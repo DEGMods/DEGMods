@@ -1,0 +1,190 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * DEG MODS: Design System
+ * Purple-based dark theme. Uses shadcn/ui HSL CSS variable token system.
+ */
+
+@theme inline {
+  /* Extra small breakpoint (below Tailwind's default sm: 640px). */
+  --breakpoint-xs: 480px;
+  --color-surface-background: hsl(var(--surface-background));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-hover: hsl(var(--primary-hover));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+/* ─── Dark Mode (default and only mode) ─── */
+
+:root {
+  --surface-background: 0 0% 7%;
+  --background: 0 0% 11%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 263 70% 58%;
+  --primary-hover: 263 70% 68%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 240 4% 66%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 80% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 15%;
+  --input: 0 0% 15%;
+  --ring: 263 70% 58%;
+  --success: 142 70% 45%;
+  --warning: 38 95% 55%;
+  --radius: 0.625rem;
+}
+
+/* ─── Base Layer ─── */
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+html {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: hsl(var(--surface-background));
+  color: hsl(var(--foreground));
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ─── Focus ring ─── */
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: hsl(var(--ring));
+}
+
+/*
+ * Radix menus move DOM focus programmatically — onto an item when you hover it,
+ * and back onto the trigger when the menu closes — which the browser reports as
+ * :focus-visible. That made the purple ring flash on dropdown items and stick on
+ * the 3-dot trigger after closing. Menu items use their own bg highlight, so we
+ * exclude them and their triggers from the global outline.
+ */
+:focus-visible:not(input):not(textarea):not(select):not([role='menuitem']):not([aria-haspopup='menu']) {
+  outline: 2px solid hsl(var(--ring) / 0.5);
+  outline-offset: 2px;
+}
+
+/* ─── Selection ─── */
+
+::selection {
+  background-color: hsl(var(--primary) / 0.2);
+  color: hsl(var(--foreground));
+}
+
+/* ─── Custom Scrollbars ─── */
+
+* {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.25);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.4);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ─── Utilities ─── */
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ─── Animations ─── */
+
+@keyframes shimmer {
+  0% { background-position: 400% 0; }
+  100% { background-position: 0% 0; }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes media-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
+}
+
+.media-skeleton {
+  background-color: hsl(var(--muted-foreground) / 0.2) !important;
+  animation: media-pulse 1.5s ease-in-out infinite !important;
+  border-radius: 0.5rem;
+}

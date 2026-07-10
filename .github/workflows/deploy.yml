@@ -1,0 +1,58 @@
+# Builds the app, generates the SEO sitemap from relays, and deploys to GitHub
+# Pages. Runs on push, hourly (to refresh the sitemap with new/edited/deleted
+# posts), and manually. Zero extra infra — works on any fork.
+#
+# One-time setup on a fork:
+#   • Settings → Pages → Source: "GitHub Actions"
+#   • (optional) Settings → Secrets and variables → Actions → Variables:
+#       SITE_URL    e.g. https://your-domain.com   (default: https://degmods.com)
+#       SEO_RELAYS  comma-separated relay list      (default: public relays)
+name: Deploy
+
+on:
+  push:
+    branches: [main, master]
+  schedule:
+    - cron: '0 */6 * * *' # every 6h — refreshes the sitemap (a full re-walk takes minutes)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one deploy at a time; don't cancel an in-progress run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:ghpages
+      - name: Generate sitemap
+        run: npm run sitemap
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          SEO_RELAYS: ${{ vars.SEO_RELAYS }}
+          SEO_MIN_POW: ${{ vars.SEO_MIN_POW }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

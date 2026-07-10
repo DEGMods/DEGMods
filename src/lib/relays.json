@@ -1,0 +1,9 @@
+[
+  { "url": "wss://brs.degmods.com", "read": true, "write": true, "enabled": true },
+  { "url": "wss://relay.damus.io", "read": true, "write": true, "enabled": true },
+  { "url": "wss://relay.primal.net", "read": true, "write": true, "enabled": true },
+  { "url": "wss://nos.lol", "read": true, "write": true, "enabled": true },
+  { "url": "wss://relay.nostr.band", "read": true, "write": false, "enabled": true, "search": true },
+  { "url": "wss://relay.noswhere.com", "read": true, "write": false, "enabled": true, "search": true },
+  { "url": "wss://search.nos.today", "read": true, "write": false, "enabled": true, "search": true }
+]

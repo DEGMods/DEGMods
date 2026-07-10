@@ -1,0 +1,220 @@
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { AlertTriangle } from 'lucide-react'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { loadVerifiedImage } from '@/lib/blossom/client'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { useImageSizeGate, ImageTooLarge } from '@/components/shared/SafeImage'
+
+/**
+ * Check if a string looks like a bare SHA-256 hash (64 hex chars).
+ */
+function isBareHash(str: string): boolean {
+  return /^[a-fA-F0-9]{64}$/.test(str.trim())
+}
+
+/**
+ * Extract a SHA-256 hash from a Blossom URL.
+ */
+function extractHash(url: string): string | null {
+  try {
+    const u = new URL(url)
+    const lastSegment = u.pathname.split('/').pop() || ''
+    const base = lastSegment.replace(/\.[^.]+$/, '')
+    if (/^[a-fA-F0-9]{64}$/.test(base)) return base
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Resolve an image URL. If it's a bare hash, prepend the first Blossom server.
+ * If it's already a full URL, return as-is.
+ */
+export function resolveImageUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  const trimmed = url.trim()
+  if (!trimmed) return undefined
+
+  // Already a full URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed
+  }
+
+  // Bare hash: resolve using first Blossom server
+  if (isBareHash(trimmed)) {
+    const blossomUrls = useSettingsStore.getState().getAllEnabledBlossomUrls()
+    if (blossomUrls.length > 0) {
+      return `${blossomUrls[0].replace(/\/$/, '')}/${trimmed}`
+    }
+  }
+
+  return trimmed
+}
+
+/**
+ * Build alternative Blossom URLs from a hash.
+ */
+function buildAlternativeUrls(originalUrl: string, hash: string): string[] {
+  const blossomUrls = useSettingsStore.getState().getAllEnabledBlossomUrls()
+  const ext = originalUrl.match(/(\.[a-zA-Z0-9]+)$/)?.[1] || ''
+
+  return blossomUrls
+    .map(server => `${server.replace(/\/$/, '')}/${hash}${ext}`)
+    .filter(url => url !== originalUrl)
+}
+
+interface BlossomImageProps {
+  src: string | undefined
+  alt: string
+  className?: string
+  fallback?: React.ReactNode
+  loading?: 'lazy' | 'eager'
+  onLoad?: () => void
+  /** Called when the image gives up (no more Blossom servers to try / fallback shown). */
+  onError?: () => void
+}
+
+/**
+ * Image component with Blossom server failover and SHA-256 hash verification.
+ *
+ * - Resolves bare hashes to full Blossom URLs.
+ * - Hash-based URLs are fetched, verified against the hash in the URL, and
+ *   failed over across other Blossom servers to find the matching bytes. If no
+ *   server has the correct bytes, the image is shown with a "hash mismatch"
+ *   warning mark (top-left). Verification is lazy (when scrolled into view) and
+ *   cached per hash.
+ * - Regular (non-hash) URLs: shown directly, with server failover on load error.
+ */
+export function BlossomImage(props: BlossomImageProps) {
+  const resolvedSrc = resolveImageUrl(props.src)
+  const gate = useImageSizeGate(resolvedSrc)
+  const hash =
+    (resolvedSrc ? extractHash(resolvedSrc) : null) ||
+    (props.src && isBareHash(props.src.trim()) ? props.src.trim() : null)
+
+  if (!resolvedSrc) return <>{props.fallback}</>
+  if (gate.blocked) return <ImageTooLarge size={gate.size} onOverride={gate.override} className={props.className} />
+  if (hash) return <VerifiedImage {...props} resolvedSrc={resolvedSrc} hash={hash} />
+  return <SimpleImage {...props} resolvedSrc={resolvedSrc} />
+}
+
+// ─── Non-hash: simple failover ──────────────────────────────────────
+
+const MAX_IMG_RETRIES = 3
+
+function SimpleImage({ src, alt, className, fallback, loading = 'lazy', onLoad, onError, resolvedSrc }: BlossomImageProps & { resolvedSrc: string }) {
+  const [currentSrc, setCurrentSrc] = useState(resolvedSrc)
+  const [failed, setFailed] = useState(false)
+  // Bumping the key remounts the <img>, forcing a fresh load attempt of the
+  // same URL after a transient failure (without changing the URL).
+  const [reloadKey, setReloadKey] = useState(0)
+  const retriesRef = useRef(0)
+  const triedUrlsRef = useRef<Set<string>>(new Set())
+
+  const handleError = useCallback(() => {
+    const hash = extractHash(currentSrc) || (isBareHash(src?.trim() || '') ? src!.trim() : null)
+    if (hash) {
+      const alternatives = buildAlternativeUrls(currentSrc, hash).filter(url => !triedUrlsRef.current.has(url))
+      if (alternatives.length > 0) {
+        triedUrlsRef.current.add(currentSrc)
+        triedUrlsRef.current.add(alternatives[0])
+        retriesRef.current = 0
+        setCurrentSrc(alternatives[0])
+        return
+      }
+    }
+    // No (more) alternatives: retry the same URL a few times before giving up.
+    if (retriesRef.current < MAX_IMG_RETRIES) {
+      const n = ++retriesRef.current
+      setTimeout(() => setReloadKey(k => k + 1), 600 * n)
+      return
+    }
+    setFailed(true)
+    onError?.()
+  }, [currentSrc, src, onError])
+
+  if (failed) return <>{fallback}</>
+  return (
+    <img key={reloadKey} src={currentSrc} alt={alt} className={className} loading={loading} onLoad={onLoad} onError={handleError} />
+  )
+}
+
+// ─── Hash-based: verified loading ───────────────────────────────────
+
+function VerifiedImage({ alt, className, fallback, loading = 'lazy', onLoad, onError, resolvedSrc, hash }: BlossomImageProps & { resolvedSrc: string; hash: string }) {
+  const [result, setResult] = useState<{ url: string; mismatch: boolean } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [inView, setInView] = useState(loading === 'eager')
+  const [attempt, setAttempt] = useState(0)
+  const placeholderRef = useRef<HTMLDivElement>(null)
+
+  // Lazy: only verify once scrolled near the viewport.
+  useEffect(() => {
+    if (inView) return
+    const el = placeholderRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') { setInView(true); return }
+    const obs = new IntersectionObserver(
+      (entries) => { if (entries.some(e => e.isIntersecting)) { setInView(true); obs.disconnect() } },
+      { rootMargin: '200px' },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [inView])
+
+  // Retry verification on transient failure (bounded). Bumping `attempt`
+  // re-runs the loader, which refetches since failures aren't cached.
+  const retry = useCallback(() => {
+    if (attempt < MAX_IMG_RETRIES) {
+      setResult(null)
+      const n = attempt + 1
+      setTimeout(() => setAttempt(n), 600 * n)
+    } else {
+      setFailed(true)
+      onError?.()
+    }
+  }, [attempt, onError])
+
+  useEffect(() => {
+    if (!inView) return
+    let cancelled = false
+    const servers = useSettingsStore.getState().getAllEnabledBlossomUrls()
+    const ext = resolvedSrc.match(/(\.[a-zA-Z0-9]+)(?:[?#]|$)/)?.[1] || ''
+    const candidates = [...new Set([resolvedSrc, ...servers.map(s => `${s.replace(/\/$/, '')}/${hash}${ext}`)])]
+    loadVerifiedImage(candidates, hash)
+      .then(res => {
+        if (cancelled) return
+        if (!res.url) retry()
+        else setResult({ url: res.url, mismatch: res.status === 'mismatch' })
+      })
+      .catch(() => { if (!cancelled) retry() })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, hash, resolvedSrc, attempt])
+
+  if (failed) return <>{fallback}</>
+  if (!result) return <div ref={placeholderRef} className={className} aria-hidden />
+
+  return (
+    <>
+      <img
+        key={attempt}
+        src={result.url}
+        alt={alt}
+        className={className}
+        onLoad={onLoad}
+        onError={retry}
+      />
+      {result.mismatch && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="absolute left-1 top-1 z-20 inline-flex items-center justify-center rounded bg-yellow-500/90 p-1 text-black shadow">
+              <AlertTriangle className="h-3.5 w-3.5" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Hash mismatch</TooltipContent>
+        </Tooltip>
+      )}
+    </>
+  )
+}

@@ -1,0 +1,164 @@
+import { useEffect } from 'react'
+import { Routes, Route } from 'react-router-dom'
+import { Toaster } from 'sonner'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useModerationStore } from '@/stores/moderationStore'
+import { useWotStore } from '@/stores/wotStore'
+import { useBlockStore } from '@/stores/blockStore'
+import { useDnnStore } from '@/stores/dnnStore'
+import { warmGamesDb } from '@/stores/gamesDbStore'
+import { useRelayCapabilityStore } from '@/stores/relayCapabilityStore'
+import { useLoginModalStore } from '@/stores/loginModalStore'
+import { StorageKey } from '@/lib/constants'
+import { restoreSession } from '@/lib/auth/restore'
+import { MainLayout } from '@/components/layout/MainLayout'
+import { HomePage } from '@/pages/HomePage'
+import { LoginPage } from '@/pages/LoginPage'
+import ProfilePage from '@/pages/ProfilePage'
+import { GamesPage } from '@/pages/GamesPage'
+import { GamePage } from '@/pages/GamePage'
+import { ModsPage } from '@/pages/ModsPage'
+import ModPage from '@/pages/ModPage'
+import { SubmitModPage } from '@/pages/SubmitModPage'
+import { EditModPage } from '@/pages/EditModPage'
+import BlogPage from '@/pages/BlogPage'
+import BlogPostPage from '@/pages/BlogPostPage'
+import { FeedPage } from '@/pages/FeedPage'
+import WriteBlogPage from '@/pages/WriteBlogPage'
+import { NotificationsPage } from '@/pages/NotificationsPage'
+import SettingsPage from '@/pages/SettingsPage'
+import { AboutPage } from '@/pages/AboutPage'
+import { ModManagerPage } from '@/pages/ModManagerPage'
+import { AdsPage } from '@/pages/AdsPage'
+import { FaqPage } from '@/pages/FaqPage'
+import { GuidesPage } from '@/pages/GuidesPage'
+import { NotFoundPage } from '@/pages/NotFoundPage'
+
+/** Renders the login screen as a full-screen overlay, keeping the current page mounted. */
+function LoginModalHost() {
+  const isOpen = useLoginModalStore((s) => s.isOpen)
+  const close = useLoginModalStore((s) => s.close)
+  if (!isOpen) return null
+  return <LoginPage onClose={close} />
+}
+
+export default function App() {
+  useEffect(() => {
+    // Rehydrate persisted settings + login on startup (e.g. new tab / reload).
+    useSettingsStore.getState().loadFromStorage()
+    // Probe relays' NIP-11 to learn which support NIP-50 search (cached locally).
+    const probeRelayCaps = () =>
+      useRelayCapabilityStore.getState().probeRelays(useSettingsStore.getState().getAllEnabledRelayUrls())
+    probeRelayCaps()
+    restoreSession().finally(() => {
+      // Build/refresh the Web of Trust graph + load the block list once login is restored.
+      useWotStore.getState().init()
+      useBlockStore.getState().loadBlockList()
+      // Pull the user's published relay (10002) + blossom (10063) lists, then
+      // re-probe so their relays get marked too.
+      const pk = useAuthStore.getState().pubkey
+      if (pk) useSettingsStore.getState().loadUserLists(pk).finally(probeRelayCaps)
+    })
+
+    // Refresh admin moderation defaults (e.g. excluded tags) from NIP-78.
+    const relayUrls = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    useModerationStore.getState().syncModeration(relayUrls)
+
+    // Start the DNN naming service (resolves/verifies DNN IDs).
+    useDnnStore.getState().initService()
+
+    // Warm the (heavy) games DB into IndexedDB in the background, regardless of
+    // the current route, so /games is usually instant when the user gets there.
+    warmGamesDb()
+
+    // Keep login state in sync across tabs.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== StorageKey.CURRENT_ACCOUNT) return
+      const auth = useAuthStore.getState()
+      if (!e.newValue) {
+        // Logged out in another tab.
+        if (auth.pubkey) auth.logout()
+      } else if (e.newValue !== auth.pubkey) {
+        // Logged in / switched account in another tab.
+        restoreSession()
+      }
+    }
+    window.addEventListener('storage', onStorage)
+
+    // (Re)build the WoT graph whenever the logged-in account changes.
+    let prevPk = useAuthStore.getState().pubkey
+    const unsubAuth = useAuthStore.subscribe((s) => {
+      if (s.pubkey !== prevPk) {
+        prevPk = s.pubkey
+        if (s.pubkey) {
+          useWotStore.getState().init()
+          useBlockStore.getState().loadBlockList()
+          useSettingsStore.getState().loadUserLists(s.pubkey).finally(probeRelayCaps)
+        } else {
+          useBlockStore.getState().reset()
+          useSettingsStore.getState().resetUserLists()
+        }
+      }
+    })
+
+    // Cooperative rebroadcasting: 30s after load, every visitor (logged in or
+    // not) checks that the admin's important events are still widely replicated
+    // and re-broadcasts any that relays have purged. Deferred so it never
+    // competes with initial page work.
+    const redundancyTimer = setTimeout(() => {
+      import('@/lib/nostr/eventRedundancy').then(({ ensureAdminEventsRedundancy }) => {
+        ensureAdminEventsRedundancy()
+      })
+    }, 30_000)
+
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      unsubAuth()
+      clearTimeout(redundancyTimer)
+    }
+  }, [])
+
+  return (
+    <>
+      <Routes>
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/:npub" element={<ProfilePage />} />
+          <Route path="/games" element={<GamesPage />} />
+          <Route path="/game/:name" element={<GamePage />} />
+          <Route path="/mods" element={<ModsPage />} />
+          <Route path="/mod/:naddr" element={<ModPage />} />
+          <Route path="/submit" element={<SubmitModPage />} />
+          <Route path="/mod/:naddr/edit" element={<EditModPage />} />
+          <Route path="/blog" element={<BlogPage />} />
+          <Route path="/blog/:naddr" element={<BlogPostPage />} />
+          <Route path="/feed" element={<FeedPage />} />
+          <Route path="/write" element={<WriteBlogPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/mod-manager" element={<ModManagerPage />} />
+          <Route path="/ads" element={<AdsPage />} />
+          <Route path="/faq" element={<FaqPage />} />
+          <Route path="/guides" element={<GuidesPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+      <LoginModalHost />
+      <Toaster
+        theme="dark"
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: 'hsl(270 12% 12%)',
+            border: '1px solid hsl(270 10% 18%)',
+            color: 'hsl(270 5% 95%)',
+          },
+        }}
+      />
+    </>
+  )
+}
