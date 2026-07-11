@@ -5,8 +5,10 @@
 # One-time setup on a fork:
 #   • Settings → Pages → Source: "GitHub Actions"
 #   • (optional) Settings → Secrets and variables → Actions → Variables:
-#       SITE_URL    e.g. https://your-domain.com   (default: https://degmods.com)
-#       SEO_RELAYS  comma-separated relay list      (default: public relays)
+#       SITE_URL      e.g. https://your-domain.com   (default: https://degmods.com)
+#       SEO_RELAYS    comma-separated relay list      (default: public relays)
+#       SEO_DISALLOW  keep out of search engines      (default: true = disallowed)
+#                     Set to "false" on the real production domain to enable SEO.
 name: Deploy
 
 on:
@@ -43,6 +45,9 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL }}
           SEO_RELAYS: ${{ vars.SEO_RELAYS }}
           SEO_MIN_POW: ${{ vars.SEO_MIN_POW }}
+          # Defaults to "true" (disallow) so the temp deploy stays out of search;
+          # set the SEO_DISALLOW repo variable to "false" to enable SEO at launch.
+          SEO_DISALLOW: ${{ vars.SEO_DISALLOW || 'true' }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

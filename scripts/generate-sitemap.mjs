@@ -8,10 +8,13 @@
  * recent window back to SEO_MAX entries, so it's fully forkable with no DB.
  *
  * Config via env (all optional):
- *   SITE_URL    canonical base URL          (default https://degmods.com)
- *   SEO_RELAYS  comma-separated relay list
- *   SEO_MAX     max coordinates per kind    (default 5000)
- *   SEO_OUT     output directory            (default dist)
+ *   SITE_URL     canonical base URL         (default https://degmods.com)
+ *   SEO_RELAYS   comma-separated relay list
+ *   SEO_MAX      max coordinates per kind   (default 5000)
+ *   SEO_OUT      output directory           (default dist)
+ *   SEO_DISALLOW when truthy, emit a Disallow-all robots.txt and skip the
+ *                sitemap entirely — for staging/temp deploys that must stay out
+ *                of search. Set it to `false` on the real domain to enable SEO.
  */
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -47,6 +50,8 @@ const MAX_PER_KIND = Number(process.env.SEO_MAX || 1_000_000)
 // content (which publishes with PoW). Set to 0 to disable. Empty/unset → 15.
 const MIN_POW = process.env.SEO_MIN_POW ? Number(process.env.SEO_MIN_POW) : 15
 const OUT_DIR = process.env.SEO_OUT || 'dist'
+// Staging guard: keep temp/preview deploys out of search engines.
+const DISALLOW = /^(1|true|yes|on)$/i.test(String(process.env.SEO_DISALLOW || ''))
 
 const MOD_KIND = 31142
 const BLOG_KIND = 30023
@@ -129,6 +134,15 @@ function writeXml(file, body) {
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true })
+
+  // Staging: block all crawlers and emit no sitemap. One flag flip (SEO_DISALLOW
+  // → false) turns SEO back on for the production domain.
+  if (DISALLOW) {
+    writeFileSync(join(OUT_DIR, 'robots.txt'), 'User-agent: *\nDisallow: /\n')
+    console.log('sitemap: SEO_DISALLOW set — wrote Disallow-all robots.txt, skipped sitemap')
+    return
+  }
+
   const pool = new SimplePool()
 
   const [mods, blogs, deleted] = await Promise.all([
