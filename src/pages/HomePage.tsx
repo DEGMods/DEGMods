@@ -155,9 +155,10 @@ export function HomePage() {
 
         const curatedGameNames = curationTags('home-featured-games')
           .filter(t => t[0] === 'game' || t[0] === 'g').map(t => t[1])
-        const gameNames = curatedGameNames.length
+        const gameNames = (curatedGameNames.length
           ? curatedGameNames
-          : [...new Set(allMods.map(m => m.game).filter(Boolean))].slice(0, 6)
+          : [...new Set(allMods.map(m => m.game).filter(Boolean))]
+        ).slice(0, 5)
         const gamesVal = gameNames.map(name => ({ name, ...(getGameImages(name) ?? {}) }))
         setGames(gamesVal)
 
@@ -261,7 +262,7 @@ export function HomePage() {
               All Games <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {games.map(game => (
               <GameCard key={game.name} game={game} />
             ))}
