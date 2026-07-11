@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { nip19 } from 'nostr-tools'
-import { ChevronLeft, ChevronRight, Gamepad2, AlertTriangle, Tag, User, ArrowRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Gamepad2, AlertTriangle, Tag, User, ArrowRight, History } from 'lucide-react'
 import { KINDS } from '@/lib/constants'
 import { LEGACY_MOD_KIND } from '@/lib/mods/legacy'
 import { cn } from '@/lib/utils'
@@ -202,10 +202,16 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
                 </div>
               )}
 
-              <div className="mt-auto pt-2">
+              <div className="mt-auto flex items-center gap-2 pt-2">
+                {/* LEGACY: old kind-30402 mod marker, shown left of the button */}
+                {mod.legacy && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-orange-500/90 px-2 py-0.5 text-[11px] font-semibold text-black">
+                    <History className="h-3 w-3" /> Legacy
+                  </span>
+                )}
                 <Link
                   to={`/mod/${naddr}`}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+                  className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
                 >
                   View Mod
                   <ArrowRight className="h-4 w-4" />
