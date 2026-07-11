@@ -112,7 +112,7 @@ function FeedBlogsTab({ authors }: { authors: string[] }) {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 auto-rows-[10rem]">
+      <div className="grid grid-cols-1 gap-4">
         {blogs.map((blog) => <BlogPostCard key={blog.id} blog={blog} />)}
       </div>
       {!reachedEnd && <div ref={sentinelRef} className="h-1" />}
