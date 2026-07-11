@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { LazyMount } from '@/components/shared/LazyMount'
@@ -217,8 +216,11 @@ export function ModScreenshots({ screenshots, blurred = false, onReveal }: ModSc
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-5xl w-full bg-[#1c1c1c] border-0 p-0 overflow-hidden">
-          <div className="relative flex items-center justify-center min-h-[300px]">
+        {/* [&>button]:hidden removes the dialog's built-in top-right close X — the
+            close control lives in the slab below instead. gap-0 so that slab sits
+            flush under the media. */}
+        <DialogContent className="max-w-5xl w-full gap-0 bg-[#1c1c1c] border-0 p-0 overflow-hidden [&>button]:hidden">
+          <div className="flex items-center justify-center min-h-[300px]">
             {/* Reuse BlossomImage (via SkeletonImage) so a hash-verified screenshot
                 already loaded in the carousel renders from its cached blob instead
                 of being re-fetched from the Blossom server. */}
@@ -228,31 +230,43 @@ export function ModScreenshots({ screenshots, blurred = false, onReveal }: ModSc
               loading="eager"
               className="w-full max-h-[80vh] object-contain"
             />
+          </div>
 
+          {/* Controls slab below the media: nav group centered (own bg), close on
+              the right (own bg). */}
+          <div className="relative flex min-h-[52px] items-center justify-center border-t border-[#262626] bg-[#1c1c1c] px-3 py-2.5">
             {screenshots.length > 1 && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
+              <div className="inline-flex items-center gap-1 rounded-full bg-[#212121] p-1">
+                <button
+                  type="button"
+                  aria-label="Previous"
                   onClick={goPrev}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white hover:bg-[#2a2a2a]"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-[#2a2a2a] hover:text-white"
                 >
-                  <ChevronLeft className="w-6 h-6" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <span className="min-w-[3.25rem] px-1 text-center text-sm tabular-nums text-neutral-300">
+                  {currentIndex + 1} / {screenshots.length}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next"
                   onClick={goNext}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white hover:bg-[#2a2a2a]"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-[#2a2a2a] hover:text-white"
                 >
-                  <ChevronRight className="w-6 h-6" />
-                </Button>
-              </>
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
             )}
 
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 text-neutral-300 text-sm px-3 py-1 rounded-full">
-              {currentIndex + 1} / {screenshots.length}
-            </div>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setOpen(false)}
+              className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg bg-[#212121] text-neutral-300 transition-colors hover:bg-[#2a2a2a] hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
         </DialogContent>
       </Dialog>
