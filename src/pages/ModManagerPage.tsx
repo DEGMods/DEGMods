@@ -1,27 +1,12 @@
-import { FolderSync, RefreshCw, ShieldAlert, Download } from 'lucide-react'
+import { Download, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const features = [
-  {
-    icon: FolderSync,
-    title: 'Auto-Install',
-    desc: 'Automatically install mods to the correct game directory. No manual file copying required.',
-  },
-  {
-    icon: RefreshCw,
-    title: 'Update Tracking',
-    desc: 'Get notified when mod authors publish updates. Keep your mods current with one click.',
-  },
-  {
-    icon: ShieldAlert,
-    title: 'Conflict Detection',
-    desc: 'Detect and resolve conflicts between mods. See which files overlap before installing.',
-  },
-]
+const MO2_VIDEO = 'https://www.youtube.com/embed/07-JVWDn7LA'
+const MO2_RELEASES = 'https://github.com/ModOrganizer2/modorganizer/releases'
 
 export function ModManagerPage() {
   return (
-    <div className="mx-auto space-y-12 py-12">
+    <div className="mx-auto max-w-3xl space-y-10 py-12">
       {/* Header */}
       <section className="space-y-4">
         <div className="flex items-center gap-3">
@@ -30,51 +15,59 @@ export function ModManagerPage() {
             Coming Soon
           </span>
         </div>
-        <p className="max-w-2xl text-lg text-neutral-400 leading-relaxed">
-          A desktop application for managing your downloaded mods. Install, update, and organize
-          mods across your games.
-        </p>
-      </section>
-
-      {/* Feature Cards */}
-      <section className="space-y-6">
-        <h2 className="text-2xl font-semibold">Features</h2>
-        <div className="grid gap-6 sm:grid-cols-3">
-          {features.map((item) => (
-            <div
-              key={item.title}
-              className={cn(
-                'rounded-xl border border-[#262626] bg-[#1c1c1c] p-6 space-y-3',
-                'hover:border-purple-600/50 transition-colors'
-              )}
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-600/20">
-                <item.icon size={20} className="text-purple-400" />
-              </div>
-              <h3 className="text-lg font-semibold">{item.title}</h3>
-              <p className="text-sm text-neutral-400 leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
+        <div className="space-y-4 text-lg leading-relaxed text-neutral-400">
+          <p>
+            DEG Mods will eventually have its own mod manager software, likely a fork of{' '}
+            <span className="text-neutral-200">Mod Organizer 2</span>, customized to work seamlessly
+            with DEG Mods. Until then, you can use Mod Organizer 2 as it is. It is already a powerful
+            and useful tool without any modifications, and it makes modding your games much easier.
+          </p>
+          <p>
+            To help you get familiar with Mod Organizer 2, there are online videos that can guide
+            you. Here is one of them.
+          </p>
         </div>
       </section>
 
-      {/* Download placeholder */}
+      {/* Video */}
+      <section>
+        <div className="overflow-hidden rounded-xl border border-[#262626] bg-black">
+          <div className="relative aspect-video">
+            <iframe
+              className="absolute inset-0 h-full w-full"
+              src={MO2_VIDEO}
+              title="Getting started with Mod Organizer 2"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Download */}
       <section
         className={cn(
-          'rounded-xl border border-dashed border-[#262626] bg-[#1c1c1c] p-8',
-          'flex flex-col items-center gap-4 text-center'
+          'flex flex-col items-center gap-4 rounded-xl border border-[#262626] bg-[#1c1c1c] p-8 text-center',
         )}
       >
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-600/20">
           <Download size={24} className="text-purple-400" />
         </div>
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold">Download</h3>
-          <p className="text-sm text-neutral-400">
-            The download will be available here when ready. The mod manager is currently in
-            development.
-          </p>
-        </div>
+        <p className="max-w-md text-sm text-neutral-400">
+          You can find and download Mod Organizer 2 from their GitHub repository.
+        </p>
+        <a
+          href={MO2_RELEASES}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            'inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-medium text-white',
+            'transition-colors hover:bg-purple-700',
+          )}
+        >
+          Download Mod Organizer 2
+          <ExternalLink size={16} />
+        </a>
       </section>
     </div>
   )
