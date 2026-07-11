@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { nip19 } from 'nostr-tools'
 import { ChevronLeft, ChevronRight, Gamepad2, AlertTriangle, Tag, User, ArrowRight } from 'lucide-react'
 import { KINDS } from '@/lib/constants'
+import { LEGACY_MOD_KIND } from '@/lib/mods/legacy'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
@@ -56,7 +57,13 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
 
   if (count === 0 || !mod) return null
 
-  const naddr = nip19.naddrEncode({ kind: KINDS.MOD, pubkey: mod.pubkey, identifier: mod.dTag })
+  // Legacy mods are kind 30402, not 31142 — encode the mod's actual kind so the
+  // link resolves (otherwise the mod page looks up the wrong kind and 404s).
+  const naddr = nip19.naddrEncode({
+    kind: mod.legacy ? LEGACY_MOD_KIND : KINDS.MOD,
+    pubkey: mod.pubkey,
+    identifier: mod.dTag,
+  })
   const blurred = !!mod.contentWarning
   const npub = nip19.npubEncode(mod.pubkey)
   const authorName = author?.display_name || `${npub.slice(0, 10)}…`
