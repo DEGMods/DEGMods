@@ -214,12 +214,13 @@ function PermissionRow({
 // ─── Draggable screenshot row ───────────────────────────────────────
 
 function ScreenshotRow({
-  row, index, onChange, onRemove, inputClass,
+  row, index, onChange, onRemove, onCommit, inputClass,
 }: {
   row: { id: string; url: string }
   index: number
   onChange: (value: string) => void
   onRemove: () => void
+  onCommit: () => void
   inputClass: string
 }) {
   const controls = useDragControls()
@@ -229,6 +230,7 @@ function ScreenshotRow({
       value={row}
       dragListener={false}
       dragControls={controls}
+      onDragEnd={onCommit}
       whileDrag={{ scale: 1.01, boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}
       className="flex items-center gap-2 rounded-lg bg-[#1c1c1c] py-2"
     >
@@ -376,6 +378,14 @@ export function ModEditor({
   const syncScreenshots = useCallback((rows: { id: string; url: string }[]) => {
     setSsRows(rows)
     updateField('screenshots', rows.map((r) => r.url))
+  }, [updateField])
+  // Drag reorder only touches local row order (setSsRows) so the whole editor
+  // doesn't re-render mid-drag (which glitched framer's drop animation). The new
+  // order is pushed to the form once, on drop, via commitScreenshots.
+  const ssRowsRef = useRef(ssRows)
+  ssRowsRef.current = ssRows
+  const commitScreenshots = useCallback(() => {
+    updateField('screenshots', ssRowsRef.current.map((r) => r.url))
   }, [updateField])
   // Pull external form.screenshots changes (uploads, draft restore) back into
   // rows, keeping ids where the url at a position is unchanged. No-ops when the
@@ -809,7 +819,7 @@ export function ModEditor({
           {ssRows.length > 1 && (
             <p className="text-[11px] text-neutral-600">Drag the handle to reorder — the first screenshot shows first on the mod page.</p>
           )}
-          <Reorder.Group as="div" axis="y" values={ssRows} onReorder={syncScreenshots} className="space-y-2">
+          <Reorder.Group as="div" axis="y" values={ssRows} onReorder={setSsRows} className="space-y-2">
             {ssRows.map((row, i) => (
               <ScreenshotRow
                 key={row.id}
@@ -817,6 +827,7 @@ export function ModEditor({
                 index={i}
                 onChange={(v) => updateScreenshot(row.id, v)}
                 onRemove={() => removeScreenshot(row.id)}
+                onCommit={commitScreenshots}
                 inputClass={inputClass}
               />
             ))}
