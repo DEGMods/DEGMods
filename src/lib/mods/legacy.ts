@@ -28,6 +28,26 @@ export function isLegacyModEvent(event: NostrEvent): boolean {
   )
 }
 
+/**
+ * Repair an accidentally doubled mod coordinate.
+ *
+ * Some legacy share links encode an naddr whose `identifier` is itself a full
+ * `kind:pubkey:d` coordinate. Re-prefixing that on the way in produces a doubled
+ * coord like `30402:<pk>:30402:<pk>:<uuid>`, which then fails to match the real
+ * event (whose `d` tag is just `<uuid>`). Collapse any repeated `kind:pubkey:`
+ * prefix back to a single canonical `kind:pubkey:d`. A well-formed coord is
+ * returned unchanged (trimmed).
+ */
+export function normalizeModCoord(coord: string): string {
+  const value = coord.trim()
+  const m = /^(31142|30402):([0-9a-f]{64}):(.+)$/i.exec(value)
+  if (!m) return value
+  const rest = m[3]
+  // The identifier is itself another full coord → the prefix was doubled.
+  if (/^(31142|30402):[0-9a-f]{64}:.+$/i.test(rest)) return normalizeModCoord(rest)
+  return `${m[1]}:${m[2]}:${rest}`
+}
+
 /** Merge legacy mods into a list and re-sort by publish date (newest first). */
 export function withLegacyMods(mods: ModDetails[], legacy: ModDetails[]): ModDetails[] {
   if (legacy.length === 0) return mods

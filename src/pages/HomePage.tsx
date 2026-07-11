@@ -15,6 +15,7 @@ import { useWotModFilter } from '@/hooks/useWot'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { constructModListFromEvents, extractBlogData } from '@/lib/nostr/events'
+import { LEGACY_MOD_KIND, extractLegacyModData, isLegacyModEvent, normalizeModCoord } from '@/lib/mods/legacy'
 import { KINDS, ADMIN_PUBKEY } from '@/lib/constants'
 import type { ModDetails } from '@/types/mod'
 import type { BlogDetails } from '@/types/blog'
@@ -83,20 +84,29 @@ export function HomePage() {
         const curationTags = (d: string): string[][] => curationByD.get(d)?.tags ?? []
         const byATag = new Map(allMods.map(m => [m.aTag, m]))
 
+        // normalizeModCoord repairs legacy coords stored with a doubled prefix
+        // (30402:pk:30402:pk:uuid) so they match the real event's aTag/d tag.
         const sliderCoords = curationTags('home-featured-mods-slider')
-          .filter(t => t[0] === 'a').map(t => t[1])
+          .filter(t => t[0] === 'a').map(t => normalizeModCoord(t[1]))
         const gridCoords = curationTags('home-featured-mods')
-          .filter(t => t[0] === 'a').map(t => t[1])
+          .filter(t => t[0] === 'a').map(t => normalizeModCoord(t[1]))
 
-        // Fetch any curated mods (slider + grid) not in the latest batch.
+        // Fetch any curated mods (slider + grid) not in the latest batch. Curation
+        // may reference current (31142) OR legacy (30402) mods, so fetch both kinds.
         const wantedCoords = [...new Set([...sliderCoords, ...gridCoords])]
         const missing = wantedCoords.filter(a => !byATag.has(a))
         if (missing.length) {
           const authors = [...new Set(missing.map(a => a.split(':')[1]))]
           const dtags = [...new Set(missing.map(a => a.split(':').slice(2).join(':')))]
-          const extraEvents = await fetchEvents(relays, { kinds: [KINDS.MOD], authors, '#d': dtags }, 6000)
+          const extraEvents = await fetchEvents(relays, { kinds: [KINDS.MOD, LEGACY_MOD_KIND], authors, '#d': dtags }, 6000)
           if (cancelled) return
-          for (const m of constructModListFromEvents(extraEvents)) byATag.set(m.aTag, m)
+          for (const m of constructModListFromEvents(extraEvents.filter(e => e.kind === KINDS.MOD))) byATag.set(m.aTag, m)
+          for (const ev of extraEvents) {
+            if (ev.kind === LEGACY_MOD_KIND && isLegacyModEvent(ev)) {
+              const m = extractLegacyModData(ev)
+              byATag.set(m.aTag, m)
+            }
+          }
         }
         const resolve = (coords: string[]) =>
           coords.map(a => byATag.get(a)).filter((m): m is ModDetails => !!m)

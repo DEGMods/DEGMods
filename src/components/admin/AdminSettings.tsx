@@ -31,6 +31,7 @@ import {
 import CsvEditor from '@/components/admin/CsvEditor'
 import { getNodeAds, saveNodeAds, getAdStats, MANAGED_BLOSSOMS, type AdStats } from '@/lib/blossom/adminApi'
 import { parseCsvLine } from '@/lib/csv'
+import { LEGACY_MOD_KIND, normalizeModCoord } from '@/lib/mods/legacy'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -960,21 +961,24 @@ function FeaturedTab() {
   )
 }
 
-// ── Shared: decode an naddr (or raw coordinate) into a kind-31142 `a` coord ──
+// ── Shared: decode an naddr (or raw coordinate) into a mod `a` coord ──
+// Accepts current mods (kind 31142) and legacy mods (kind 30402).
 
 function naddrToModCoord(input: string): { coord: string } | { error: string } {
   const value = input.trim()
   if (!value) return { error: 'Enter an naddr' }
 
-  // Accept a raw coordinate too: 31142:<pubkey>:<dtag>
-  if (/^31142:[0-9a-f]{64}:.+$/i.test(value)) return { coord: value }
+  // Accept a raw coordinate too: 31142 (current) or 30402 (legacy) mods.
+  if (/^(31142|30402):[0-9a-f]{64}:.+$/i.test(value)) return { coord: normalizeModCoord(value) }
 
   try {
     const decoded = nip19.decode(value)
     if (decoded.type !== 'naddr') return { error: 'Not an naddr address' }
     const { kind, pubkey, identifier } = decoded.data
-    if (kind !== KINDS.MOD) return { error: `naddr is kind ${kind}, expected a mod (31142)` }
-    return { coord: `${kind}:${pubkey}:${identifier}` }
+    if (kind !== KINDS.MOD && kind !== LEGACY_MOD_KIND) {
+      return { error: `naddr is kind ${kind}, expected a mod (31142 or legacy 30402)` }
+    }
+    return { coord: normalizeModCoord(`${kind}:${pubkey}:${identifier}`) }
   } catch {
     return { error: 'Invalid naddr' }
   }
@@ -1047,9 +1051,12 @@ function FeaturedModSection({
       const event = await fetchEvent(relays, {
         kinds: [KINDS.GAME_DB], authors: [ADMIN_PUBKEY], '#d': [dTag],
       })
-      const coords = (event?.tags ?? []).filter(t => t[0] === 'a').map(t => t[1])
+      // Repair any legacy coords that were stored with a doubled prefix so they
+      // resolve, and so a re-publish writes the clean form back.
+      const raw = (event?.tags ?? []).filter(t => t[0] === 'a').map(t => t[1])
+      const coords = raw.map(normalizeModCoord)
       setItems(coords.map(coord => ({ coord, resolving: true })))
-      setDirty(false)
+      setDirty(coords.some((c, i) => c !== raw[i]))
       // Resolve titles in the background
       coords.forEach(async coord => {
         const title = await resolveTitle(coord).catch(() => undefined)
@@ -1122,7 +1129,7 @@ function FeaturedModSection({
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem() } }}
-          placeholder="naddr1… (or 31142:pubkey:dtag)"
+          placeholder="naddr1… (current or legacy mod)"
           className="bg-[#212121] border-[#262626] text-white text-xs font-mono"
         />
         <Button size="sm" onClick={addItem} disabled={!input.trim()} className="bg-purple-600 hover:bg-purple-700 shrink-0">
@@ -2364,7 +2371,7 @@ function BlockedModsSection() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem() } }}
-          placeholder="naddr1… (or 31142:pubkey:dtag)"
+          placeholder="naddr1… (current or legacy mod)"
           className="bg-[#212121] border-[#262626] text-white text-xs font-mono"
         />
         <Button size="sm" onClick={addItem} disabled={!input.trim()} className="bg-purple-600 hover:bg-purple-700 shrink-0">
