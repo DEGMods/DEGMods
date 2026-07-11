@@ -109,7 +109,7 @@ export default function BlogPage() {
         </div>
       ) : (
         <>
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4">
             {paged.map(blog => (
               <BlogPostCard
                 key={blog.id}

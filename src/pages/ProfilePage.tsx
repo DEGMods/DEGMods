@@ -290,7 +290,7 @@ function BlogsTab({ pubkey, profile }: { pubkey: string; profile: UserProfile | 
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4">
         {paged.map((blog) => <BlogPostCard key={blog.id} blog={blog} author={profile ?? undefined} />)}
       </div>
       <Pagination page={current} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />

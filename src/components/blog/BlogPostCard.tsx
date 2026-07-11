@@ -35,7 +35,7 @@ export function BlogPostCard({ blog, author }: BlogPostCardProps) {
         )}
       >
         {/* Featured image: pulsing skeleton while loading, lazy-loaded in viewport */}
-        <div className="relative w-32 sm:w-44 shrink-0 self-stretch overflow-hidden bg-[#171717]">
+        <div className="relative aspect-video shrink-0 self-stretch overflow-hidden bg-[#171717]">
           {blog.featuredImageUrl ? (
             <SkeletonImage
               src={blog.featuredImageUrl}
