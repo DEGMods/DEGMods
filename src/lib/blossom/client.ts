@@ -469,21 +469,42 @@ const verifiedImageCache = new LRUCache<string, VerifiedImageResult>({
   },
 })
 
+// De-dupe concurrent loads of the same hash: without this, two components that
+// mount together (e.g. the slider's foreground image and its blurred background,
+// or the same mod in both the slider and the grid) would each kick off their own
+// fetch before either populates the result cache. Sharing the in-flight promise
+// collapses them into a single network fetch.
+const inflightImageLoads = new Map<string, Promise<VerifiedImageResult>>()
+
 /**
  * Fetch and SHA-256-verify an image across candidate URLs (original + other
  * Blossom servers). Returns an object URL for the verified bytes; if no
  * candidate matches the expected hash it returns the first fetched bytes
- * flagged `mismatch`. Cached per hash.
+ * flagged `mismatch`. Cached per hash, and de-duped while in flight.
  */
-export async function loadVerifiedImage(
+export function loadVerifiedImage(
   candidates: string[],
   expectedHash: string,
   stallTimeoutMs = 15000,
   attempts = 2,
 ): Promise<VerifiedImageResult> {
   const cached = verifiedImageCache.get(expectedHash)
-  if (cached) return cached
+  if (cached) return Promise.resolve(cached)
 
+  const inflight = inflightImageLoads.get(expectedHash)
+  if (inflight) return inflight
+
+  const load = loadVerifiedImageUncached(candidates, expectedHash, stallTimeoutMs, attempts)
+  inflightImageLoads.set(expectedHash, load)
+  return load.finally(() => inflightImageLoads.delete(expectedHash))
+}
+
+async function loadVerifiedImageUncached(
+  candidates: string[],
+  expectedHash: string,
+  stallTimeoutMs: number,
+  attempts: number,
+): Promise<VerifiedImageResult> {
   let firstUrl: string | null = null
   // Retry the whole candidate set a few times: a transient disruption (network
   // blip, backgrounded tab aborting the fetch) shouldn't permanently fail it.

@@ -7,7 +7,7 @@ import { KINDS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
-import { resolveImageUrl } from '@/components/shared/BlossomImage'
+import { useResolvedImageSrc } from '@/components/shared/BlossomImage'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { SafeImage } from '@/components/shared/SafeImage'
 import type { ModDetails } from '@/types/mod'
@@ -50,10 +50,13 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
     return () => { cancelled = true }
   }, [mod?.pubkey, mod?.id])
 
+  // Shares the fetch + hash-verification with the foreground <SkeletonImage>
+  // below, so the blurred background never fetches the image a second time.
+  const bgUrl = useResolvedImageSrc(mod?.featuredImageUrl)
+
   if (count === 0 || !mod) return null
 
   const naddr = nip19.naddrEncode({ kind: KINDS.MOD, pubkey: mod.pubkey, identifier: mod.dTag })
-  const bgUrl = resolveImageUrl(mod.featuredImageUrl)
   const blurred = !!mod.contentWarning
   const npub = nip19.npubEncode(mod.pubkey)
   const authorName = author?.display_name || `${npub.slice(0, 10)}…`

@@ -64,6 +64,39 @@ function buildAlternativeUrls(originalUrl: string, hash: string): string[] {
     .filter(url => url !== originalUrl)
 }
 
+/**
+ * Resolve an image to a displayable `src` that SHARES the fetch + verification
+ * with <BlossomImage> (via the per-hash cache and in-flight de-dupe in
+ * loadVerifiedImage). Use this for a second, decorative rendering of an image
+ * that <BlossomImage> already shows — e.g. a blurred slider background — so it
+ * reuses the same bytes instead of triggering its own network fetch.
+ *
+ * Hash-based (Blossom) images resolve to the verified object URL once ready;
+ * until then the returned value is `undefined`. Non-hash URLs resolve
+ * synchronously to the plain URL.
+ */
+export function useResolvedImageSrc(src: string | undefined): string | undefined {
+  const resolved = resolveImageUrl(src)
+  const hash =
+    (resolved ? extractHash(resolved) : null) ||
+    (src && isBareHash(src.trim()) ? src.trim() : null)
+  const [url, setUrl] = useState<string | undefined>(hash ? undefined : resolved)
+
+  useEffect(() => {
+    if (!hash || !resolved) { setUrl(resolved); return }
+    let cancelled = false
+    const servers = useSettingsStore.getState().getAllEnabledBlossomUrls()
+    const ext = resolved.match(/(\.[a-zA-Z0-9]+)(?:[?#]|$)/)?.[1] || ''
+    const candidates = [...new Set([resolved, ...servers.map(s => `${s.replace(/\/$/, '')}/${hash}${ext}`)])]
+    loadVerifiedImage(candidates, hash)
+      .then(res => { if (!cancelled) setUrl(res.url || resolved) })
+      .catch(() => { if (!cancelled) setUrl(resolved) })
+    return () => { cancelled = true }
+  }, [resolved, hash])
+
+  return url
+}
+
 interface BlossomImageProps {
   src: string | undefined
   alt: string
