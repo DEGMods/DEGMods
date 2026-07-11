@@ -28,7 +28,9 @@ import {
   Layers,
   Boxes,
   RotateCcw,
+  GripVertical,
 } from 'lucide-react'
+import { Reorder, useDragControls } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -209,6 +211,67 @@ function PermissionRow({
   )
 }
 
+// ─── Draggable screenshot row ───────────────────────────────────────
+
+function ScreenshotRow({
+  row, index, onChange, onRemove, inputClass,
+}: {
+  row: { id: string; url: string }
+  index: number
+  onChange: (value: string) => void
+  onRemove: () => void
+  inputClass: string
+}) {
+  const controls = useDragControls()
+  return (
+    <Reorder.Item
+      as="div"
+      value={row}
+      dragListener={false}
+      dragControls={controls}
+      whileDrag={{ scale: 1.01, boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}
+      className="flex items-start gap-2 rounded-lg bg-[#1c1c1c]"
+    >
+      <button
+        type="button"
+        onPointerDown={(e) => controls.start(e)}
+        aria-label="Drag to reorder"
+        className="mt-2 shrink-0 cursor-grab touch-none rounded p-1 text-neutral-600 hover:text-neutral-400 active:cursor-grabbing"
+      >
+        <GripVertical size={16} />
+      </button>
+      <div className="mt-0.5 h-12 w-16 shrink-0 overflow-hidden rounded border border-[#262626] bg-[#171717]">
+        {row.url.trim() && (
+          <img
+            key={row.url}
+            src={row.url}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }}
+          />
+        )}
+      </div>
+      <div className="flex-1">
+        <Input
+          value={row.url}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={`Screenshot URL #${index + 1}`}
+          maxLength={LIMITS.screenshot}
+          className={cn(inputClass, 'w-full')}
+        />
+        <Counter value={row.url} max={LIMITS.screenshot} />
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="mt-2 shrink-0 rounded p-1.5 text-neutral-500 transition-colors hover:bg-[#2a2a2a] hover:text-neutral-300 cursor-pointer"
+      >
+        <X size={14} />
+      </button>
+    </Reorder.Item>
+  )
+}
+
 // ─── Component ──────────────────────────────────────────────────────
 
 export function ModEditor({
@@ -304,19 +367,36 @@ export function ModEditor({
     [],
   )
 
-  // ─── Screenshot helpers ─────────────────────────────────────────
-  const updateScreenshot = (index: number, value: string) => {
-    const next = [...form.screenshots]
-    next[index] = value
-    updateField('screenshots', next)
-  }
+  // ─── Screenshot helpers (id-keyed rows so they can be drag-reordered) ──
+  // form.screenshots stays a string[] (single source for validation/publish);
+  // these rows just carry a stable id per entry for animated reordering.
+  const [ssRows, setSsRows] = useState<{ id: string; url: string }[]>(
+    () => (form.screenshots.length ? form.screenshots : ['']).map((url) => ({ id: crypto.randomUUID(), url })),
+  )
+  const syncScreenshots = useCallback((rows: { id: string; url: string }[]) => {
+    setSsRows(rows)
+    updateField('screenshots', rows.map((r) => r.url))
+  }, [updateField])
+  // Pull external form.screenshots changes (uploads, draft restore) back into
+  // rows, keeping ids where the url at a position is unchanged. No-ops when the
+  // change originated from syncScreenshots (urls already match).
+  useEffect(() => {
+    setSsRows((prev) => {
+      const urls = form.screenshots
+      if (urls.length === prev.length && urls.every((u, i) => u === prev[i].url)) return prev
+      return urls.map((url, i) => (prev[i]?.url === url ? prev[i] : { id: crypto.randomUUID(), url }))
+    })
+  }, [form.screenshots])
+
+  const updateScreenshot = (id: string, value: string) =>
+    syncScreenshots(ssRows.map((r) => (r.id === id ? { ...r, url: value } : r)))
   const addScreenshot = () => {
-    if (form.screenshots.length >= MAX_SCREENSHOTS) { toast.error(`Up to ${MAX_SCREENSHOTS} screenshots`); return }
-    updateField('screenshots', [...form.screenshots, ''])
+    if (ssRows.length >= MAX_SCREENSHOTS) { toast.error(`Up to ${MAX_SCREENSHOTS} screenshots`); return }
+    syncScreenshots([...ssRows, { id: crypto.randomUUID(), url: '' }])
   }
-  const removeScreenshot = (index: number) => {
-    const next = form.screenshots.filter((_, i) => i !== index)
-    updateField('screenshots', next.length === 0 ? [''] : next)
+  const removeScreenshot = (id: string) => {
+    const next = ssRows.filter((r) => r.id !== id)
+    syncScreenshots(next.length === 0 ? [{ id: crypto.randomUUID(), url: '' }] : next)
   }
 
   // ─── Tag helpers ────────────────────────────────────────────────
@@ -726,49 +806,32 @@ export function ModEditor({
       {/* ── 9. Screenshots ──────────────────────────────────────── */}
       <Section icon={ImageIcon} label="Screenshots" error={errors.screenshots} required incomplete={!!liveErrors.screenshots} step={3} order={13}>
         <div className="space-y-2">
-          {form.screenshots.map((url, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <div className="h-12 w-16 shrink-0 overflow-hidden rounded border border-[#262626] bg-[#171717]">
-                {url.trim() && (
-                  <img
-                    key={url}
-                    src={url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }}
-                  />
-                )}
-              </div>
-              <div className="flex-1">
-                <Input
-                  value={url}
-                  onChange={(e) => updateScreenshot(i, e.target.value)}
-                  placeholder={`Screenshot URL #${i + 1}`}
-                  maxLength={LIMITS.screenshot}
-                  className={cn(inputClass, 'w-full')}
-                />
-                <Counter value={url} max={LIMITS.screenshot} />
-              </div>
-              <button
-                type="button"
-                onClick={() => removeScreenshot(i)}
-                className="mt-2 text-neutral-500 hover:text-neutral-300 transition-colors p-1.5 rounded hover:bg-[#2a2a2a] cursor-pointer"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          ))}
+          {ssRows.length > 1 && (
+            <p className="text-[11px] text-neutral-600">Drag the handle to reorder — the first screenshot shows first on the mod page.</p>
+          )}
+          <Reorder.Group as="div" axis="y" values={ssRows} onReorder={syncScreenshots} className="space-y-2">
+            {ssRows.map((row, i) => (
+              <ScreenshotRow
+                key={row.id}
+                row={row}
+                index={i}
+                onChange={(v) => updateScreenshot(row.id, v)}
+                onRemove={() => removeScreenshot(row.id)}
+                inputClass={inputClass}
+              />
+            ))}
+          </Reorder.Group>
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={addScreenshot}
-            disabled={form.screenshots.length >= MAX_SCREENSHOTS}
+            disabled={ssRows.length >= MAX_SCREENSHOTS}
             className="text-xs border-[#262626] bg-transparent hover:bg-[#2a2a2a] text-neutral-400"
           >
             <Plus size={14} className="mr-1" /> Add URL
           </Button>
-          <span className="ml-2 text-[10px] text-neutral-600">{form.screenshots.filter((s) => s.trim()).length}/{MAX_SCREENSHOTS}</span>
+          <span className="ml-2 text-[10px] text-neutral-600">{ssRows.filter((r) => r.url.trim()).length}/{MAX_SCREENSHOTS}</span>
         </div>
         <Separator className="bg-[#262626]" />
         <div>
