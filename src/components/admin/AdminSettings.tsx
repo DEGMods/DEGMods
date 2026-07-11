@@ -163,7 +163,9 @@ function GamesDbTab() {
   const [uploadPercent, setUploadPercent] = useState(0)
   const [uploadSpeed, setUploadSpeed] = useState(0)
   const [currentHost, setCurrentHost] = useState('')
-  const skipCurrentRef = useRef(false)
+  // Abort controller for the in-flight server upload, so "Skip server" cancels
+  // the CURRENT upload and moves on (rather than skipping the next server).
+  const skipAbortRef = useRef<AbortController | null>(null)
 
   // Change tracking
   const [pendingHashes, setPendingHashes] = useState<string[]>([])
@@ -183,13 +185,11 @@ function GamesDbTab() {
     const results: UploadResult[] = []
 
     for (const serverUrl of blossomUrls) {
-      if (skipCurrentRef.current) {
-        skipCurrentRef.current = false
-        continue
-      }
       setCurrentHost(serverUrl)
       setUploadPercent(0)
       setUploadSpeed(0)
+      const controller = new AbortController()
+      skipAbortRef.current = controller
 
       try {
         let lastLoaded = 0
@@ -203,12 +203,13 @@ function GamesDbTab() {
             lastTime = now
           }
           setUploadPercent(p.percentage)
-        })
+        }, 60000, controller.signal)
         results.push(result)
       } catch {
-        // failed on this server, continue
+        // failed, skipped, or timed out on this server — move to the next.
       }
     }
+    skipAbortRef.current = null
     return results
   }, [])
 
@@ -293,7 +294,7 @@ function GamesDbTab() {
     setUploadPercent(0)
     setUploadSpeed(0)
     setCurrentHost('')
-    skipCurrentRef.current = false
+    skipAbortRef.current = null
 
     try {
       const text = await file.text()
@@ -409,7 +410,7 @@ function GamesDbTab() {
     setUploadPercent(0)
     setUploadSpeed(0)
     setCurrentHost('')
-    skipCurrentRef.current = false
+    skipAbortRef.current = null
 
     try {
       const blob = new Blob([newText], { type: 'text/csv' })
@@ -563,7 +564,7 @@ function GamesDbTab() {
             currentHost={currentHost}
             uploadPercent={uploadPercent}
             uploadSpeed={uploadSpeed}
-            onSkip={() => { skipCurrentRef.current = true }}
+            onSkip={() => { skipAbortRef.current?.abort() }}
           />
         )}
 
@@ -639,7 +640,7 @@ function GamesDbTab() {
             uploadPercent={uploadPercent}
             uploadSpeed={uploadSpeed}
             isHashing={uploadStatus === 'hashing'}
-            onSkip={() => { skipCurrentRef.current = true }}
+            onSkip={() => { skipAbortRef.current?.abort() }}
           />
         )}
 

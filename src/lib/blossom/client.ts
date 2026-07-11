@@ -79,8 +79,10 @@ export async function uploadFile(
   authHeader: string,
   onProgress?: (progress: UploadProgress) => void,
   timeoutMs: number = 60000,
+  signal?: AbortSignal,
 ): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new Error(`Upload to ${serverUrl} aborted`)); return }
     const xhr = new XMLHttpRequest()
     const url = `${serverUrl.replace(/\/$/, '')}/upload`
     xhr.open('PUT', url)
@@ -93,13 +95,18 @@ export async function uploadFile(
       reject(new Error(`Upload to ${serverUrl} timed out after ${timeoutMs}ms`))
     }, timeoutMs)
 
+    // Let a caller (e.g. the "Skip server" button) abort THIS upload.
+    const onAbort = () => xhr.abort()
+    const cleanup = () => { clearTimeout(timeout); signal?.removeEventListener('abort', onAbort) }
+    signal?.addEventListener('abort', onAbort, { once: true })
+
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
         onProgress({ loaded: e.loaded, total: e.total, percentage: Math.round((e.loaded / e.total) * 100) })
       }
     }
     xhr.onload = () => {
-      clearTimeout(timeout)
+      cleanup()
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const res = JSON.parse(xhr.responseText)
@@ -109,7 +116,8 @@ export async function uploadFile(
         reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`))
       }
     }
-    xhr.onerror = () => { clearTimeout(timeout); reject(new Error(`Network error uploading to ${serverUrl}`)) }
+    xhr.onerror = () => { cleanup(); reject(new Error(`Network error uploading to ${serverUrl}`)) }
+    xhr.onabort = () => { cleanup(); reject(new Error(`Upload to ${serverUrl} aborted`)) }
     xhr.send(file)
   })
 }

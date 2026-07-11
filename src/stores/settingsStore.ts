@@ -262,7 +262,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     get().saveToStorage()
   },
   addCustomBlossom: (server) => {
-    set(s => ({ customBlossoms: [...s.customBlossoms, server] }))
+    const clean = server.url.trim().replace(/\/+$/, '')
+    if (!clean) return
+    set(s => {
+      // Don't add a host that's already present (in any list), even if it differs
+      // only by a trailing slash or case — that's what caused duplicate uploads.
+      const already = [...s.clientBlossoms, ...s.userBlossoms, ...s.customBlossoms]
+        .some(b => b.url.trim().replace(/\/+$/, '').toLowerCase() === clean.toLowerCase())
+      if (already) return s
+      return { customBlossoms: [...s.customBlossoms, { ...server, url: clean }] }
+    })
     get().saveToStorage()
   },
   removeCustomBlossom: (url) => {
@@ -406,6 +415,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const s = get()
     const seen = new Set<string>()
     const out: string[] = []
+    // Normalize (trim + drop trailing slashes) and dedupe case-insensitively, so
+    // e.g. "https://brs.degmods.com" and "https://brs.degmods.com/" (or the same
+    // host added twice across lists) can't cause a duplicate upload/fetch.
+    const norm = (u: string) => u.trim().replace(/\/+$/, '')
     const addList = (list: BlossomConfig[]) => {
       let enabled = list.filter(b => b.enabled)
       if (s.limitBlossomsPerList) {
@@ -415,7 +428,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const rest = pickRandom(enabled.filter(b => !b.pinned), Math.max(0, 3 - pinned.length))
         enabled = [...pinned, ...rest]
       }
-      for (const b of enabled) if (!seen.has(b.url)) { seen.add(b.url); out.push(b.url) }
+      for (const b of enabled) {
+        const clean = norm(b.url)
+        const key = clean.toLowerCase()
+        if (clean && !seen.has(key)) { seen.add(key); out.push(clean) }
+      }
     }
     addList(s.clientBlossoms)
     addList(s.userBlossoms)
