@@ -6,7 +6,7 @@ const MO2_RELEASES = 'https://github.com/ModOrganizer2/modorganizer/releases'
 
 export function ModManagerPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-10 py-12">
+    <div className="mx-auto space-y-12 py-12">
       {/* Header */}
       <section className="space-y-4">
         <div className="flex items-center gap-3">
