@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Gamepad2, Package, PenLine, Rss, Settings, User, Menu, X, Eye, Pencil, LogOut } from 'lucide-react'
+import { Gamepad2, Package, PenLine, Rss, Settings, User, Menu, X, Eye, Pencil, LogOut, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useNotificationsStore } from '@/stores/notificationsStore'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
@@ -87,6 +88,13 @@ export function Header() {
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+  const pubkey = useAuthStore(s => s.pubkey)
+  const hasUnread = useNotificationsStore(s => s.newestTs > s.lastSeen)
+
+  // Refresh the unread state on login (throttled inside the store).
+  useEffect(() => {
+    if (pubkey) useNotificationsStore.getState().refresh(pubkey)
+  }, [pubkey])
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
@@ -120,6 +128,17 @@ export function Header() {
 
         {/* Right side actions */}
         <div className="flex items-center gap-1">
+          {isAuthenticated && (
+            <Link to="/feed?view=notifications" aria-label="Notifications">
+              <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground hover:bg-transparent">
+                <Bell size={18} />
+                {/* Unread dot (bordered so it reads on the icon) — wired to read-state next */}
+                {hasUnread && (
+                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-purple-500 ring-2 ring-background" />
+                )}
+              </Button>
+            </Link>
+          )}
           <Link to="/settings">
             <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hover:bg-transparent">
               <Settings size={18} />

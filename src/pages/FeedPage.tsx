@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Bell, Rss } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useFollowsStore } from '@/stores/followsStore'
+import { useNotificationsStore } from '@/stores/notificationsStore'
 import { PublisherCard } from '@/components/mod/PublisherCard'
 import { FeedView } from '@/components/social/FeedView'
 import { NotificationsView } from '@/components/social/NotificationsView'
@@ -30,9 +32,16 @@ export function FeedPage() {
   const myPubkey = useAuthStore((s) => s.pubkey)
   const contactEvent = useFollowsStore((s) => s.contactEvent)
   const loadContacts = useFollowsStore((s) => s.loadContacts)
-  const [view, setView] = useState<View>('home')
+  const [searchParams] = useSearchParams()
+  // Deep-link support: /feed?view=notifications opens the notifications view.
+  const [view, setView] = useState<View>(searchParams.get('view') === 'notifications' ? 'notifications' : 'home')
 
   useEffect(() => { if (myPubkey) loadContacts() }, [myPubkey, loadContacts])
+
+  // Opening the notifications view marks everything seen (clears the nav dot).
+  useEffect(() => {
+    if (view === 'notifications' && myPubkey) useNotificationsStore.getState().markSeen(myPubkey)
+  }, [view, myPubkey])
 
   const authors = useMemo(() => {
     const set = new Set<string>()
