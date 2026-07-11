@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 
 type View = 'home' | 'notifications'
 
-function NavButton({ icon: Icon, label, active, onClick }: { icon: typeof Rss; label: string; active: boolean; onClick: () => void }) {
+function NavButton({ icon: Icon, label, active, dot, onClick }: { icon: typeof Rss; label: string; active: boolean; dot?: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -22,7 +22,10 @@ function NavButton({ icon: Icon, label, active, onClick }: { icon: typeof Rss; l
         active ? 'bg-[#262626] text-white' : 'text-neutral-400 hover:bg-[#212121] hover:text-neutral-200',
       )}
     >
-      <Icon className="h-4 w-4" />
+      <span className="relative flex">
+        <Icon className="h-4 w-4" />
+        {dot && <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-purple-500 ring-2 ring-[#1c1c1c]" />}
+      </span>
       {label}
     </button>
   )
@@ -35,10 +38,13 @@ export function FeedPage() {
   const [searchParams] = useSearchParams()
   // Deep-link support: /feed?view=notifications opens the notifications view.
   const [view, setView] = useState<View>(searchParams.get('view') === 'notifications' ? 'notifications' : 'home')
+  const hasUnread = useNotificationsStore((s) => s.newestTs > s.lastSeen)
 
   useEffect(() => { if (myPubkey) loadContacts() }, [myPubkey, loadContacts])
+  useEffect(() => { if (myPubkey) useNotificationsStore.getState().refresh(myPubkey) }, [myPubkey])
 
-  // Opening the notifications view marks everything seen (clears the nav dot).
+  // Viewing the notifications marks everything seen (clears the dot) and records
+  // the NIP-78 seen marker.
   useEffect(() => {
     if (view === 'notifications' && myPubkey) useNotificationsStore.getState().markSeen(myPubkey)
   }, [view, myPubkey])
@@ -74,7 +80,7 @@ export function FeedPage() {
           <PublisherCard pubkey={myPubkey} />
           <div className="rounded-lg border border-[#262626] bg-[#1c1c1c] p-2 space-y-1">
             <NavButton icon={Rss} label="Feed" active={view === 'home'} onClick={() => setView('home')} />
-            <NavButton icon={Bell} label="Notifications" active={view === 'notifications'} onClick={() => setView('notifications')} />
+            <NavButton icon={Bell} label="Notifications" active={view === 'notifications'} dot={hasUnread} onClick={() => setView('notifications')} />
           </div>
         </div>
       </div>

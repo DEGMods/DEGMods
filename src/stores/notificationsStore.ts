@@ -20,7 +20,6 @@ import { KINDS } from '@/lib/constants'
 const APP_DATA_KIND = 30078
 const SEEN_DTAG = 'notifications_seen_at' // Jumble/Den Chat-compatible
 const CACHE_KEY = 'degmods:notifications-seen-at'
-const PUBLISH_THROTTLE_S = 60
 const REFRESH_TTL_MS = 3 * 60 * 1000
 
 function cachedSeen(): number {
@@ -62,14 +61,13 @@ async function fetchNewestNotifTs(pubkey: string): Promise<number> {
 }
 
 let lastRefresh = 0
-let lastPublished = 0
 
 interface NotificationsState {
   newestTs: number
   lastSeen: number
   /** Fetch newest-notification + last-seen timestamps (throttled by a TTL). */
   refresh: (pubkey: string, force?: boolean) => Promise<void>
-  /** Mark everything seen now — clears the dot; publishes the 30078 marker (throttled). */
+  /** Mark everything seen now — clears the dot and publishes the 30078 marker. */
   markSeen: (pubkey: string) => Promise<void>
 }
 
@@ -95,8 +93,6 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const now = Math.floor(Date.now() / 1000)
     localStorage.setItem(CACHE_KEY, String(now))
     set({ lastSeen: now })
-    if (now - lastPublished < PUBLISH_THROTTLE_S) return
-    lastPublished = now
     try {
       const signed = await signEvent({
         kind: APP_DATA_KIND,
