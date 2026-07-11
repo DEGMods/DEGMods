@@ -201,6 +201,7 @@ function ModsTab({ pubkey }: { pubkey: string }) {
   // legacy visibility setting (no filter bar on the profile page).
   const legacyMode = useModFiltersStore((s) => s.legacyMode)
   const legacyMods = useLegacyModsStore((s) => s.mods)
+  const legacyLoading = useLegacyModsStore((s) => s.loading)
   useEffect(() => { useLegacyModsStore.getState().load() }, [])
   const mods = useMemo(() => {
     const authorLegacy = legacyMode === 'hide' ? [] : legacyMods.filter((m) => m.pubkey === pubkey)
@@ -223,7 +224,12 @@ function ModsTab({ pubkey }: { pubkey: string }) {
     if (!loading && !reachedEnd && current >= totalPages - 1) loadMore()
   }, [current, totalPages, reachedEnd, loading, loadMore])
 
-  if (loading) {
+  // Hold the skeletons until BOTH the current-mod and legacy fetches settle so
+  // this author's legacy mods don't pop in after the fact. Skip the wait when
+  // legacy is hidden, since none would be shown.
+  const showSkeleton = loading || (legacyMode !== 'hide' && legacyLoading)
+
+  if (showSkeleton) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-lg bg-[#212121]" />)}

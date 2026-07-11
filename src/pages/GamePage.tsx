@@ -50,11 +50,16 @@ export function GamePage() {
 
   // LEGACY: merge in old kind-30402 mods for this game (matched by game name).
   const legacyMods = useLegacyModsStore((s) => s.mods)
+  const legacyLoading = useLegacyModsStore((s) => s.loading)
   useEffect(() => { useLegacyModsStore.getState().load() }, [])
   const mods = useMemo(
     () => withLegacyMods(newMods, legacyMods.filter(m => m.game.toLowerCase() === gameName.toLowerCase())),
     [newMods, legacyMods, gameName],
   )
+  // Keep the skeletons until BOTH fetches settle — otherwise legacy mods pop in
+  // after the current-mod fetch finishes and the list visibly reflows. Skip the
+  // wait when legacy is hidden, since none would be shown anyway.
+  const showSkeleton = loading || (legacyMode !== 'hide' && legacyLoading)
 
   const availableClients = useMemo(
     () => [...new Set(mods.map(m => m.client).filter((c): c is string => !!c))].sort(),
@@ -128,7 +133,7 @@ export function GamePage() {
             <h1 className="text-2xl md:text-3xl font-bold text-white">
               {gameName}
             </h1>
-            {!loading && (
+            {!showSkeleton && (
               <p className="text-neutral-400 text-sm mt-1">
                 at least {mods.length} {mods.length === 1 ? 'mod' : 'mods'} available
               </p>
@@ -161,7 +166,7 @@ export function GamePage() {
 
         <ModFiltersBar availableClients={availableClients} resultCount={filtered.length} wotHiddenCount={wotHiddenCount} />
 
-        {loading ? (
+        {showSkeleton ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="space-y-2">

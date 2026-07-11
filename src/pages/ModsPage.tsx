@@ -39,8 +39,13 @@ export function ModsPage() {
 
   // LEGACY: merge in the old kind-30402 mods (loaded once, filtered client-side).
   const legacyMods = useLegacyModsStore((s) => s.mods)
+  const legacyLoading = useLegacyModsStore((s) => s.loading)
   useEffect(() => { useLegacyModsStore.getState().load() }, [])
   const allMods = useMemo(() => withLegacyMods(newMods, legacyMods), [newMods, legacyMods])
+  // Hold the skeletons until BOTH fetches settle so legacy mods don't pop in
+  // (and reflow the grid) after the current-mod fetch alone finishes. Skip the
+  // wait when legacy is hidden, since none would be shown anyway.
+  const showSkeleton = loading || (legacyMode !== 'hide' && legacyLoading)
 
   // Relay-reported totals (NIP-45) — the true counts, not just what's loaded.
   const [counts, setCounts] = useState<{ current: number; legacy: number } | null>(null)
@@ -201,7 +206,7 @@ export function ModsPage() {
       />
 
       {/* Grid */}
-      {loading ? (
+      {showSkeleton ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="space-y-2">
