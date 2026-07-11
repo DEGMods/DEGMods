@@ -33,6 +33,7 @@ import { AboutPage } from '@/pages/AboutPage'
 import { ModManagerPage } from '@/pages/ModManagerPage'
 import { AdsPage } from '@/pages/AdsPage'
 import { FaqPage } from '@/pages/FaqPage'
+import { TosPage } from '@/pages/TosPage'
 import { GuidesPage } from '@/pages/GuidesPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
@@ -144,6 +145,7 @@ export default function App() {
           <Route path="/mod-manager" element={<ModManagerPage />} />
           <Route path="/ads" element={<AdsPage />} />
           <Route path="/faq" element={<FaqPage />} />
+          <Route path="/tos" element={<TosPage />} />
           <Route path="/guides" element={<GuidesPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

@@ -12,6 +12,7 @@ import {
   extractAnnouncement, ANNOUNCEMENT_DTAG,
   buildAdsEvent, extractAds, ADS_DTAG, type AdEntry,
   buildFaqEvent, extractFaq, FAQ_DTAG, type FaqItem,
+  buildTosEvent, extractTos, TOS_DTAG, type TosItem,
   buildGuidesEvent, extractGuideCoordinates, GUIDES_DTAG, extractBlogData,
   EMULATED_PLATFORMS_DTAG, extractEmulatedPlatforms,
   SUGGESTED_TAGS_DTAG, extractSuggestedTags,
@@ -50,7 +51,7 @@ import {
   Upload, Trash2, FileText, Plus, Save, Pencil, SkipForward,
   AlertTriangle, X, Link2, Eye, GripVertical, ShieldAlert, EyeOff,
   Image as ImageIcon, HelpCircle, BookOpen, Joystick, Flag, Copy, ExternalLink, ChevronDown, Lightbulb,
-  HardDrive, Radio, BarChart3,
+  HardDrive, Radio, BarChart3, ScrollText,
 } from 'lucide-react'
 import { BlossomsTab } from './BlossomsTab'
 import { RelaysTab } from './RelaysTab'
@@ -59,7 +60,7 @@ import type { BlogDetails } from '@/types/blog'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-type AdminTab = 'games-db' | 'featured' | 'announcements' | 'ads' | 'faq' | 'guides' | 'suggestions' | 'moderation' | 'blossoms' | 'relays'
+type AdminTab = 'games-db' | 'featured' | 'announcements' | 'ads' | 'faq' | 'tos' | 'guides' | 'suggestions' | 'moderation' | 'blossoms' | 'relays'
 
 interface CsvFileEntry {
   hash: string
@@ -100,6 +101,7 @@ const adminTabs: { id: AdminTab; label: string; icon: typeof Database }[] = [
   { id: 'announcements', label: 'Announcements', icon: Megaphone },
   { id: 'ads', label: 'Ads', icon: ImageIcon },
   { id: 'faq', label: 'FAQ', icon: HelpCircle },
+  { id: 'tos', label: 'ToS', icon: ScrollText },
   { id: 'guides', label: 'Guides', icon: BookOpen },
   { id: 'suggestions', label: 'Suggestions', icon: Lightbulb },
   { id: 'moderation', label: 'Moderation', icon: ShieldAlert },
@@ -139,6 +141,7 @@ export default function AdminSettings() {
       {activeTab === 'announcements' && <AnnouncementsTab />}
       {activeTab === 'ads' && <AdsTab />}
       {activeTab === 'faq' && <FaqTab />}
+      {activeTab === 'tos' && <TosTab />}
       {activeTab === 'guides' && <GuidesTab />}
       {activeTab === 'suggestions' && <SuggestionsTab />}
       {activeTab === 'moderation' && <ModerationTab />}
@@ -1730,6 +1733,83 @@ function FaqTab() {
               </div>
               <Input value={it.question} onChange={(e) => update(it.id, { question: e.target.value })} placeholder="Question" className={inputClass} />
               <Textarea value={it.answer} onChange={(e) => update(it.id, { answer: e.target.value })} placeholder="Answer (markdown)" rows={3} className={inputClass} />
+            </div>
+          ))}
+          <Button onClick={publish} disabled={!dirty || publishing} className="w-full">
+            {publishing ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />}
+            Publish Changes
+          </Button>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Terms of Use Tab ───────────────────────────────────────────────
+
+interface EditTos extends TosItem { id: string }
+
+function TosTab() {
+  const [items, setItems] = useState<EditTos[]>([])
+  const [loading, setLoading] = useState(true)
+  const [publishing, setPublishing] = useState(false)
+  const [baseline, setBaseline] = useState('[]')
+
+  const toTos = (i: EditTos): TosItem => ({ title: i.title, body: i.body })
+  const serialize = (list: EditTos[]) => JSON.stringify(list.map(toTos))
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const event = await fetchEvent(relays, { kinds: [KINDS.GAME_DB], authors: [ADMIN_PUBKEY], '#d': [TOS_DTAG] })
+      const parsed = event ? extractTos(event) : []
+      const withIds = parsed.map((i): EditTos => ({ ...i, id: crypto.randomUUID() }))
+      setItems(withIds)
+      setBaseline(serialize(withIds))
+    } catch { toast.error('Failed to load Terms of Use') } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const dirty = serialize(items) !== baseline
+  const update = (id: string, patch: Partial<EditTos>) => setItems(p => p.map(i => i.id === id ? { ...i, ...patch } : i))
+  const remove = (id: string) => setItems(p => p.filter(i => i.id !== id))
+
+  const publish = async () => {
+    setPublishing(true)
+    try {
+      const clean = items.map(toTos).filter(i => i.title.trim() && i.body.trim())
+      const result = await signAndPublish(buildTosEvent(clean), (s) => {
+        if (s === 'mining') toast.loading('Processing proof of work…', { id: 'tos' })
+        if (s === 'publishing') toast.loading('Publishing…', { id: 'tos' })
+      })
+      if (result.success) { toast.success('Terms of Use published', { id: 'tos' }); setBaseline(serialize(items)) }
+      else toast.error(result.error || 'Publish failed', { id: 'tos' })
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Publish failed', { id: 'tos' }) } finally { setPublishing(false) }
+  }
+
+  const inputClass = 'bg-[#212121] border-[#262626] text-white text-sm'
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-neutral-500">Sections shown on the <span className="font-mono text-neutral-300">/tos</span> page. Body text supports markdown.</p>
+        <Button onClick={() => setItems(p => [...p, { id: crypto.randomUUID(), title: '', body: '' }])} variant="outline" size="sm" className="border-[#262626] shrink-0">
+          <Plus size={14} className="mr-1.5" /> Add Section
+        </Button>
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500 py-4"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+      ) : (
+        <>
+          {items.length === 0 && <p className="text-sm text-neutral-500 py-6 text-center">No terms yet.</p>}
+          {items.map((it, idx) => (
+            <div key={it.id} className="space-y-2 rounded-lg border border-[#262626] bg-[#1c1c1c] p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-neutral-300">Section #{idx + 1}</span>
+                <button onClick={() => remove(it.id)} className="text-neutral-500 hover:text-red-400" aria-label="Remove"><X size={16} /></button>
+              </div>
+              <Input value={it.title} onChange={(e) => update(it.id, { title: e.target.value })} placeholder="Title" className={inputClass} />
+              <Textarea value={it.body} onChange={(e) => update(it.id, { body: e.target.value })} placeholder="Body (markdown)" rows={4} className={inputClass} />
             </div>
           ))}
           <Button onClick={publish} disabled={!dirty || publishing} className="w-full">

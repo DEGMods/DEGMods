@@ -728,6 +728,37 @@ export function extractFaq(event: NostrEvent): FaqItem[] {
   }
 }
 
+// ─── Terms of Use (kind 30078, d: terms-of-use) ─────────────────────
+
+export const TOS_DTAG = 'terms-of-use'
+
+export interface TosItem { title: string; body: string } // body is markdown
+
+export function buildTosEvent(items: TosItem[]): UnsignedEvent {
+  return {
+    kind: KINDS.GAME_DB,
+    content: JSON.stringify(items),
+    tags: [['d', TOS_DTAG]],
+    created_at: Math.floor(Date.now() / 1000),
+    pubkey: '',
+  }
+}
+
+export function extractTos(event: NostrEvent): TosItem[] {
+  try {
+    const arr = JSON.parse(event.content)
+    if (!Array.isArray(arr)) return []
+    return arr
+      .map((i): TosItem => ({
+        title: typeof i?.title === 'string' ? i.title : '',
+        body: typeof i?.body === 'string' ? i.body : '',
+      }))
+      .filter(i => i.title.trim() && i.body.trim())
+  } catch {
+    return []
+  }
+}
+
 // ─── Guides (kind 30078 list of kind:30023 article coords; d: site-guides) ──
 // The guide *content* lives in long-form (kind 30023) articles; this NIP-78
 // event just curates which ones (and in what order) appear as guides.
