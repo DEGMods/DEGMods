@@ -17,15 +17,18 @@ import type { Event as NostrEvent } from 'nostr-tools'
 import { constructModListFromEvents, extractBlogData } from '@/lib/nostr/events'
 import { LEGACY_MOD_KIND, extractLegacyModData, isLegacyModEvent, normalizeModCoord } from '@/lib/mods/legacy'
 import { KINDS, ADMIN_PUBKEY } from '@/lib/constants'
+import { beginRefresh, endRefresh } from '@/lib/ui/refreshToast'
 import type { ModDetails } from '@/types/mod'
 import type { BlogDetails } from '@/types/blog'
 import type { GameEntry } from '@/types/game'
 
 const NIP78_KIND = 30078
 const HOME_TTL = 2 * 60 * 1000
+const HOME_CACHE_KEY = 'home-cache-v1'
 
-// Home data survives navigation so returning is instant instead of re-fetching
-// everything and flashing skeletons. Refreshed in the background past the TTL.
+// Home data survives navigation AND full reloads (persisted to localStorage) so
+// returning is instant instead of re-fetching everything and flashing skeletons.
+// A stale cache still paints immediately, then refreshes in the background.
 interface HomeCache {
   at: number
   mods: ModDetails[]
@@ -37,24 +40,57 @@ interface HomeCache {
 }
 let homeCache: HomeCache | null = null
 
+// Read the cache once (in-memory first, else the sync localStorage copy). Sync so
+// the very first render can paint from it with no skeleton flash on reload.
+function readHomeCache(): HomeCache | null {
+  if (homeCache) return homeCache
+  try {
+    const raw = localStorage.getItem(HOME_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Omit<HomeCache, 'blogAuthors'> & { blogAuthors: [string, UserProfile][] }
+    homeCache = { ...parsed, blogAuthors: new Map(parsed.blogAuthors) }
+    return homeCache
+  } catch {
+    return null
+  }
+}
+
+function writeHomeCache(cache: HomeCache): void {
+  homeCache = cache
+  try {
+    localStorage.setItem(
+      HOME_CACHE_KEY,
+      JSON.stringify({ ...cache, blogAuthors: [...cache.blogAuthors] }),
+    )
+  } catch {
+    // quota / serialization failure is non-fatal — the in-memory copy still serves.
+  }
+}
+
 export function HomePage() {
   const getGameImages = useGamesDbStore(s => s.getGameImages)
 
-  const [mods, setMods] = useState<ModDetails[]>(() => homeCache?.mods ?? [])
-  const [sliderMods, setSliderMods] = useState<ModDetails[]>(() => homeCache?.sliderMods ?? [])
-  const [featuredMods, setFeaturedMods] = useState<ModDetails[]>(() => homeCache?.featuredMods ?? [])
-  const [games, setGames] = useState<GameEntry[]>(() => homeCache?.games ?? [])
-  const [blogs, setBlogs] = useState<BlogDetails[]>(() => homeCache?.blogs ?? [])
-  const [blogAuthors, setBlogAuthors] = useState<Map<string, UserProfile>>(() => homeCache?.blogAuthors ?? new Map())
-  const [loading, setLoading] = useState(() => !homeCache)
+  const cached0 = readHomeCache()
+  const [mods, setMods] = useState<ModDetails[]>(() => cached0?.mods ?? [])
+  const [sliderMods, setSliderMods] = useState<ModDetails[]>(() => cached0?.sliderMods ?? [])
+  const [featuredMods, setFeaturedMods] = useState<ModDetails[]>(() => cached0?.featuredMods ?? [])
+  const [games, setGames] = useState<GameEntry[]>(() => cached0?.games ?? [])
+  const [blogs, setBlogs] = useState<BlogDetails[]>(() => cached0?.blogs ?? [])
+  const [blogAuthors, setBlogAuthors] = useState<Map<string, UserProfile>>(() => cached0?.blogAuthors ?? new Map())
+  const [loading, setLoading] = useState(() => !cached0)
 
   useEffect(() => {
     let cancelled = false
-    // Reuse cached home data on a quick return; only re-fetch when it's stale.
+    const hasCache = !!homeCache
+    // Fresh cache on a quick return: paint it and skip the network entirely.
     if (homeCache && Date.now() - homeCache.at < HOME_TTL) { setLoading(false); return }
+    // Otherwise revalidate. With a cache to show, do it in the background (no
+    // skeletons) behind a "Checking for updates…" toast, and update in place.
+    const background = hasCache
     async function load() {
       const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-      if (!homeCache) setLoading(true)
+      if (background) beginRefresh()
+      else setLoading(true)
       try {
         const [modEvents, blogEvents, curationEvents] = await Promise.all([
           fetchEvents(relays, { kinds: [KINDS.MOD] }, 10000),
@@ -147,15 +183,18 @@ export function HomePage() {
         }))
         if (cancelled) return
         setBlogAuthors(authors)
-        homeCache = {
+        writeHomeCache({
           at: Date.now(),
-          mods: allMods, sliderMods: sliderVal, featuredMods: featuredVal,
+          // Only the latest few are shown ("Latest Mods"); cap the persisted
+          // slice so the localStorage copy stays small and within quota.
+          mods: allMods.slice(0, 24), sliderMods: sliderVal, featuredMods: featuredVal,
           games: gamesVal, blogs: parsedBlogs, blogAuthors: authors,
-        }
+        })
       } catch {
         // silently fail
       } finally {
-        if (!cancelled) setLoading(false)
+        if (background) endRefresh()
+        else if (!cancelled) setLoading(false)
       }
     }
     load()
