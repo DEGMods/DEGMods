@@ -2100,7 +2100,8 @@ function ReportsSection() {
   }
 
   const visible = reports.filter(r => types.has(r.type))
-  const mods = visible.filter(r => r.kind === KINDS.MOD)
+  // LEGACY: legacy mods are kind 30402 — surface their reports in the Mods tab too.
+  const mods = visible.filter(r => r.kind === KINDS.MOD || r.kind === LEGACY_MOD_KIND)
   const blogs = visible.filter(r => r.kind === KINDS.BLOG)
   const list = tab === 'mods' ? mods : blogs
   const page = tab === 'mods' ? modPage : blogPage

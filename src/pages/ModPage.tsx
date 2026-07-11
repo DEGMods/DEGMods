@@ -283,7 +283,7 @@ export default function ModPage() {
   const modTarget: NostrTarget = {
     id: mod.id,
     pubkey: mod.pubkey,
-    kind: KINDS.MOD,
+    kind: mod.legacy ? LEGACY_MOD_KIND : KINDS.MOD, // LEGACY: keep k tags correct
     aTag: mod.aTag,
   }
 
@@ -805,7 +805,7 @@ export default function ModPage() {
           target={{
             eventId: mod.id,
             coord: mod.aTag,
-            kind: KINDS.MOD,
+            kind: mod.legacy ? LEGACY_MOD_KIND : KINDS.MOD, // LEGACY: report the real kind
             authorPubkey: mod.pubkey,
             title: mod.title,
             hashes: mod.downloads.map((d) => d.hash).filter((h): h is string => !!h),
