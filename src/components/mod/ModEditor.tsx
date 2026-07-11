@@ -230,17 +230,17 @@ function ScreenshotRow({
       dragListener={false}
       dragControls={controls}
       whileDrag={{ scale: 1.01, boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}
-      className="flex items-start gap-2 rounded-lg bg-[#1c1c1c]"
+      className="flex items-center gap-2 rounded-lg bg-[#1c1c1c] py-2"
     >
       <button
         type="button"
         onPointerDown={(e) => controls.start(e)}
         aria-label="Drag to reorder"
-        className="mt-2 shrink-0 cursor-grab touch-none rounded p-1 text-neutral-600 hover:text-neutral-400 active:cursor-grabbing"
+        className="shrink-0 cursor-grab touch-none rounded p-1 text-neutral-600 hover:text-neutral-400 active:cursor-grabbing"
       >
         <GripVertical size={16} />
       </button>
-      <div className="mt-0.5 h-12 w-16 shrink-0 overflow-hidden rounded border border-[#262626] bg-[#171717]">
+      <div className="h-12 w-16 shrink-0 overflow-hidden rounded border border-[#262626] bg-[#171717]">
         {row.url.trim() && (
           <img
             key={row.url}
@@ -264,7 +264,7 @@ function ScreenshotRow({
       <button
         type="button"
         onClick={onRemove}
-        className="mt-2 shrink-0 rounded p-1.5 text-neutral-500 transition-colors hover:bg-[#2a2a2a] hover:text-neutral-300 cursor-pointer"
+        className="shrink-0 rounded p-1.5 text-neutral-500 transition-colors hover:bg-[#2a2a2a] hover:text-neutral-300 cursor-pointer"
       >
         <X size={14} />
       </button>
