@@ -8,6 +8,7 @@
  */
 import type { Event as NostrEvent } from 'nostr-tools'
 import type { ModDetails, ModFormState, DownloadEntry, PermissionsData } from '@/types/mod'
+import { cacheEvent } from '@/lib/nostr/eventCache'
 
 export const LEGACY_MOD_KIND = 30402
 export const LEGACY_GAMEMOD_TAG = 'GameMod'
@@ -71,6 +72,10 @@ function boolTag(event: NostrEvent, name: string, dflt: boolean): boolean {
 
 /** Parse a legacy (kind-30402) mod event into the shared ModDetails shape. */
 export function extractLegacyModData(event: NostrEvent): ModDetails {
+  // Mirror extractModData: cache the raw event by coordinate so opening a legacy
+  // mod (e.g. from the featured slider) renders instantly from what a list/home
+  // fetch already pulled, instead of showing a spinner while it re-fetches.
+  cacheEvent(event)
   const first = (name: string): string => event.tags.find((t) => t[0] === name)?.[1] ?? ''
   // All values across every tag of a name (handles both one-per-tag and
   // multi-value-per-tag encodings the old client used).
