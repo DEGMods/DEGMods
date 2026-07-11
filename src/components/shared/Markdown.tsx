@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { Copy, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BlossomImage } from './BlossomImage'
@@ -132,15 +134,28 @@ interface MarkdownProps {
   className?: string
 }
 
+// Sanitize schema (GitHub's, hardened). rehype-sanitize runs AFTER rehype-raw,
+// so it cleans any embedded/raw HTML before it becomes React elements: scripts,
+// event handlers (onclick…), `javascript:`/`data:` URLs, <style>, <iframe>, etc.
+// are dropped. We keep the code-block language class so fenced code still
+// highlights, and let anchors carry href/title (our <a> component forces
+// target=_blank rel=noopener noreferrer nofollow regardless).
+const sanitizeSchema = defaultSchema
+
 /**
  * Renders user-authored markdown (mod bodies, blog posts) with GFM support,
- * single-newline line breaks, and dark-theme styling. Raw HTML is NOT rendered
- * (no rehype-raw), so output is XSS-safe.
+ * single-newline line breaks, and dark-theme styling. Some legacy posts store
+ * raw HTML bodies rather than markdown, so raw HTML IS rendered — but only after
+ * rehype-sanitize strips anything unsafe, so output stays XSS-safe.
  */
 export function Markdown({ content, className }: MarkdownProps) {
   return (
     <div className={cn('text-sm leading-relaxed text-neutral-300 break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
+        components={components}
+      >
         {content}
       </ReactMarkdown>
     </div>
