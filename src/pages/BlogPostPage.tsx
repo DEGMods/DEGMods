@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
-import { getCachedEvent } from '@/lib/nostr/eventCache'
+import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
 import { fetchEvent, fetchLatestEvent } from '@/lib/nostr/relay-pool'
@@ -90,6 +90,9 @@ export default function BlogPostPage() {
       const { pubkey: authorPk, identifier, kind } = decoded.data
       const coord = `${kind}:${authorPk}:${identifier}`
 
+      // Await hydration so a cold reload doesn't miss the persisted cache.
+      await whenEventCacheReady
+      if (cancelled) return
       const cached = getCachedEvent(coord)
       if (cached) applyEvent(cached)
       else setLoading(true)

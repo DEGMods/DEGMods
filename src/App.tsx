@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import { RefreshIndicator } from '@/components/shared/RefreshIndicator'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useModerationStore } from '@/stores/moderationStore'
@@ -148,6 +149,7 @@ export default function App() {
         </Route>
       </Routes>
       <LoginModalHost />
+      <RefreshIndicator />
       <Toaster
         theme="dark"
         position="bottom-right"

@@ -4,6 +4,8 @@ import { fetchEventsWithSearch } from '@/lib/nostr/searchFetch'
 import { constructModListFromEvents } from '@/lib/nostr/events'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { beginRefresh, endRefresh } from '@/lib/ui/refreshToast'
+import { idbStorage } from '@/lib/storage/idbStorage'
+import { createPersister } from '@/lib/storage/persist'
 import type { ModDetails } from '@/types/mod'
 
 const DEFAULT_BATCH = 100
@@ -12,15 +14,22 @@ const PROG_TTL = 60 * 1000
 // Bounded LRU so visiting many games/profiles in a session can't grow unbounded.
 const PROG_CACHE_MAX = 16
 
+// Persistence (IndexedDB): only the most-recent filters, capped events each, so
+// a full reload of /mods, /game, /profile paints instantly instead of spinning.
+const PROG_KEY = 'prog-mods-cache-v1'
+const PROG_PERSIST_FILTERS = 6
+const PROG_PERSIST_EVENTS = 150
+const PROG_MAX_AGE_MS = 6 * 60 * 60 * 1000
+
 interface ProgCacheEntry {
   at: number
   raw: NostrEvent[]
   oldest: number | undefined
 }
 
-// In-memory (per session) cache of loaded events per filter, so returning to a
-// list page paints instantly and revalidates in the background instead of
-// flashing skeletons. Keyed by the JSON filter; not persisted (lists can be big).
+// Cache of loaded events per filter (keyed by the JSON filter), so returning to
+// a list page paints instantly and revalidates in the background instead of
+// flashing skeletons.
 const progCache = new Map<string, ProgCacheEntry>()
 
 function cacheGet(key: string): ProgCacheEntry | undefined {
@@ -40,7 +49,42 @@ function cacheSet(key: string, entry: ProgCacheEntry): void {
     if (oldestKey === undefined) break
     progCache.delete(oldestKey)
   }
+  schedulePersist()
 }
+
+// Hydrate the most-recent filters from IndexedDB. Read paths await this before
+// deciding cache-vs-skeleton so a cold reload doesn't miss the persisted copy.
+let progHydrated = false
+const whenProgReady: Promise<void> = (async () => {
+  try {
+    const raw = await idbStorage.getItem(PROG_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as { savedAt: number; filters: [string, ProgCacheEntry][] }
+      if (parsed?.filters && Date.now() - parsed.savedAt <= PROG_MAX_AGE_MS) {
+        for (const [key, entry] of parsed.filters) progCache.set(key, entry)
+      }
+    }
+  } catch {
+    // corrupt/absent cache is non-fatal.
+  }
+  progHydrated = true
+})()
+
+const schedulePersist = createPersister(() => {
+  try {
+    // Most-recently-used filters (Map keeps insertion order), newest first page
+    // of each, so the blob stays a few MB.
+    const filters = [...progCache.entries()]
+      .slice(-PROG_PERSIST_FILTERS)
+      .map(([key, v]): [string, ProgCacheEntry] => [
+        key,
+        { at: v.at, oldest: v.oldest, raw: v.raw.slice(0, PROG_PERSIST_EVENTS) },
+      ])
+    idbStorage.setItem(PROG_KEY, JSON.stringify({ savedAt: Date.now(), filters }))
+  } catch {
+    // serialization/quota failure is non-fatal.
+  }
+})
 
 /**
  * Progressively fetches mods for a given base filter. The first batch loads on
@@ -89,30 +133,31 @@ export function useProgressiveMods(baseFilter: Filter, batch: number = DEFAULT_B
   // Reset/seed + initial (or background) load whenever the base filter changes.
   useEffect(() => {
     let cancelled = false
-    const cached = cacheGet(filterKey)
 
-    if (cached) {
-      // Paint the cached page instantly; no skeletons on return.
-      rawRef.current = cached.raw.slice()
-      seenRef.current = new Set(cached.raw.map((e) => e.id))
-      oldestRef.current = cached.oldest
-      setMods(constructModListFromEvents(rawRef.current))
-      setReachedEnd(false)
-      setLoading(false)
-    } else {
-      rawRef.current = []
-      seenRef.current = new Set()
-      oldestRef.current = undefined
-      setMods([])
-      setReachedEnd(false)
-      setLoading(true)
-    }
-    inFlightRef.current = false
+    const seedAndFetch = () => {
+      const cached = cacheGet(filterKey)
+      if (cached) {
+        // Paint the cached page instantly; no skeletons on return/reload.
+        rawRef.current = cached.raw.slice()
+        seenRef.current = new Set(cached.raw.map((e) => e.id))
+        oldestRef.current = cached.oldest
+        setMods(constructModListFromEvents(rawRef.current))
+        setReachedEnd(false)
+        setLoading(false)
+      } else {
+        rawRef.current = []
+        seenRef.current = new Set()
+        oldestRef.current = undefined
+        setMods([])
+        setReachedEnd(false)
+        setLoading(true)
+      }
+      inFlightRef.current = false
 
-    // Fresh cache: skip the network entirely. Otherwise fetch — in the
-    // background (no skeletons, toast) when we already have something to show.
-    const fresh = cached && Date.now() - cached.at < PROG_TTL
-    if (!fresh) {
+      // Fresh cache: skip the network entirely. Otherwise fetch — in the
+      // background (no skeletons, toast) when we already have something to show.
+      const fresh = cached && Date.now() - cached.at < PROG_TTL
+      if (fresh) return
       const background = !!cached
       ;(async () => {
         const relayUrls = useSettingsStore.getState().getAllEnabledRelayUrls('read')
@@ -129,6 +174,17 @@ export function useProgressiveMods(baseFilter: Filter, batch: number = DEFAULT_B
           else if (!cancelled) setLoading(false)
         }
       })()
+    }
+
+    if (progHydrated) {
+      seedAndFetch()
+    } else {
+      // Cold reload: keep skeletons until the IndexedDB copy is loaded, then
+      // decide cache-vs-fetch (a quick single IDB read).
+      setMods([])
+      setReachedEnd(false)
+      setLoading(true)
+      whenProgReady.then(() => { if (!cancelled) seedAndFetch() })
     }
 
     return () => { cancelled = true }
