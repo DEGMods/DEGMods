@@ -92,8 +92,17 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
       </AnimatePresence>
       <div className="absolute inset-0 bg-black/25" aria-hidden />
 
+      {/* Prev/next peeks in the side margins (desktop only — no room below 1080px).
+          Behind the centered content, so their inner edge tucks under the slide. */}
+      {count > 1 && (
+        <>
+          <SidePeek mod={mods[(index - 1 + count) % count]} side="left" onClick={() => go(index - 1)} />
+          <SidePeek mod={mods[(index + 1) % count]} side="right" onClick={() => go(index + 1)} />
+        </>
+      )}
+
       {/* Foreground: constrained to the page width and centered */}
-      <div className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 md:py-8 lg:px-8">
+      <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6 md:py-8 lg:px-8">
         <AnimatePresence mode="wait">
           <motion.div
             key={mod.id}
@@ -257,5 +266,31 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
         )}
       </div>
     </div>
+  )
+}
+
+// Prev/next slide preview shown in the slider's side margin. Reuses the shared
+// image hook so its bytes are already loaded when it becomes the active slide.
+function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'right'; onClick: () => void }) {
+  const url = useResolvedImageSrc(mod.featuredImageUrl)
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={side === 'left' ? 'Previous slide' : 'Next slide'}
+      className={cn(
+        'absolute top-1/2 z-0 hidden aspect-video w-[24rem] -translate-y-1/2 overflow-hidden rounded-xl',
+        'border border-white/10 opacity-75 shadow-lg shadow-black/40 transition-opacity hover:opacity-100 min-[1080px]:block',
+        side === 'left' ? 'left-4' : 'right-4',
+      )}
+    >
+      {url ? (
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-[#171717]">
+          <Gamepad2 className="h-8 w-8 text-neutral-700" />
+        </div>
+      )}
+    </button>
   )
 }
