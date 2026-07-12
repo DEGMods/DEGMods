@@ -92,13 +92,13 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
       </AnimatePresence>
       <div className="absolute inset-0 bg-black/25" aria-hidden />
 
-      {/* Prev/next peeks in the side margins (desktop only — no room below 1080px).
-          Behind the centered content, so their inner edge tucks under the slide. */}
+      {/* Prev/next peeks, anchored to the centered content's edges (so they sit
+          right beside the slide at any width). Desktop only — no room < 1080px. */}
       {count > 1 && (
-        <>
+        <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-full max-w-7xl -translate-x-1/2 min-[1080px]:block">
           <SidePeek mod={mods[(index - 1 + count) % count]} side="left" onClick={() => go(index - 1)} />
           <SidePeek mod={mods[(index + 1) % count]} side="right" onClick={() => go(index + 1)} />
-        </>
+        </div>
       )}
 
       {/* Foreground: constrained to the page width and centered */}
@@ -279,18 +279,29 @@ function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'rig
       onClick={onClick}
       aria-label={side === 'left' ? 'Previous slide' : 'Next slide'}
       className={cn(
-        'absolute top-1/2 z-0 hidden aspect-video w-[24rem] -translate-y-1/2 overflow-hidden rounded-xl',
-        'border border-white/10 opacity-75 shadow-lg shadow-black/40 transition-opacity hover:opacity-100 min-[1080px]:block',
-        side === 'left' ? 'left-4' : 'right-4',
+        'pointer-events-auto absolute top-1/2 aspect-video w-[30rem] -translate-y-1/2 overflow-hidden rounded-xl',
+        'border border-white/10 opacity-75 shadow-lg shadow-black/40 transition-opacity hover:opacity-100',
+        // Inner edge sits just outside the slide with a gap, extending outward.
+        side === 'left' ? 'right-full -translate-x-4' : 'left-full translate-x-4',
       )}
     >
-      {url ? (
-        <img src={url} alt="" className="h-full w-full object-cover" />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-[#171717]">
-          <Gamepad2 className="h-8 w-8 text-neutral-700" />
-        </div>
-      )}
+      <div className="absolute inset-0 flex items-center justify-center bg-[#171717]">
+        <Gamepad2 className="h-8 w-8 text-neutral-700" />
+      </div>
+      <AnimatePresence initial={false}>
+        {url && (
+          <motion.img
+            key={url}
+            src={url}
+            alt=""
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+      </AnimatePresence>
     </button>
   )
 }
