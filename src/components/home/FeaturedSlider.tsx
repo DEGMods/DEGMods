@@ -279,9 +279,10 @@ function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'rig
       onClick={onClick}
       aria-label={side === 'left' ? 'Previous slide' : 'Next slide'}
       style={{
-        // Fade the outer edge into the background (masks any clipping too).
-        maskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent, #000 45%)`,
-        WebkitMaskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent, #000 45%)`,
+        // Fade the outer edge deep into the peek. The flat transparent zone at
+        // the edge (0–15%) also swallows the rounded corners on that side.
+        maskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent 15%, #000 65%)`,
+        WebkitMaskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent 15%, #000 65%)`,
       }}
       className={cn(
         'pointer-events-auto absolute top-1/2 aspect-video w-[36rem] -translate-y-1/2 overflow-hidden rounded-xl',
