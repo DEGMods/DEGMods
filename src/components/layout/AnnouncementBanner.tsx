@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Megaphone, AlertTriangle, ExternalLink, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { fetchEvent } from '@/lib/nostr/relay-pool'
+import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { extractAnnouncement, ANNOUNCEMENT_DTAG, type AnnouncementData } from '@/lib/nostr/events'
 import { KINDS, ADMIN_PUBKEY } from '@/lib/constants'
 import { Markdown } from '@/components/shared/Markdown'
@@ -22,7 +22,9 @@ export function AnnouncementBanner() {
     let cancelled = false
     async function load() {
       const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-      const event = await fetchEvent(relays, {
+      // Multi-pass so a fast relay serving a stale (or since-cleared) revision
+      // can't win over the relay holding the newest one on a cold start.
+      const event = await fetchLatestEvent(relays, {
         kinds: [KINDS.GAME_DB],
         authors: [ADMIN_PUBKEY],
         '#d': [ANNOUNCEMENT_DTAG],
