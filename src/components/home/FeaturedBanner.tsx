@@ -16,13 +16,18 @@ function coordToNaddr(coord: string): string | null {
   }
 }
 
-// Fade both side edges into the page background.
+// Fade both side edges into the (image-coloured) side background.
 const EDGE_MASK = 'linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%)'
 
 /**
  * Admin-curated full-width banner above the slider, linking to one mod. Renders
  * nothing unless the NIP-78 `featured-mod-banner` event has both an image and a
  * mod coordinate.
+ *
+ * The side margins carry a blurred copy of the same image stretched across the
+ * full width, so the left margin continues the banner's left-edge colours and
+ * the right margin its right-edge colours. This needs no canvas pixel reads, so
+ * it works even for image hosts that don't send CORS headers.
  */
 export function FeaturedBanner() {
   const [banner, setBanner] = useState<Banner | null>(null)
@@ -46,15 +51,26 @@ export function FeaturedBanner() {
   if (!naddr) return null
 
   return (
-    <div className="w-screen mx-[calc(50%_-_50vw)]">
-      <div className="mx-auto max-w-[90rem] px-4">
+    <div className="relative w-screen mx-[calc(50%_-_50vw)] overflow-hidden">
+      {/* Blurred, full-width backdrop: left of centre shows the banner's
+          left-edge colours, right of centre its right-edge colours. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 scale-110"
+        style={{
+          backgroundImage: `url(${banner.image})`,
+          backgroundSize: '100% 100%',
+          filter: 'blur(48px) saturate(1.2) brightness(0.85)',
+        }}
+      />
+      <div className="relative mx-auto max-w-[90rem] px-4">
         <Link to={`/mod/${naddr}`} className="block" aria-label="Featured mod">
           <img
             src={banner.image}
             alt=""
             className="h-auto max-h-[450px] w-full object-cover"
             style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
-            onError={(e) => { (e.currentTarget.closest('div') as HTMLElement).style.display = 'none' }}
+            onError={(e) => { (e.currentTarget.closest('.relative')?.parentElement as HTMLElement | null)?.style.setProperty('display', 'none') }}
           />
         </Link>
       </div>
