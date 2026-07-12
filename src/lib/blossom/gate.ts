@@ -13,7 +13,7 @@
  */
 
 import type { Event as NostrEvent } from 'nostr-tools'
-import { fetchEvent } from '@/lib/nostr/relay-pool'
+import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { KINDS } from '@/lib/constants'
 
 // ─── Challenge types ────────────────────────────────────────────────
@@ -196,7 +196,10 @@ function normalizeAds(content: string): Ad[] {
 export async function fetchAdInventory(ref: string, relayUrls: string[]): Promise<Ad[]> {
   const coord = parseAdRef(ref)
   if (!coord) return []
-  const ev: NostrEvent | null = await fetchEvent(relayUrls, {
+  // Multi-pass so a fast relay serving a stale inventory revision can't win over
+  // the relay holding the newest one — otherwise a just-added ad is invisible and
+  // the modal keeps showing only the older ad(s).
+  const ev: NostrEvent | null = await fetchLatestEvent(relayUrls, {
     kinds: [coord.kind || KINDS.GAME_DB],
     authors: [coord.pubkey],
     '#d': [coord.dtag],
