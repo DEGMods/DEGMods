@@ -6,6 +6,8 @@ import { ModCard } from '@/components/mod/ModCard'
 import { GameCard } from '@/components/game/GameCard'
 import { BlogPostCard } from '@/components/blog/BlogPostCard'
 import { FeaturedSlider } from '@/components/home/FeaturedSlider'
+import { FeaturedBanner } from '@/components/home/FeaturedBanner'
+import { HomeAds } from '@/components/home/HomeAds'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useGamesDbStore } from '@/stores/gamesDbStore'
@@ -214,6 +216,9 @@ export function HomePage() {
 
   return (
     <div className="space-y-16">
+      {/* Admin-curated banner above the slider (renders only when set) */}
+      <FeaturedBanner />
+
       {/* Featured slider: full-bleed band, flush against the header */}
       {(loading || visibleSlider.length > 0) && (
         <div className="-mt-6 w-screen mx-[calc(50%_-_50vw)]">
@@ -323,6 +328,9 @@ export function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Ads (up to 4; hidden when none) */}
+      <HomeAds />
     </div>
   )
 }

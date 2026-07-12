@@ -25,7 +25,7 @@ const reasons = [
   },
 ]
 
-function AdCard({ ad }: { ad: AdEntry }) {
+export function AdCard({ ad }: { ad: AdEntry }) {
   const buttons = ad.buttons.filter(b => b.text.trim() && b.link.trim())
   return (
     <div className="overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c] shadow-md shadow-black/20">
