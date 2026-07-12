@@ -13,6 +13,7 @@ import {
   buildAdsEvent, extractAds, ADS_DTAG, type AdEntry,
   buildFaqEvent, extractFaq, FAQ_DTAG, type FaqItem,
   buildTosEvent, extractTos, TOS_DTAG, type TosItem,
+  buildFeaturedBannerEvent, extractFeaturedBanner, FEATURED_BANNER_DTAG,
   buildGuidesEvent, extractGuideCoordinates, GUIDES_DTAG, extractBlogData,
   EMULATED_PLATFORMS_DTAG, extractEmulatedPlatforms,
   SUGGESTED_TAGS_DTAG, extractSuggestedTags,
@@ -961,6 +962,94 @@ function FeaturedTab() {
         title="Featured Games"
         desc="Games featured on the home page."
       />
+      <FeaturedBannerSection />
+    </div>
+  )
+}
+
+// ── Featured Mod Banner (single image + mod link, above the slider) ──
+
+function FeaturedBannerSection() {
+  const dTag = FEATURED_BANNER_DTAG
+  const [image, setImage] = useState('')
+  const [naddrInput, setNaddrInput] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [publishing, setPublishing] = useState(false)
+  const [baseline, setBaseline] = useState('|')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const event = await fetchEvent(relays, { kinds: [KINDS.GAME_DB], authors: [ADMIN_PUBKEY], '#d': [dTag] })
+      const b = event ? extractFeaturedBanner(event) : null
+      const img = b?.image ?? ''
+      const addr = b?.coord ? (coordNaddr(b.coord) ?? b.coord) : ''
+      setImage(img)
+      setNaddrInput(addr)
+      setBaseline(`${img}|${addr}`)
+    } catch { toast.error('Failed to load banner') } finally { setLoading(false) }
+  }, [dTag])
+  useEffect(() => { load() }, [load])
+
+  const dirty = `${image}|${naddrInput}` !== baseline
+
+  const publish = async () => {
+    const bothEmpty = !image.trim() && !naddrInput.trim()
+    let banner = { image: '', coord: '' }
+    if (!bothEmpty) {
+      const parsed = naddrToModCoord(naddrInput)
+      if ('error' in parsed) { toast.error(parsed.error); return }
+      if (!image.trim()) { toast.error('Add a banner image'); return }
+      banner = { image: image.trim(), coord: parsed.coord }
+    }
+    setPublishing(true)
+    try {
+      const result = await signAndPublish(buildFeaturedBannerEvent(banner), (s) => {
+        if (s === 'mining') toast.loading('Processing proof of work…', { id: dTag })
+        if (s === 'publishing') toast.loading('Publishing…', { id: dTag })
+      })
+      if (result.success) { toast.success(bothEmpty ? 'Banner cleared' : 'Featured mod banner published', { id: dTag }); setBaseline(`${image}|${naddrInput}`) }
+      else toast.error(result.error || 'Publish failed', { id: dTag })
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Publish failed', { id: dTag }) } finally { setPublishing(false) }
+  }
+
+  const inputClass = 'bg-[#212121] border-[#262626] text-white text-sm'
+  return (
+    <div className="p-4 rounded-lg border border-[#262626] bg-[#1c1c1c] space-y-3">
+      <div className="flex items-center gap-2">
+        <ImageIcon size={14} className="text-purple-400" />
+        <h4 className="text-sm font-medium text-white">Featured Mod Banner</h4>
+        <code className="ml-auto text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">d:{dTag}</code>
+      </div>
+      <p className="text-[11px] text-neutral-500">
+        A full-width banner shown above the slider on the home page, linking to one mod. Needs both an
+        image and the mod's <strong>naddr</strong>. Clear both fields and publish to hide it.
+      </p>
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500 py-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            <label className="text-xs text-neutral-400">Banner image</label>
+            <BlossomUploadField accept={IMAGE_UPLOAD_ACCEPT} label="Drop an image or click to upload" sublabel="Mirrored to up to 3 servers" onUploaded={(r) => setImage(r.url)} resetAfter />
+            <Input value={image} onChange={(e) => setImage(e.target.value)} placeholder="Banner image URL" className={`${inputClass} font-mono text-xs`} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-neutral-400">Mod address</label>
+            <Input value={naddrInput} onChange={(e) => setNaddrInput(e.target.value)} placeholder="naddr1… (current or legacy mod)" className={`${inputClass} font-mono text-xs`} />
+          </div>
+          {image.trim() && (
+            <div className="overflow-hidden rounded-lg border border-[#262626] bg-[#171717]">
+              <img src={image} alt="" className="max-h-44 w-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }} />
+            </div>
+          )}
+          <Button onClick={publish} disabled={!dirty || publishing} className="w-full">
+            {publishing ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />}
+            Publish
+          </Button>
+        </>
+      )}
     </div>
   )
 }

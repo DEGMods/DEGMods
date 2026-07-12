@@ -39,6 +39,7 @@ const ADMIN_CONFIG_DTAGS = [
   'site-ads',
   'site-announcement',
   'site-faq',
+  'terms-of-use',
   'site-guides',
   'blocked-mods',
   'emulated-platforms',
@@ -48,6 +49,7 @@ const ADMIN_CONFIG_DTAGS = [
   'home-featured-mods-slider',
   'home-featured-mods',
   'home-featured-games',
+  'featured-mod-banner',
 ]
 
 // ── Session dedup + sequential queue ──

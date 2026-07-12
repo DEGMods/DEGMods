@@ -759,6 +759,36 @@ export function extractTos(event: NostrEvent): TosItem[] {
   }
 }
 
+// ─── Featured Mod Banner (kind 30078, d: featured-mod-banner) ────────
+// A single full-width banner on the home page linking to one mod. Hidden when
+// unset (empty content parses to null).
+
+export const FEATURED_BANNER_DTAG = 'featured-mod-banner'
+
+export interface FeaturedBanner { image: string; coord: string }
+
+export function buildFeaturedBannerEvent(banner: FeaturedBanner): UnsignedEvent {
+  return {
+    kind: KINDS.GAME_DB,
+    content: JSON.stringify(banner),
+    tags: [['d', FEATURED_BANNER_DTAG]],
+    created_at: Math.floor(Date.now() / 1000),
+    pubkey: '',
+  }
+}
+
+export function extractFeaturedBanner(event: NostrEvent): FeaturedBanner | null {
+  try {
+    const o = JSON.parse(event.content)
+    const image = typeof o?.image === 'string' ? o.image.trim() : ''
+    const coord = typeof o?.coord === 'string' ? o.coord.trim() : ''
+    if (!image || !coord) return null
+    return { image, coord }
+  } catch {
+    return null
+  }
+}
+
 // ─── Guides (kind 30078 list of kind:30023 article coords; d: site-guides) ──
 // The guide *content* lives in long-form (kind 30023) articles; this NIP-78
 // event just curates which ones (and in what order) appear as guides.
