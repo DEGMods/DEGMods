@@ -7,9 +7,10 @@ import { extractAds, ADS_DTAG, type AdEntry } from '@/lib/nostr/events'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { AdCard } from '@/pages/AdsPage'
 
-/** Home-page ads section — up to 4 live ads, "View All" → /ads. Hidden if none. */
+/** Home-page ads section — up to 4 live ads, "View All" → /ads. Always shown. */
 export function HomeAds() {
   const [ads, setAds] = useState<AdEntry[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -20,12 +21,12 @@ export function HomeAds() {
         if (!cancelled) setAds(ev ? extractAds(ev) : [])
       } catch {
         if (!cancelled) setAds([])
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     })()
     return () => { cancelled = true }
   }, [])
-
-  if (ads.length === 0) return null
 
   return (
     <section>
@@ -35,9 +36,15 @@ export function HomeAds() {
           View All <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {ads.slice(0, 4).map((ad, i) => <AdCard key={i} ad={ad} />)}
-      </div>
+      {ads.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {ads.slice(0, 4).map((ad, i) => <AdCard key={i} ad={ad} />)}
+        </div>
+      ) : (
+        <p className="text-neutral-500 text-center py-8">
+          {loading ? 'Loading…' : 'No ads found.'}
+        </p>
+      )}
     </section>
   )
 }

@@ -216,19 +216,23 @@ export function HomePage() {
 
   return (
     <div className="space-y-16">
-      {/* Admin-curated banner above the slider (renders only when set) */}
-      <FeaturedBanner />
+      {/* Flush top band: admin banner (when set) stacked directly above the
+          slider, pulled up to sit against the header with no gap between them. */}
+      <div className="-mt-6 space-y-0">
+        {/* Admin-curated banner (renders only when set) */}
+        <FeaturedBanner />
 
-      {/* Featured slider: full-bleed band, flush against the header */}
-      {(loading || visibleSlider.length > 0) && (
-        <div className="-mt-6 w-screen mx-[calc(50%_-_50vw)]">
-          {loading ? (
-            <Skeleton className="h-[320px] md:h-[440px] w-full rounded-none" />
-          ) : (
-            <FeaturedSlider mods={visibleSlider} />
-          )}
-        </div>
-      )}
+        {/* Featured slider: full-bleed band */}
+        {(loading || visibleSlider.length > 0) && (
+          <div className="w-screen mx-[calc(50%_-_50vw)]">
+            {loading ? (
+              <Skeleton className="h-[320px] md:h-[440px] w-full rounded-none" />
+            ) : (
+              <FeaturedSlider mods={visibleSlider} />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Featured Mods (admin-curated) */}
       {!loading && visibleFeatured.length > 0 && (
@@ -308,17 +312,17 @@ export function HomePage() {
       </section>
 
       {/* From the Blog */}
-      {!loading && blogs.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="flex items-center gap-2 text-2xl font-bold text-white">
-              <BookOpen className="h-6 w-6 text-purple-400" />
-              From the Blog
-            </h2>
-            <Link to="/blog" className="text-purple-400 hover:text-purple-300 text-sm font-medium flex items-center gap-1">
-              View All <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+      <section>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-white">
+            <BookOpen className="h-6 w-6 text-purple-400" />
+            From the Blog
+          </h2>
+          <Link to="/blog" className="text-purple-400 hover:text-purple-300 text-sm font-medium flex items-center gap-1">
+            View All <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+        {blogs.length > 0 ? (
           <div className="flex flex-col sm:flex-row gap-4">
             {blogs.map(blog => (
               <div key={blog.id} className="flex-1 min-w-0">
@@ -326,8 +330,12 @@ export function HomePage() {
               </div>
             ))}
           </div>
-        </section>
-      )}
+        ) : (
+          <p className="text-neutral-500 text-center py-8">
+            {loading ? 'Loading…' : 'No blog posts found.'}
+          </p>
+        )}
+      </section>
 
       {/* Ads (up to 4; hidden when none) */}
       <HomeAds />

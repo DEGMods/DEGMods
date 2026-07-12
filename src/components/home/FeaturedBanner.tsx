@@ -46,16 +46,18 @@ export function FeaturedBanner() {
   if (!naddr) return null
 
   return (
-    <div className="-mt-2">
-      <Link to={`/mod/${naddr}`} className="block" aria-label="Featured mod">
-        <img
-          src={banner.image}
-          alt=""
-          className="h-auto max-h-[450px] w-full rounded-2xl object-cover"
-          style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
-          onError={(e) => { (e.currentTarget.closest('div') as HTMLElement).style.display = 'none' }}
-        />
-      </Link>
+    <div className="w-screen mx-[calc(50%_-_50vw)]">
+      <div className="mx-auto max-w-[90rem] px-4">
+        <Link to={`/mod/${naddr}`} className="block" aria-label="Featured mod">
+          <img
+            src={banner.image}
+            alt=""
+            className="h-auto max-h-[450px] w-full object-cover"
+            style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
+            onError={(e) => { (e.currentTarget.closest('div') as HTMLElement).style.display = 'none' }}
+          />
+        </Link>
+      </div>
     </div>
   )
 }
