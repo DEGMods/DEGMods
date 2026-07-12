@@ -278,8 +278,13 @@ function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'rig
       type="button"
       onClick={onClick}
       aria-label={side === 'left' ? 'Previous slide' : 'Next slide'}
+      style={{
+        // Fade the outer edge into the background (masks any clipping too).
+        maskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent, #000 45%)`,
+        WebkitMaskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent, #000 45%)`,
+      }}
       className={cn(
-        'pointer-events-auto absolute top-1/2 aspect-video w-[30rem] -translate-y-1/2 overflow-hidden rounded-xl',
+        'pointer-events-auto absolute top-1/2 aspect-video w-[36rem] -translate-y-1/2 overflow-hidden rounded-xl',
         'border border-white/10 opacity-75 shadow-lg shadow-black/40 transition-opacity hover:opacity-100',
         // Inner edge sits just outside the slide with a gap, extending outward.
         side === 'left' ? 'right-full -translate-x-4' : 'left-full translate-x-4',
