@@ -13,11 +13,24 @@ import { generateSecretKey, getPublicKey } from 'nostr-tools'
 import { BunkerSigner as NBunkerSigner, createNostrConnectURI, toBunkerURL } from 'nostr-tools/nip46'
 import { bytesToHex } from '@noble/hashes/utils'
 
-const DEFAULT_RELAYS = ['wss://relay.primal.net', 'wss://relay.damus.io', 'wss://nos.lol']
+// The FIRST relay must be a dedicated NIP-46 handshake relay that reliably fans
+// out the ephemeral kind-24133 messages between the signer (e.g. Amber) and this
+// browser. `bucket.coracle.social` is purpose-built for this and is what the
+// working reference clients (Jumble / Den Chat) use; general feed relays don't
+// always deliver the connect handshake in time, so nostrconnect silently hangs.
+const DEFAULT_RELAYS = ['wss://bucket.coracle.social/', 'wss://relay.primal.net/', 'wss://relay.damus.io/']
 
 export interface NostrConnectLoginDetails {
   privKey: Uint8Array
   connectionString: string
+}
+
+/** Reject if `promise` doesn't settle within `ms`, so a silent signer can't hang the login. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ])
 }
 
 /**
@@ -30,7 +43,8 @@ export function generateNostrConnectDetails(relays: string[] = DEFAULT_RELAYS): 
     clientPubkey: getPublicKey(privKey),
     relays,
     secret: Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join(''),
-    name: 'DEG MODS',
+    // Host (no spaces) — some signers mangle a name with a space in the URI query.
+    name: window.location.host,
     url: window.location.origin,
   })
   return { privKey, connectionString }
@@ -61,7 +75,9 @@ export class NostrConnectSigner {
     }, abortSignal || 60_000)
 
     this.bunkerString = toBunkerURL(this.signer.bp)
-    this.pubkey = await this.signer.getPublicKey()
+    // The handshake is done here, but a signer that never answers get_public_key
+    // would otherwise hang the login forever — cap it so we surface an error.
+    this.pubkey = await withTimeout(this.signer.getPublicKey(), 15_000, 'Signer connected but did not return your public key in time')
 
     return { bunkerString: this.bunkerString, pubkey: this.pubkey }
   }

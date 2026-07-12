@@ -10,6 +10,18 @@ import { generateSecretKey, getPublicKey } from 'nostr-tools'
 import { BunkerSigner as NBunkerSigner, parseBunkerInput } from 'nostr-tools/nip46'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
 
+// Cap the initial handshake so an unreachable relay or an offline/unapproved
+// signer surfaces an error instead of spinning "Connecting…" forever.
+const CONNECT_TIMEOUT_MS = 30_000
+const PUBKEY_TIMEOUT_MS = 15_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ])
+}
+
 export class BunkerSigner {
   signer: NBunkerSigner | null = null
   private clientSecretKey: Uint8Array
@@ -38,10 +50,18 @@ export class BunkerSigner {
     })
 
     if (isInitialConnection) {
-      await this.signer.connect()
+      await withTimeout(
+        this.signer.connect(),
+        CONNECT_TIMEOUT_MS,
+        'Signer did not respond — make sure it is online and approve the connection request',
+      )
     }
 
-    this.pubkey = await this.signer.getPublicKey()
+    this.pubkey = await withTimeout(
+      this.signer.getPublicKey(),
+      PUBKEY_TIMEOUT_MS,
+      'Signer connected but did not return your public key in time',
+    )
     return this.pubkey
   }
 
