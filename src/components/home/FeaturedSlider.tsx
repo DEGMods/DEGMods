@@ -91,6 +91,14 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
         )}
       </AnimatePresence>
       <div className="absolute inset-0 bg-black/25" aria-hidden />
+      {/* Side vignette over the background (still under the peeks + slide):
+          black → transparent → black, with the transparent middle 50% wide so
+          each black side is 25%. */}
+      <div
+        className="absolute inset-0"
+        style={{ background: 'linear-gradient(to right, #000 0%, transparent 25%, transparent 75%, #000 100%)' }}
+        aria-hidden
+      />
 
       {/* Prev/next peeks, anchored to the centered content's edges (so they sit
           right beside the slide at any width). Desktop only — no room < 1080px. */}
