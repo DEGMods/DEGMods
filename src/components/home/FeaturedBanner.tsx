@@ -1,10 +1,6 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
-import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
-import { extractFeaturedBanner, FEATURED_BANNER_DTAG, type FeaturedBanner as Banner } from '@/lib/nostr/events'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { ADMIN_PUBKEY, KINDS } from '@/lib/constants'
+import { type FeaturedBanner as Banner } from '@/lib/nostr/events'
 
 function coordToNaddr(coord: string): string | null {
   const [kindStr, pubkey, ...rest] = coord.split(':')
@@ -21,7 +17,8 @@ const EDGE_MASK = 'linear-gradient(to right, transparent 0%, #000 8%, #000 92%, 
 
 /**
  * Admin-curated full-width banner above the slider, linking to one mod. Renders
- * nothing unless the NIP-78 `featured-mod-banner` event has both an image and a
+ * nothing unless the `banner` (from the NIP-78 `featured-mod-banner` event, fed
+ * by HomePage's cached + background-refreshed data) has an image and a valid
  * mod coordinate.
  *
  * The side margins carry a blurred copy of the same image stretched across the
@@ -29,23 +26,7 @@ const EDGE_MASK = 'linear-gradient(to right, transparent 0%, #000 8%, #000 92%, 
  * the right margin its right-edge colours. This needs no canvas pixel reads, so
  * it works even for image hosts that don't send CORS headers.
  */
-export function FeaturedBanner() {
-  const [banner, setBanner] = useState<Banner | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-        const ev = await fetchLatestEvent(relays, { kinds: [KINDS.GAME_DB], authors: [ADMIN_PUBKEY], '#d': [FEATURED_BANNER_DTAG] })
-        if (!cancelled) setBanner(ev ? extractFeaturedBanner(ev) : null)
-      } catch {
-        if (!cancelled) setBanner(null)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
-
+export function FeaturedBanner({ banner }: { banner: Banner | null }) {
   if (!banner) return null
   const naddr = coordToNaddr(banner.coord)
   if (!naddr) return null

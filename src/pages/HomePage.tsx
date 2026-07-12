@@ -16,7 +16,11 @@ import { useBlockFilter } from '@/hooks/useBlock'
 import { useWotModFilter } from '@/hooks/useWot'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
 import type { Event as NostrEvent } from 'nostr-tools'
-import { constructModListFromEvents, extractBlogData } from '@/lib/nostr/events'
+import {
+  constructModListFromEvents, extractBlogData,
+  extractFeaturedBanner, extractAds, FEATURED_BANNER_DTAG, ADS_DTAG,
+  type FeaturedBanner as BannerData, type AdEntry,
+} from '@/lib/nostr/events'
 import { LEGACY_MOD_KIND, extractLegacyModData, isLegacyModEvent, normalizeModCoord } from '@/lib/mods/legacy'
 import { KINDS, ADMIN_PUBKEY } from '@/lib/constants'
 import { beginRefresh, endRefresh } from '@/lib/ui/refreshToast'
@@ -26,7 +30,7 @@ import type { GameEntry } from '@/types/game'
 
 const NIP78_KIND = 30078
 const HOME_TTL = 2 * 60 * 1000
-const HOME_CACHE_KEY = 'home-cache-v1'
+const HOME_CACHE_KEY = 'home-cache-v2'
 
 // Home data survives navigation AND full reloads (persisted to localStorage) so
 // returning is instant instead of re-fetching everything and flashing skeletons.
@@ -39,6 +43,8 @@ interface HomeCache {
   games: GameEntry[]
   blogs: BlogDetails[]
   blogAuthors: Map<string, UserProfile>
+  banner: BannerData | null
+  ads: AdEntry[]
 }
 let homeCache: HomeCache | null = null
 
@@ -79,6 +85,8 @@ export function HomePage() {
   const [games, setGames] = useState<GameEntry[]>(() => cached0?.games ?? [])
   const [blogs, setBlogs] = useState<BlogDetails[]>(() => cached0?.blogs ?? [])
   const [blogAuthors, setBlogAuthors] = useState<Map<string, UserProfile>>(() => cached0?.blogAuthors ?? new Map())
+  const [banner, setBanner] = useState<BannerData | null>(() => cached0?.banner ?? null)
+  const [ads, setAds] = useState<AdEntry[]>(() => cached0?.ads ?? [])
   const [loading, setLoading] = useState(() => !cached0)
 
   useEffect(() => {
@@ -100,7 +108,7 @@ export function HomePage() {
           fetchEvents(relays, {
             kinds: [NIP78_KIND],
             authors: [ADMIN_PUBKEY],
-            '#d': ['home-featured-mods-slider', 'home-featured-mods', 'home-featured-games'],
+            '#d': ['home-featured-mods-slider', 'home-featured-mods', 'home-featured-games', FEATURED_BANNER_DTAG, ADS_DTAG],
           }, 6000, 4500),
         ])
         if (cancelled) return
@@ -155,6 +163,15 @@ export function HomePage() {
         const featuredVal = resolve(gridCoords)
         setFeaturedMods(featuredVal)
 
+        // Admin banner + ads share this NIP-78 curation batch, so they ride the
+        // same cache + background-refresh flow as everything else on the page.
+        const bannerEv = curationByD.get(FEATURED_BANNER_DTAG)
+        const bannerVal = bannerEv ? extractFeaturedBanner(bannerEv) : null
+        setBanner(bannerVal)
+        const adsEv = curationByD.get(ADS_DTAG)
+        const adsVal = adsEv ? extractAds(adsEv) : []
+        setAds(adsVal)
+
         const curatedGameNames = curationTags('home-featured-games')
           .filter(t => t[0] === 'game' || t[0] === 'g').map(t => t[1])
         const gameNames = (curatedGameNames.length
@@ -192,6 +209,7 @@ export function HomePage() {
           // slice so the localStorage copy stays small and within quota.
           mods: allMods.slice(0, 24), sliderMods: sliderVal, featuredMods: featuredVal,
           games: gamesVal, blogs: parsedBlogs, blogAuthors: authors,
+          banner: bannerVal, ads: adsVal,
         })
       } catch {
         // silently fail
@@ -220,7 +238,7 @@ export function HomePage() {
           slider, pulled up to sit against the header with no gap between them. */}
       <div className="-mt-6 space-y-0">
         {/* Admin-curated banner (renders only when set) */}
-        <FeaturedBanner />
+        <FeaturedBanner banner={banner} />
 
         {/* Featured slider: full-bleed band */}
         {(loading || visibleSlider.length > 0) && (
@@ -337,8 +355,8 @@ export function HomePage() {
         )}
       </section>
 
-      {/* Ads (up to 4; hidden when none) */}
-      <HomeAds />
+      {/* Ads (up to 4; empty-state message when none) */}
+      <HomeAds ads={ads} loading={loading} />
     </div>
   )
 }

@@ -1,33 +1,14 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
-import { ADMIN_PUBKEY, KINDS } from '@/lib/constants'
-import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
-import { extractAds, ADS_DTAG, type AdEntry } from '@/lib/nostr/events'
-import { useSettingsStore } from '@/stores/settingsStore'
+import { type AdEntry } from '@/lib/nostr/events'
 import { AdCard } from '@/pages/AdsPage'
 
-/** Home-page ads section — up to 4 live ads, "View All" → /ads. Always shown. */
-export function HomeAds() {
-  const [ads, setAds] = useState<AdEntry[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-        const ev = await fetchLatestEvent(relays, { kinds: [KINDS.GAME_DB], authors: [ADMIN_PUBKEY], '#d': [ADS_DTAG] })
-        if (!cancelled) setAds(ev ? extractAds(ev) : [])
-      } catch {
-        if (!cancelled) setAds([])
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
-
+/**
+ * Home-page ads section — up to 4 live ads, "View All" → /ads. Always shown.
+ * Ads come from HomePage's cached + background-refreshed data (NIP-78 site-ads),
+ * so they paint instantly on return and update behind the refresh indicator.
+ */
+export function HomeAds({ ads, loading }: { ads: AdEntry[]; loading: boolean }) {
   return (
     <section>
       <div className="flex items-center justify-between mb-6">
