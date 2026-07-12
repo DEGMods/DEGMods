@@ -28,11 +28,11 @@ const reasons = [
 export function AdCard({ ad }: { ad: AdEntry }) {
   const buttons = ad.buttons.filter(b => b.text.trim() && b.link.trim())
   return (
-    <div className="overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c] shadow-md shadow-black/20">
-      <div className="relative aspect-[16/7] w-full bg-gradient-to-br from-purple-900/40 to-[#212121]">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c] shadow-md shadow-black/20">
+      <div className="relative aspect-[16/7] w-full shrink-0 bg-gradient-to-br from-purple-900/40 to-[#212121]">
         {ad.banner && <BlossomImage src={ad.banner} alt="" className="h-full w-full object-cover" />}
       </div>
-      <div className="p-4">
+      <div className="flex flex-1 flex-col p-4">
         <div className="flex items-center gap-3">
           {ad.profilePic ? (
             <BlossomImage src={ad.profilePic} alt="" className="h-10 w-10 shrink-0 rounded-full border border-[#262626] object-cover" />
@@ -43,9 +43,9 @@ export function AdCard({ ad }: { ad: AdEntry }) {
           )}
           {ad.name && <p className="min-w-0 truncate font-semibold text-white">{ad.name}</p>}
         </div>
-        {ad.description && <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-300">{ad.description}</p>}
+        {ad.description && <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-neutral-300">{ad.description}</p>}
         {buttons.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-auto flex flex-wrap gap-2 pt-3">
             {buttons.map((b, i) => (
               <a
                 key={i}
