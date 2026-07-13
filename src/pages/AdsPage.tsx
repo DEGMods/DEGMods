@@ -6,6 +6,8 @@ import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { extractAds, ADS_DTAG, type AdEntry } from '@/lib/nostr/events'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { BlossomImage } from '@/components/shared/BlossomImage'
+import { Button } from '@/components/ui/button'
+import { ContactModal } from '@/components/shared/ContactModal'
 
 const reasons = [
   {
@@ -101,6 +103,7 @@ export function AdCard({ ad }: { ad: AdEntry }) {
 export function AdsPage() {
   const [ads, setAds] = useState<AdEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [contactOpen, setContactOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -271,11 +274,16 @@ export function AdsPage() {
         <div className="space-y-1">
           <h3 className="text-lg font-semibold">Interested?</h3>
           <p className="text-sm text-neutral-400">
-            Reach out via Nostr to discuss advertising opportunities. Contact details and an ad
-            submission flow will be available here soon.
+            Tell us about your ad and we will get back to you by email. It sends securely over
+            Nostr, no account needed.
           </p>
         </div>
+        <Button onClick={() => setContactOpen(true)} className="bg-purple-600 text-white hover:bg-purple-700">
+          Get in touch
+        </Button>
       </section>
+
+      <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} subject="advertisement" lockSubject />
     </div>
   )
 }
