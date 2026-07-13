@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Megaphone, Users, Gamepad2, Zap, Send, User, ExternalLink, Loader2, MapPin, BarChart3, Tag, AlertTriangle, Home, Newspaper, Download } from 'lucide-react'
+import { Megaphone, Users, Gamepad2, Zap, Send, User, ExternalLink, Loader2, MapPin, BarChart3, Tag, AlertTriangle, Home, Newspaper, Download, Sparkles, Network } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ADMIN_PUBKEY, KINDS } from '@/lib/constants'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
@@ -32,6 +32,16 @@ const placements = [
     icon: Download,
     title: 'Download gate',
     desc: 'A popup shown while a user downloads a mod hosted on our servers. If a download is served from a third-party server rather than ours, no ad is shown.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Ads page',
+    desc: "This page itself. Some people browse it directly, because the lineup is hand-picked by the DEG Mods team. We don't run ads unrelated to our industry, so what appears here tends to be genuinely relevant to whoever seeks it out.",
+  },
+  {
+    icon: Network,
+    title: 'DEG Mods Network',
+    desc: 'Other mod creators and hubs that run this software unmodified show the same spots (download gates and similar placements) on their own sites, so a placement can reach beyond DEG Mods across the wider network.',
   },
 ]
 
@@ -123,7 +133,7 @@ export function AdsPage() {
         ) : ads.length === 0 ? (
           <p className="py-6 text-sm text-neutral-500">No ads running right now.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-5 xs:grid-cols-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
             {ads.map((ad, i) => <AdCard key={i} ad={ad} />)}
           </div>
         )}
