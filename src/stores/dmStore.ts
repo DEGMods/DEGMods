@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Event as NostrEvent } from 'nostr-tools'
-import { fetchEvents, subscribe } from '@/lib/nostr/relay-pool'
+import { fetchEvents, fetchLatestEvent, subscribe, publishEvent } from '@/lib/nostr/relay-pool'
+import { signEvent } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { DM_KIND, counterpartyOf, decryptContent, sendDM } from '@/lib/nostr/dm'
 
@@ -18,26 +19,70 @@ export interface DMMessage {
 
 export interface DMConversation {
   pubkey: string // the counterparty
-  lastTs: number // newest message either direction (for list ordering)
-  lastIncomingTs: number // newest message FROM them (for unread)
+  lastTs: number // newest message either direction (list position + range anchor)
+  lastIncomingTs: number // newest message FROM them (drives the nav/feed badge)
   messages: DMMessage[] // ascending by created_at
   historyLoaded: boolean
 }
 
-const READ_KEY = 'degmods:dm-read'
+// ── Seen-state (cross-device) ──────────────────────────────────────────────
+// Two synced timestamps describe the span of the inbox you've opened:
+//   seenLatest = newest chat you've opened, seenOldest = oldest chat you've opened.
+// List dot: T>seenLatest OR T<seenOldest → purple; between → gray; at an end → none.
+// Nav/feed badge: only incoming activity NEWER than seenLatest counts, so old
+// chats below seenOldest never keep the badge lit, and your own sends never do.
+// Persisted as a kind-30078 event (timestamps only, no pubkeys → no DM-graph leak),
+// cached in localStorage for instant boot.
+const APP_DATA_KIND = 30078
+const SEEN_DTAG = 'notifications_seen_at_nip04_dms'
+const SEEN_KEY = 'degmods:dm-seen-nip04'
 const MAX_PER_CONV = 1000
 
-function loadRead(): Record<string, number> {
-  try { return JSON.parse(localStorage.getItem(READ_KEY) || '{}') } catch { return {} }
+function loadSeenCache(): { seenLatest: number; seenOldest: number } {
+  try {
+    const o = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}')
+    return { seenLatest: Number(o?.seenLatest) || 0, seenOldest: Number(o?.seenOldest) || 0 }
+  } catch { return { seenLatest: 0, seenOldest: 0 } }
 }
-function persistRead(read: Record<string, number>) {
-  try { localStorage.setItem(READ_KEY, JSON.stringify(read)) } catch { /* ignore */ }
+function persistSeen(seenLatest: number, seenOldest: number) {
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify({ seenLatest, seenOldest })) } catch { /* ignore */ }
+}
+
+/** Dot for a conversation given the seen range. */
+export function dmDotState(lastTs: number, seenLatest: number, seenOldest: number): 'purple' | 'gray' | 'none' {
+  if (lastTs > seenLatest) return 'purple'
+  if (seenOldest > 0 && lastTs < seenOldest) return 'purple'
+  if (lastTs === seenLatest || lastTs === seenOldest) return 'none'
+  return 'gray'
+}
+
+// Debounced publish so a burst of opens coalesces into one 30078 write.
+let publishTimer: ReturnType<typeof setTimeout> | null = null
+function schedulePublish() {
+  if (publishTimer) clearTimeout(publishTimer)
+  publishTimer = setTimeout(() => { publishTimer = null; void publishSeen() }, 8000)
+}
+async function publishSeen() {
+  const { me, seenLatest, seenOldest } = useDMStore.getState()
+  if (!me || (!seenLatest && !seenOldest)) return
+  try {
+    const signed = await signEvent({
+      kind: APP_DATA_KIND,
+      content: JSON.stringify({ seenLatest, seenOldest }),
+      tags: [['d', SEEN_DTAG]],
+      created_at: Math.floor(Date.now() / 1000),
+      pubkey: me,
+    })
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('write')
+    await publishEvent(signed as unknown as NostrEvent, relays)
+  } catch { /* non-fatal — the local cache already holds the state */ }
 }
 
 interface DMState {
   me: string | null
   conversations: Record<string, DMConversation>
-  read: Record<string, number>
+  seenLatest: number
+  seenOldest: number
   active: string | null
   historyLoaded: boolean
   loadingHistory: boolean
@@ -48,10 +93,13 @@ interface DMState {
   start: (me: string) => () => void
   /** Backfill recent DM history so the list is complete, not just this session. */
   loadHistory: () => Promise<void>
-  /** Open a conversation: fetch its full history and mark it read. */
+  /** Pull the synced seen range and merge it into local. */
+  loadSeen: () => Promise<void>
+  /** Widen the seen range to include `ts` (opening a chat / sending). */
+  extendSeen: (ts: number) => void
+  /** Open a conversation: fetch its full history and advance the seen range. */
   openConversation: (pubkey: string) => Promise<void>
   closeConversation: () => void
-  markRead: (pubkey: string) => void
 
   decryptMessage: (pubkey: string, id: string) => Promise<void>
   decryptConversation: (pubkey: string) => Promise<void>
@@ -77,7 +125,8 @@ function upsertMessage(conv: DMConversation | undefined, pubkey: string, msg: DM
 export const useDMStore = create<DMState>((set, get) => ({
   me: null,
   conversations: {},
-  read: loadRead(),
+  seenLatest: loadSeenCache().seenLatest,
+  seenOldest: loadSeenCache().seenOldest,
   active: null,
   historyLoaded: false,
   loadingHistory: false,
@@ -100,6 +149,7 @@ export const useDMStore = create<DMState>((set, get) => ({
     const subIn = subscribe(relays, { kinds: [DM_KIND], '#p': [me] }, onEvent)
     const subOut = subscribe(relays, { kinds: [DM_KIND], authors: [me] }, onEvent)
     void get().loadHistory()
+    void get().loadSeen()
     return () => { subIn.close(); subOut.close() }
   },
 
@@ -119,12 +169,44 @@ export const useDMStore = create<DMState>((set, get) => ({
     }
   },
 
+  loadSeen: async () => {
+    const me = get().me
+    if (!me) return
+    try {
+      const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const ev = await fetchLatestEvent(relays, { kinds: [APP_DATA_KIND], authors: [me], '#d': [SEEN_DTAG] })
+      if (!ev) return
+      const o = JSON.parse(ev.content)
+      const rl = Number(o?.seenLatest) || 0
+      const ro = Number(o?.seenOldest) || 0
+      set((s) => {
+        const seenLatest = Math.max(s.seenLatest, rl)
+        const seenOldest = s.seenOldest > 0
+          ? (ro > 0 ? Math.min(s.seenOldest, ro) : s.seenOldest)
+          : ro
+        persistSeen(seenLatest, seenOldest)
+        return { seenLatest, seenOldest }
+      })
+    } catch { /* no synced state yet */ }
+  },
+
+  extendSeen: (ts) => {
+    if (!ts || ts <= 0) return
+    const s = get()
+    const seenLatest = Math.max(s.seenLatest, ts)
+    const seenOldest = s.seenOldest > 0 ? Math.min(s.seenOldest, ts) : ts
+    if (seenLatest === s.seenLatest && seenOldest === s.seenOldest) return
+    persistSeen(seenLatest, seenOldest)
+    set({ seenLatest, seenOldest })
+    schedulePublish()
+  },
+
   openConversation: async (pubkey) => {
     set({ active: pubkey })
-    get().markRead(pubkey)
+    const cur = get().conversations[pubkey]
+    if (cur) get().extendSeen(cur.lastTs)
     const me = get().me
-    const conv = get().conversations[pubkey]
-    if (!me || conv?.historyLoaded) return
+    if (!me || cur?.historyLoaded) return
     try {
       const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
       const [fromThem, toThem] = await Promise.all([
@@ -138,17 +220,11 @@ export const useDMStore = create<DMState>((set, get) => ({
         if (!c) return {}
         return { conversations: { ...s.conversations, [pubkey]: { ...c, historyLoaded: true } } }
       })
-      get().markRead(pubkey)
+      get().extendSeen(get().conversations[pubkey]?.lastTs ?? 0)
     }
   },
 
   closeConversation: () => set({ active: null }),
-
-  markRead: (pubkey) => set((s) => {
-    const read = { ...s.read, [pubkey]: Math.floor(Date.now() / 1000) }
-    persistRead(read)
-    return { read }
-  }),
 
   decryptMessage: async (pubkey, id) => {
     const me = get().me
@@ -191,12 +267,14 @@ export const useDMStore = create<DMState>((set, get) => ({
       if (!c) return {}
       return { conversations: { ...s.conversations, [recipient]: { ...c, messages: c.messages.map((m) => m.id === signed.id ? { ...m, plaintext: text } : m) } } }
     })
+    // Sending a message means I'm caught up here — advance the range past it.
+    get().extendSeen(signed.created_at)
   },
 
   reset: () => set({ me: null, conversations: {}, active: null, historyLoaded: false, loadingHistory: false }),
 }))
 
-/** True when any conversation has an incoming message newer than its read marker. */
+/** True when any conversation has an incoming message newer than seenLatest. */
 export function selectHasUnreadDM(s: DMState): boolean {
-  return Object.values(s.conversations).some((c) => c.lastIncomingTs > (s.read[c.pubkey] ?? 0))
+  return Object.values(s.conversations).some((c) => c.lastIncomingTs > s.seenLatest)
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MessageSquare, Lock, Info, Loader2 } from 'lucide-react'
+import { MessageSquare, Lock, Info, Loader2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -49,6 +49,17 @@ export function DirectMessagesView() {
               <TooltipContent className="max-w-xs text-xs leading-relaxed">
                 <p><span className="font-semibold text-purple-300">Private (NIP-04):</span> the message text is end-to-end encrypted, but relays can still see who you are talking to and when.</p>
                 <p className="mt-1.5"><span className="font-semibold text-purple-300">Extra Private (NIP-17):</span> gift-wrapped so that even the metadata (who and when) is hidden. Coming soon.</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="text-neutral-500 transition-colors hover:text-neutral-300" aria-label="About seen state">
+                  <Eye className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                <p>A <span className="font-semibold text-purple-300">purple</span> dot means new messages. Opening a chat stretches your &ldquo;seen&rdquo; range; chats inside that range you didn&rsquo;t open show a <span className="font-semibold text-neutral-300">gray</span> dot.</p>
+                <p className="mt-1.5">Your seen range (newest + oldest opened) syncs across your devices, but it can&rsquo;t track which specific older chats you opened on another device.</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

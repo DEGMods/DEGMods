@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Search, User } from 'lucide-react'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { useDMStore, type DMConversation } from '@/stores/dmStore'
+import { useDMStore, dmDotState, type DMConversation } from '@/stores/dmStore'
 import { useUserStore } from '@/stores/userStore'
 import { useProfile } from '@/hooks/useProfile'
 import { formatRelativeTime, cn } from '@/lib/utils'
 
-function ConversationRow({ conv, active, unread, onClick }: {
+function ConversationRow({ conv, active, dot, onClick }: {
   conv: DMConversation
   active: boolean
-  unread: boolean
+  dot: 'purple' | 'gray' | 'none'
   onClick: () => void
 }) {
   const { profile, name, npub } = useProfile(conv.pubkey)
@@ -32,7 +32,8 @@ function ConversationRow({ conv, active, unread, onClick }: {
         </div>
         <span className="block truncate font-mono text-[11px] text-neutral-600">{npub.slice(0, 14)}…{npub.slice(-4)}</span>
       </div>
-      {unread && <span className="h-2 w-2 shrink-0 rounded-full bg-purple-500" />}
+      {dot === 'purple' && <span className="h-2 w-2 shrink-0 rounded-full bg-purple-500" />}
+      {dot === 'gray' && <span className="h-2 w-2 shrink-0 rounded-full bg-neutral-600" />}
     </button>
   )
 }
@@ -40,7 +41,8 @@ function ConversationRow({ conv, active, unread, onClick }: {
 /** Searchable list of DM conversations, newest first. */
 export function ConversationList({ onSelect }: { onSelect: (pubkey: string) => void }) {
   const conversations = useDMStore((s) => s.conversations)
-  const read = useDMStore((s) => s.read)
+  const seenLatest = useDMStore((s) => s.seenLatest)
+  const seenOldest = useDMStore((s) => s.seenOldest)
   const active = useDMStore((s) => s.active)
   const [q, setQ] = useState('')
 
@@ -75,7 +77,7 @@ export function ConversationList({ onSelect }: { onSelect: (pubkey: string) => v
             key={c.pubkey}
             conv={c}
             active={active === c.pubkey}
-            unread={c.lastIncomingTs > (read[c.pubkey] ?? 0)}
+            dot={dmDotState(c.lastTs, seenLatest, seenOldest)}
             onClick={() => onSelect(c.pubkey)}
           />
         ))}
