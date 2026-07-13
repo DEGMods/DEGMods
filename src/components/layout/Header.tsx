@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Gamepad2, Package, PenLine, Rss, Settings, User, Menu, X, Eye, Pencil, LogOut, Bell } from 'lucide-react'
+import { Gamepad2, Package, PenLine, Rss, Settings, User, Menu, X, Eye, Pencil, LogOut, Bell, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
@@ -8,6 +8,7 @@ import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useNotificationsStore } from '@/stores/notificationsStore'
+import { useDMStore, selectHasUnreadDM } from '@/stores/dmStore'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
@@ -90,6 +91,7 @@ export function Header() {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const pubkey = useAuthStore(s => s.pubkey)
   const hasUnread = useNotificationsStore(s => s.newestTs > s.lastSeen)
+  const hasUnreadDM = useDMStore(selectHasUnreadDM)
 
   // Refresh the unread state on login (throttled inside the store).
   useEffect(() => {
@@ -134,6 +136,16 @@ export function Header() {
                 <Bell size={18} />
                 {/* Unread dot (bordered so it reads on the icon) — wired to read-state next */}
                 {hasUnread && (
+                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-purple-500 ring-2 ring-background" />
+                )}
+              </Button>
+            </Link>
+          )}
+          {isAuthenticated && (
+            <Link to="/feed?view=dm" aria-label="Direct Messages">
+              <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground hover:bg-transparent">
+                <MessageSquare size={18} />
+                {hasUnreadDM && (
                   <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-purple-500 ring-2 ring-background" />
                 )}
               </Button>
