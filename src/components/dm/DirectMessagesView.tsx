@@ -71,7 +71,7 @@ export function DirectMessagesView() {
           (bunker), or a local signer to use direct messages.
         </div>
       ) : (
-        <div className="flex h-[70vh]">
+        <div className="flex h-[70vh] overflow-hidden">
           {/* Conversation list */}
           <div className={cn('w-full flex-col border-r border-[#262626] lg:flex lg:w-72', active ? 'hidden lg:flex' : 'flex')}>
             <div className="border-b border-[#262626] p-2">

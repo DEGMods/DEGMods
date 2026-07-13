@@ -26,7 +26,7 @@ function MessageBubble({ m, onDecrypt }: { m: DMMessage; onDecrypt: () => Promis
     <div className={cn('flex', m.mine ? 'justify-end' : 'justify-start')}>
       <div className={cn('max-w-[80%] rounded-2xl px-3 py-2 text-sm', m.mine ? 'bg-purple-600 text-white' : 'bg-[#262626] text-neutral-200')}>
         {decrypted ? (
-          <span className="whitespace-pre-wrap break-words">{m.plaintext}</span>
+          <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.plaintext}</span>
         ) : (
           <button
             onClick={run}
@@ -75,7 +75,7 @@ export function DmChatView({ pubkey, onBack }: { pubkey: string; onBack: () => v
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full w-full min-w-0 flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-[#262626] p-3">
         <button onClick={onBack} className="rounded-md p-1 text-neutral-400 hover:bg-[#262626] hover:text-white lg:hidden" aria-label="Back">
@@ -96,7 +96,7 @@ export function DmChatView({ pubkey, onBack }: { pubkey: string; onBack: () => v
       </div>
 
       {/* Messages (newest at the bottom; flex-col-reverse keeps it pinned there) */}
-      <div className="flex flex-1 flex-col-reverse gap-2 overflow-y-auto p-3">
+      <div className="flex min-w-0 flex-1 flex-col-reverse gap-2 overflow-y-auto p-3">
         {messages.length === 0 ? (
           <p className="m-auto text-sm text-neutral-500">No messages yet. Say hello.</p>
         ) : (
