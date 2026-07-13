@@ -4,6 +4,8 @@ import { Toaster } from 'sonner'
 import { RefreshIndicator } from '@/components/shared/RefreshIndicator'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useDMStore } from '@/stores/dmStore'
+import { useNotificationsStore } from '@/stores/notificationsStore'
 import { useModerationStore } from '@/stores/moderationStore'
 import { useWotStore } from '@/stores/wotStore'
 import { useBlockStore } from '@/stores/blockStore'
@@ -53,6 +55,18 @@ export default function App() {
     const probeRelayCaps = () =>
       useRelayCapabilityStore.getState().probeRelays(useSettingsStore.getState().getAllEnabledRelayUrls())
     probeRelayCaps()
+
+    // App-wide open subscription: keep the DM inbox (and the notification badge)
+    // live from app open, not just while on /feed. DMs are ingested encrypted;
+    // nothing is auto-decrypted. Started on login, stopped/reset on logout.
+    let stopDm: (() => void) | null = null
+    const startMessaging = (pk: string) => {
+      stopDm?.()
+      stopDm = useDMStore.getState().start(pk)
+      useNotificationsStore.getState().refresh(pk)
+    }
+    const stopMessaging = () => { stopDm?.(); stopDm = null; useDMStore.getState().reset() }
+
     restoreSession().finally(() => {
       // Build/refresh the Web of Trust graph + load the block list once login is restored.
       useWotStore.getState().init()
@@ -60,7 +74,10 @@ export default function App() {
       // Pull the user's published relay (10002) + blossom (10063) lists, then
       // re-probe so their relays get marked too.
       const pk = useAuthStore.getState().pubkey
-      if (pk) useSettingsStore.getState().loadUserLists(pk).finally(probeRelayCaps)
+      if (pk) {
+        useSettingsStore.getState().loadUserLists(pk).finally(probeRelayCaps)
+        startMessaging(pk)
+      }
     })
 
     // Refresh admin moderation defaults (e.g. excluded tags) from NIP-78.
@@ -97,9 +114,11 @@ export default function App() {
           useWotStore.getState().init()
           useBlockStore.getState().loadBlockList()
           useSettingsStore.getState().loadUserLists(s.pubkey).finally(probeRelayCaps)
+          startMessaging(s.pubkey)
         } else {
           useBlockStore.getState().reset()
           useSettingsStore.getState().resetUserLists()
+          stopMessaging()
         }
       }
     })
@@ -118,6 +137,7 @@ export default function App() {
       window.removeEventListener('storage', onStorage)
       unsubAuth()
       clearTimeout(redundancyTimer)
+      stopMessaging()
     }
   }, [])
 

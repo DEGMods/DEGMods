@@ -1,17 +1,19 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Bell, Rss } from 'lucide-react'
+import { Bell, Rss, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useFollowsStore } from '@/stores/followsStore'
 import { useNotificationsStore } from '@/stores/notificationsStore'
+import { useDMStore, selectHasUnreadDM } from '@/stores/dmStore'
 import { PublisherCard } from '@/components/mod/PublisherCard'
 import { FeedView } from '@/components/social/FeedView'
 import { NotificationsView } from '@/components/social/NotificationsView'
+import { DirectMessagesView } from '@/components/dm/DirectMessagesView'
 import { Button } from '@/components/ui/button'
 
-type View = 'home' | 'notifications'
+type View = 'home' | 'notifications' | 'dm'
 
 function NavButton({ icon: Icon, label, active, dot, onClick }: { icon: typeof Rss; label: string; active: boolean; dot?: boolean; onClick: () => void }) {
   return (
@@ -37,8 +39,10 @@ export function FeedPage() {
   const loadContacts = useFollowsStore((s) => s.loadContacts)
   const [searchParams] = useSearchParams()
   // Deep-link support: /feed?view=notifications opens the notifications view.
-  const [view, setView] = useState<View>(searchParams.get('view') === 'notifications' ? 'notifications' : 'home')
+  const initialView = searchParams.get('view')
+  const [view, setView] = useState<View>(initialView === 'notifications' ? 'notifications' : initialView === 'dm' ? 'dm' : 'home')
   const hasUnread = useNotificationsStore((s) => s.newestTs > s.lastSeen)
+  const hasUnreadDM = useDMStore(selectHasUnreadDM)
 
   useEffect(() => { if (myPubkey) loadContacts() }, [myPubkey, loadContacts])
   useEffect(() => { if (myPubkey) useNotificationsStore.getState().refresh(myPubkey) }, [myPubkey])
@@ -72,7 +76,11 @@ export function FeedPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column: feed / notifications */}
         <div className="lg:col-span-2 min-w-0 order-2 lg:order-1">
-          {view === 'home' ? <FeedView authors={authors} /> : <NotificationsView myPubkey={myPubkey} />}
+          {view === 'home'
+            ? <FeedView authors={authors} />
+            : view === 'notifications'
+              ? <NotificationsView myPubkey={myPubkey} />
+              : <DirectMessagesView />}
         </div>
 
         {/* Right column: user card + nav */}
@@ -81,6 +89,7 @@ export function FeedPage() {
           <div className="rounded-lg border border-[#262626] bg-[#1c1c1c] p-2 space-y-1">
             <NavButton icon={Rss} label="Feed" active={view === 'home'} onClick={() => setView('home')} />
             <NavButton icon={Bell} label="Notifications" active={view === 'notifications'} dot={hasUnread} onClick={() => setView('notifications')} />
+            <NavButton icon={MessageSquare} label="Direct Messages" active={view === 'dm'} dot={hasUnreadDM} onClick={() => setView('dm')} />
           </div>
         </div>
       </div>
