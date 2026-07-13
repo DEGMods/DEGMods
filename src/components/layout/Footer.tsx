@@ -8,7 +8,7 @@ export function Footer() {
           <div className="flex items-center gap-2">
             <img src="/logo.png" alt="DEG MODS" className="h-5 w-auto" />
             <span className="text-sm text-muted-foreground">
-              DEG MODS, Decentralized Game Mods on Nostr
+              DEG MODS, Decentralized Game Mods on Nostr (Alpha v2)
             </span>
           </div>
           <nav className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
