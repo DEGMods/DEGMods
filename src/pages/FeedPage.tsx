@@ -38,11 +38,17 @@ export function FeedPage() {
   const contactEvent = useFollowsStore((s) => s.contactEvent)
   const loadContacts = useFollowsStore((s) => s.loadContacts)
   const [searchParams] = useSearchParams()
-  // Deep-link support: /feed?view=notifications opens the notifications view.
-  const initialView = searchParams.get('view')
-  const [view, setView] = useState<View>(initialView === 'notifications' ? 'notifications' : initialView === 'dm' ? 'dm' : 'home')
+  // Deep-link support: /feed?view=notifications|dm selects the view.
+  const paramView = searchParams.get('view')
+  const [view, setView] = useState<View>(paramView === 'notifications' ? 'notifications' : paramView === 'dm' ? 'dm' : 'home')
   const hasUnread = useNotificationsStore((s) => s.newestTs > s.lastSeen)
   const hasUnreadDM = useDMStore(selectHasUnreadDM)
+
+  // Sync when the ?view= param changes while already on /feed — e.g. clicking the
+  // header bell/DM button from the other tab (which only updates the query).
+  useEffect(() => {
+    if (paramView === 'notifications' || paramView === 'dm' || paramView === 'home') setView(paramView)
+  }, [paramView])
 
   useEffect(() => { if (myPubkey) loadContacts() }, [myPubkey, loadContacts])
   useEffect(() => { if (myPubkey) useNotificationsStore.getState().refresh(myPubkey) }, [myPubkey])
