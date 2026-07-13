@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Search, User } from 'lucide-react'
+import { Search, User, SquarePen } from 'lucide-react'
+import { NewChatModal } from './NewChatModal'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { useDMStore, dmDotState, type DMConversation } from '@/stores/dmStore'
 import { useUserStore } from '@/stores/userStore'
@@ -45,6 +46,7 @@ export function ConversationList({ onSelect }: { onSelect: (pubkey: string) => v
   const seenOldest = useDMStore((s) => s.seenOldest)
   const active = useDMStore((s) => s.active)
   const [q, setQ] = useState('')
+  const [newOpen, setNewOpen] = useState(false)
 
   const list = useMemo(() => {
     const all = Object.values(conversations).sort((a, b) => b.lastTs - a.lastTs)
@@ -61,16 +63,27 @@ export function ConversationList({ onSelect }: { onSelect: (pubkey: string) => v
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-[#262626] p-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search"
-            className="w-full rounded-md border border-[#262626] bg-[#212121] py-2 pl-8 pr-3 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-purple-600/50"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search"
+              className="w-full rounded-md border border-[#262626] bg-[#212121] py-2 pl-8 pr-3 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-purple-600/50"
+            />
+          </div>
+          <button
+            onClick={() => setNewOpen(true)}
+            className="shrink-0 rounded-md border border-[#262626] p-2 text-neutral-400 transition-colors hover:border-[#404040] hover:text-white"
+            aria-label="New message"
+            title="New message"
+          >
+            <SquarePen className="h-4 w-4" />
+          </button>
         </div>
       </div>
+      <NewChatModal open={newOpen} onClose={() => setNewOpen(false)} onOpen={onSelect} />
       <div className="flex-1 space-y-0.5 overflow-y-auto p-1.5">
         {list.map((c) => (
           <ConversationRow

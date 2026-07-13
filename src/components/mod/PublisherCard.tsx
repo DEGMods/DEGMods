@@ -3,10 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { User, Globe, TreePine, MoreHorizontal, Eye, Pencil, ShieldBan, Loader2, AlertTriangle, RefreshCw, Flag } from 'lucide-react'
+import { User, Globe, TreePine, MoreHorizontal, Eye, Pencil, ShieldBan, Loader2, AlertTriangle, RefreshCw, Flag, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
+import { useDMStore } from '@/stores/dmStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useBlockStore, type BlockType } from '@/stores/blockStore'
@@ -136,6 +137,12 @@ export function PublisherCard({ pubkey }: PublisherCardProps) {
     else toast.error(res.error || 'Failed to block')
   }
 
+  // Open (or start) a NIP-04 DM with this user in the feed's Direct Messages tab.
+  const openDM = () => {
+    useDMStore.getState().openConversation(pubkey)
+    navigate('/feed?view=dm')
+  }
+
   const websiteUrl = profile?.website
     ? (profile.website.startsWith('http') ? profile.website : `https://${profile.website}`)
     : null
@@ -219,8 +226,18 @@ export function PublisherCard({ pubkey }: PublisherCardProps) {
         {/* Follow */}
         {!isSelf && <FollowButton pubkey={pubkey} className="mt-3 w-full" />}
 
-        {/* Action buttons: website · zap · links */}
+        {/* Action buttons: message · website · zap · links */}
         <div className="mt-2 flex items-center gap-2">
+          {!isSelf && myPubkey && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={openDM} className={iconBtn} aria-label="Message">
+                  <MessageSquare className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Message</TooltipContent>
+            </Tooltip>
+          )}
           {websiteUrl && (
             <Tooltip>
               <TooltipTrigger asChild>
