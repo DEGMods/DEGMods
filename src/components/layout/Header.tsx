@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useNotificationsStore } from '@/stores/notificationsStore'
+import { useNotificationsStore, selectHasUnread } from '@/stores/notificationsStore'
 import { useDMStore, selectHasUnreadDM } from '@/stores/dmStore'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -90,7 +90,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const pubkey = useAuthStore(s => s.pubkey)
-  const hasUnread = useNotificationsStore(s => s.newestTs > s.lastSeen)
+  const hasUnread = useNotificationsStore(selectHasUnread)
   const hasUnreadDM = useDMStore(selectHasUnreadDM)
 
   // Refresh the unread state on login (throttled inside the store).

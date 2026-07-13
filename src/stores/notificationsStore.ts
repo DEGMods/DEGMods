@@ -65,6 +65,9 @@ let lastRefresh = 0
 interface NotificationsState {
   newestTs: number
   lastSeen: number
+  /** True once the NIP-78 seen marker has been fetched — the dot stays hidden
+   *  until then so a stale local cache can't flash it on. */
+  seenLoaded: boolean
   /** Fetch newest-notification + last-seen timestamps (throttled by a TTL). */
   refresh: (pubkey: string, force?: boolean) => Promise<void>
   /** Mark everything seen now — clears the dot and publishes the 30078 marker. */
@@ -74,6 +77,7 @@ interface NotificationsState {
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   newestTs: 0,
   lastSeen: cachedSeen(),
+  seenLoaded: false,
 
   refresh: async (pubkey, force = false) => {
     const now = Date.now()
@@ -86,7 +90,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     ])
     const lastSeen = Math.max(cachedSeen(), seenEv?.created_at ?? 0)
     if (lastSeen) localStorage.setItem(CACHE_KEY, String(lastSeen))
-    set({ newestTs: newest, lastSeen })
+    set({ newestTs: newest, lastSeen, seenLoaded: true })
   },
 
   markSeen: async (pubkey) => {
@@ -108,3 +112,8 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     }
   },
 }))
+
+/** Show the dot only after the seen marker was fetched (avoids a stale-cache flash). */
+export function selectHasUnread(s: NotificationsState): boolean {
+  return s.seenLoaded && s.newestTs > s.lastSeen
+}

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useFollowsStore } from '@/stores/followsStore'
-import { useNotificationsStore } from '@/stores/notificationsStore'
+import { useNotificationsStore, selectHasUnread } from '@/stores/notificationsStore'
 import { useDMStore, selectHasUnreadDM } from '@/stores/dmStore'
 import { PublisherCard } from '@/components/mod/PublisherCard'
 import { FeedView } from '@/components/social/FeedView'
@@ -41,7 +41,7 @@ export function FeedPage() {
   // Deep-link support: /feed?view=notifications|dm selects the view.
   const paramView = searchParams.get('view')
   const [view, setView] = useState<View>(paramView === 'notifications' ? 'notifications' : paramView === 'dm' ? 'dm' : 'home')
-  const hasUnread = useNotificationsStore((s) => s.newestTs > s.lastSeen)
+  const hasUnread = useNotificationsStore(selectHasUnread)
   const hasUnreadDM = useDMStore(selectHasUnreadDM)
 
   // Sync when the ?view= param changes while already on /feed — e.g. clicking the

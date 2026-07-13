@@ -86,6 +86,9 @@ interface DMState {
   active: string | null
   historyLoaded: boolean
   loadingHistory: boolean
+  /** True once the synced seen range has been fetched — the badge stays hidden
+   *  until then so a stale local cache can't flash it on. */
+  seenLoaded: boolean
 
   /** Fold a raw kind-4 event into its conversation (no decryption). */
   ingest: (ev: NostrEvent) => void
@@ -130,6 +133,7 @@ export const useDMStore = create<DMState>((set, get) => ({
   active: null,
   historyLoaded: false,
   loadingHistory: false,
+  seenLoaded: false,
 
   ingest: (ev) => {
     const me = get().me
@@ -175,19 +179,23 @@ export const useDMStore = create<DMState>((set, get) => ({
     try {
       const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
       const ev = await fetchLatestEvent(relays, { kinds: [APP_DATA_KIND], authors: [me], '#d': [SEEN_DTAG] })
-      if (!ev) return
-      const o = JSON.parse(ev.content)
-      const rl = Number(o?.seenLatest) || 0
-      const ro = Number(o?.seenOldest) || 0
-      set((s) => {
-        const seenLatest = Math.max(s.seenLatest, rl)
-        const seenOldest = s.seenOldest > 0
-          ? (ro > 0 ? Math.min(s.seenOldest, ro) : s.seenOldest)
-          : ro
-        persistSeen(seenLatest, seenOldest)
-        return { seenLatest, seenOldest }
-      })
-    } catch { /* no synced state yet */ }
+      if (ev) {
+        const o = JSON.parse(ev.content)
+        const rl = Number(o?.seenLatest) || 0
+        const ro = Number(o?.seenOldest) || 0
+        set((s) => {
+          const seenLatest = Math.max(s.seenLatest, rl)
+          const seenOldest = s.seenOldest > 0
+            ? (ro > 0 ? Math.min(s.seenOldest, ro) : s.seenOldest)
+            : ro
+          persistSeen(seenLatest, seenOldest)
+          return { seenLatest, seenOldest }
+        })
+      }
+    } catch { /* no synced state yet */ } finally {
+      // Mark loaded whether or not a marker existed, so the badge can now decide.
+      set({ seenLoaded: true })
+    }
   },
 
   extendSeen: (ts) => {
@@ -271,10 +279,11 @@ export const useDMStore = create<DMState>((set, get) => ({
     get().extendSeen(signed.created_at)
   },
 
-  reset: () => set({ me: null, conversations: {}, active: null, historyLoaded: false, loadingHistory: false }),
+  reset: () => set({ me: null, conversations: {}, active: null, historyLoaded: false, loadingHistory: false, seenLoaded: false }),
 }))
 
-/** True when any conversation has an incoming message newer than seenLatest. */
+/** True when the seen range is loaded AND a conversation has an incoming message
+ *  newer than seenLatest. Gated on seenLoaded so a stale cache can't flash the dot. */
 export function selectHasUnreadDM(s: DMState): boolean {
-  return Object.values(s.conversations).some((c) => c.lastIncomingTs > s.seenLatest)
+  return s.seenLoaded && Object.values(s.conversations).some((c) => c.lastIncomingTs > s.seenLatest)
 }
