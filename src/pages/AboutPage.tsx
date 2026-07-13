@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Server, Code2, ShieldCheck, Zap } from 'lucide-react'
+import { Server, Code2, ShieldCheck } from 'lucide-react'
 import { nip19 } from 'nostr-tools'
 import { cn } from '@/lib/utils'
 import { ADMIN_PUBKEY } from '@/lib/constants'
 import { XLogo } from '@/components/shared/XLogo'
+import { NostrLogo } from '@/components/shared/NostrLogo'
 
 const ADMIN_NPUB = nip19.npubEncode(ADMIN_PUBKEY)
 const DEG_X_URL = 'https://x.com/DEGMods'
@@ -134,7 +135,7 @@ export function AboutPage() {
             to={`/profile/${ADMIN_NPUB}`}
             className="inline-flex items-center gap-2 rounded-lg border border-[#262626] bg-[#1c1c1c] px-4 py-2.5 text-sm font-medium text-neutral-200 transition-colors hover:border-purple-600/50 hover:bg-[#212121]"
           >
-            <Zap className="h-4 w-4 text-purple-400" /> Nostr
+            <NostrLogo /> Nostr
           </Link>
           <a
             href={DEG_X_URL}

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { nip19 } from 'nostr-tools'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -6,9 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Loader2, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { XLogo } from '@/components/shared/XLogo'
+import { NostrLogo } from '@/components/shared/NostrLogo'
+import { ADMIN_PUBKEY } from '@/lib/constants'
 import { CONTACT_SUBJECTS, sendContactMessage, type ContactSubject } from '@/lib/nostr/contact'
 
 const DEG_X_URL = 'https://x.com/DEGMods'
+const ADMIN_NPUB = nip19.npubEncode(ADMIN_PUBKEY)
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -110,16 +115,25 @@ export function ContactModal({
             {sending ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</> : 'Send message'}
           </Button>
 
-          <div className="border-t border-[#262626] pt-3 text-center">
-            <p className="mb-2 text-xs text-neutral-500">Prefer social? You can also reach us on X.</p>
-            <a
-              href={DEG_X_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#262626] px-3 py-1.5 text-sm text-neutral-200 transition-colors hover:border-[#404040] hover:bg-[#212121]"
-            >
-              <XLogo /> @DEGMods
-            </a>
+          <div className="space-y-2 border-t border-[#262626] pt-3 text-center">
+            <p className="text-xs text-neutral-500">Prefer social? You can also reach us on Nostr or X.</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Link
+                to={`/profile/${ADMIN_NPUB}`}
+                onClick={onClose}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#262626] px-3 py-1.5 text-sm text-neutral-200 transition-colors hover:border-[#404040] hover:bg-[#212121]"
+              >
+                <NostrLogo /> Nostr
+              </Link>
+              <a
+                href={DEG_X_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#262626] px-3 py-1.5 text-sm text-neutral-200 transition-colors hover:border-[#404040] hover:bg-[#212121]"
+              >
+                <XLogo /> @DEGMods
+              </a>
+            </div>
           </div>
         </div>
       </DialogContent>
