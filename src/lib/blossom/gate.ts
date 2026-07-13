@@ -147,12 +147,21 @@ export function buildAdProof(c: string, adId: string): string {
 
 // ─── Ad inventory (NIP-78) ──────────────────────────────────────────
 
+/** A labelled call-to-action button shown under the ad image. */
+export interface AdLink {
+  text: string
+  link: string
+}
+
 export interface Ad {
   id: string
   media: string
+  /** Legacy single click-through (pre-buttons). Kept as a fallback CTA. */
   link: string
   alt: string
   weight: number
+  /** Up to 3 labelled CTA buttons shown under the image. */
+  buttons: AdLink[]
 }
 
 /** Parse a `30078:<pubkey>:<dtag>` coordinate. */
@@ -178,12 +187,20 @@ function normalizeAds(content: string): Ad[] {
     const media = typeof o?.media === 'string' ? o.media : ''
     if (!id || !media) continue
     const weight = Number(o?.weight)
+    const buttons = Array.isArray(o?.buttons)
+      ? (o.buttons as unknown[])
+          .map((b) => b as Record<string, unknown>)
+          .filter((b) => typeof b?.text === 'string' && typeof b?.link === 'string' && (b.text as string).trim() && (b.link as string).trim())
+          .slice(0, 3)
+          .map((b) => ({ text: (b.text as string).trim(), link: (b.link as string).trim() }))
+      : []
     ads.push({
       id,
       media,
       link: typeof o?.link === 'string' ? o.link : '',
       alt: typeof o?.alt === 'string' ? o.alt : '',
       weight: Number.isFinite(weight) && weight > 0 ? Math.floor(weight) : 1,
+      buttons,
     })
   }
   return ads

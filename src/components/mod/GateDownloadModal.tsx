@@ -44,7 +44,7 @@ export function GateDownloadModal({ challenge, url, onResolved, onCancel }: Gate
 
   const powProofRef = useRef<string>('')
   const adRef = useRef<Ad | null>(null)
-  const mediaRef = useRef<HTMLAnchorElement | null>(null)
+  const mediaRef = useRef<HTMLDivElement | null>(null)
   const visibleRef = useRef(true)
   const settledRef = useRef(false)
 
@@ -122,6 +122,15 @@ export function GateDownloadModal({ challenge, url, onResolved, onCancel }: Gate
   const ready = powDone && adViewed
   const adUnavailable = needAd && adState.kind === 'none'
 
+  // CTA buttons shown under the ad image. Prefer the ad's `buttons`; fall back to
+  // the legacy single `link` as one "Visit" button so older inventory still works.
+  const readyAd = adState.kind === 'ready' ? adState.ad : null
+  const adLinks = readyAd
+    ? (readyAd.buttons.length > 0
+        ? readyAd.buttons
+        : (readyAd.link ? [{ text: 'Visit', link: readyAd.link }] : []))
+    : []
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) cancel() }}>
       <DialogContent className="max-w-md border-[#262626] bg-[#1c1c1c]">
@@ -133,26 +142,31 @@ export function GateDownloadModal({ challenge, url, onResolved, onCancel }: Gate
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Ad */}
+          {/* Ad: the image is not clickable — only the CTA buttons below it are. */}
           {needAd && adState.kind === 'ready' && (
             <div>
-              <a
-                ref={mediaRef}
-                href={adState.ad.link ? (adState.ad.link.startsWith('http') ? adState.ad.link : `https://${adState.ad.link}`) : undefined}
-                target="_blank"
-                rel="noopener noreferrer sponsored"
-                onClick={() => reportAdClick(nodeOrigin(url), adState.ad.id, challenge.ad!.c)}
-                className="group block overflow-hidden rounded-xl border border-[#262626] bg-[#161616]"
-              >
+              <div ref={mediaRef} className="overflow-hidden rounded-xl border border-[#262626] bg-[#161616]">
                 <div className="relative aspect-[16/9] w-full">
                   <BlossomImage src={adState.ad.media} alt={adState.ad.alt || 'Sponsored'} className="h-full w-full object-cover" />
-                  {adState.ad.link && (
-                    <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      Visit <ExternalLink className="h-3 w-3" />
-                    </span>
-                  )}
                 </div>
-              </a>
+              </div>
+              {adLinks.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {adLinks.map((b, i) => (
+                    <a
+                      key={i}
+                      href={b.link.startsWith('http') ? b.link : `https://${b.link}`}
+                      target="_blank"
+                      rel="noopener noreferrer sponsored"
+                      onClick={() => reportAdClick(nodeOrigin(url), adState.ad.id, challenge.ad!.c)}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+                    >
+                      {b.text}
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ))}
+                </div>
+              )}
               <p className="mt-1.5 text-center text-[11px] uppercase tracking-wide text-neutral-500">Sponsored — keeps downloads free</p>
             </div>
           )}

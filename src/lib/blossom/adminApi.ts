@@ -181,7 +181,8 @@ export function wsToHttp(wss: string): string {
 // ─── Download-gate ad inventory (node-signed NIP-78; BUD-Ads target) ─
 
 /** One ad in the node's download-gate inventory (mirrors the node's adItem). */
-export interface NodeAdItem { id: string; media: string; link?: string; alt?: string; weight?: number }
+export interface NodeAdButton { text: string; link: string }
+export interface NodeAdItem { id: string; media: string; link?: string; alt?: string; weight?: number; buttons?: NodeAdButton[] }
 export interface NodeAdsInfo {
   ref: string                 // 30078:<node-pubkey>:manual-blossom-ads
   publish_relays: string[]

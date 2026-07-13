@@ -1406,7 +1406,7 @@ const emptyAd = (): EditAd => ({ id: crypto.randomUUID(), name: '', description:
 
 // ── Download-gate ads (node-signed NIP-78 inventory; BUD-Ads gate target) ──
 
-interface GateAd { id: string; media: string; link: string; alt: string; weight: number }
+interface GateAd { id: string; media: string; link: string; alt: string; weight: number; buttons: { text: string; link: string }[] }
 
 function GateAdsSection() {
   // Today there's one managed node; a selector can be added when there are more.
@@ -1420,10 +1420,15 @@ function GateAdsSection() {
   const [stats, setStats] = useState<AdStats | null>(null)
   const [statsAdId, setStatsAdId] = useState<string | null>(null)
 
-  const serialize = (l: GateAd[]) => JSON.stringify(l.map(({ id, media, link, alt, weight }) => ({ id, media, link, alt, weight })))
+  const serialize = (l: GateAd[]) => JSON.stringify(l.map(({ id, media, link, alt, weight, buttons }) => ({ id, media, link, alt, weight, buttons })))
 
-  const toRows = (items: { id: string; media: string; link?: string; alt?: string; weight?: number }[]): GateAd[] =>
-    items.map((a) => ({ id: a.id, media: a.media, link: a.link ?? '', alt: a.alt ?? '', weight: a.weight ?? 1 }))
+  const toRows = (items: { id: string; media: string; link?: string; alt?: string; weight?: number; buttons?: { text: string; link: string }[] }[]): GateAd[] =>
+    items.map((a) => ({
+      id: a.id, media: a.media, link: a.link ?? '', alt: a.alt ?? '', weight: a.weight ?? 1,
+      buttons: Array.isArray(a.buttons)
+        ? a.buttons.filter((b) => b && typeof b.text === 'string' && typeof b.link === 'string').slice(0, 3).map((b) => ({ text: b.text, link: b.link }))
+        : [],
+    }))
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1449,20 +1454,33 @@ function GateAdsSection() {
   const dirty = serialize(ads) !== baseline
   const update = (id: string, patch: Partial<GateAd>) => setAds((prev) => prev.map((a) => a.id === id ? { ...a, ...patch } : a))
   const remove = (id: string) => setAds((prev) => prev.filter((a) => a.id !== id))
-  const add = () => setAds((prev) => [...prev, { id: crypto.randomUUID().slice(0, 8), media: '', link: '', alt: '', weight: 1 }])
+  const add = () => setAds((prev) => [...prev, { id: crypto.randomUUID().slice(0, 8), media: '', link: '', alt: '', weight: 1, buttons: [] }])
+  const updateButton = (id: string, i: number, patch: Partial<{ text: string; link: string }>) =>
+    setAds((prev) => prev.map((a) => a.id === id ? { ...a, buttons: a.buttons.map((b, j) => j === i ? { ...b, ...patch } : b) } : a))
+  const addButton = (id: string) =>
+    setAds((prev) => prev.map((a) => a.id === id && a.buttons.length < 3 ? { ...a, buttons: [...a.buttons, { text: '', link: '' }] } : a))
+  const removeButton = (id: string, i: number) =>
+    setAds((prev) => prev.map((a) => a.id === id ? { ...a, buttons: a.buttons.filter((_, j) => j !== i) } : a))
 
   const save = async () => {
     setSaving(true)
     try {
       const clean = ads
         .filter((a) => a.media.trim())
-        .map((a) => ({
-          id: a.id,
-          media: a.media.trim(),
-          link: a.link.trim() || undefined,
-          alt: a.alt.trim() || undefined,
-          weight: a.weight > 0 ? a.weight : 1,
-        }))
+        .map((a) => {
+          const buttons = a.buttons
+            .map((b) => ({ text: b.text.trim(), link: b.link.trim() }))
+            .filter((b) => b.text && b.link)
+            .slice(0, 3)
+          return {
+            id: a.id,
+            media: a.media.trim(),
+            link: a.link.trim() || undefined,
+            alt: a.alt.trim() || undefined,
+            weight: a.weight > 0 ? a.weight : 1,
+            buttons: buttons.length ? buttons : undefined,
+          }
+        })
       const res = await saveNodeAds(node.url, clean)
       const rows = toRows(res.ads ?? [])
       setAds(rows)
@@ -1537,15 +1555,27 @@ function GateAdsSection() {
                 <Input value={ad.media} onChange={(e) => update(ad.id, { media: e.target.value })} placeholder="Image URL or blossom hash" className={`${inputClass} font-mono text-xs`} />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-neutral-400">Click-through link (optional)</label>
-                  <Input value={ad.link} onChange={(e) => update(ad.id, { link: e.target.value })} placeholder="https://…" className={inputClass} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-neutral-400">Alt text (optional)</label>
-                  <Input value={ad.alt} onChange={(e) => update(ad.id, { alt: e.target.value })} placeholder="Describe the ad" className={inputClass} />
-                </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-neutral-400">Alt text (optional)</label>
+                <Input value={ad.alt} onChange={(e) => update(ad.id, { alt: e.target.value })} placeholder="Describe the ad" className={inputClass} />
+              </div>
+
+              {/* Buttons — shown under the image while a download is preparing.
+                  Each click counts toward this ad's clicks in analytics. */}
+              <div className="space-y-2">
+                <label className="text-xs text-neutral-400">Buttons (up to 3)</label>
+                {ad.buttons.map((b, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input value={b.text} onChange={(e) => updateButton(ad.id, i, { text: e.target.value })} placeholder="Label" className={`${inputClass} flex-1`} />
+                    <Input value={b.link} onChange={(e) => updateButton(ad.id, i, { link: e.target.value })} placeholder="https://…" className={`${inputClass} flex-[2]`} />
+                    <button onClick={() => removeButton(ad.id, i)} className="shrink-0 text-neutral-500 hover:text-red-400" aria-label="Remove button"><X size={14} /></button>
+                  </div>
+                ))}
+                {ad.buttons.length < 3 && (
+                  <Button onClick={() => addButton(ad.id)} variant="outline" size="sm" className="border-[#262626] bg-transparent text-xs text-neutral-400">
+                    <Plus size={13} className="mr-1" /> Add button
+                  </Button>
+                )}
               </div>
 
               {/* Weight */}
