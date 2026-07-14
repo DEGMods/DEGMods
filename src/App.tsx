@@ -5,6 +5,7 @@ import { RefreshIndicator } from '@/components/shared/RefreshIndicator'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useDMStore } from '@/stores/dmStore'
+import { useDM17Store } from '@/stores/dm17Store'
 import { useNotificationsStore } from '@/stores/notificationsStore'
 import { useModerationStore } from '@/stores/moderationStore'
 import { useWotStore } from '@/stores/wotStore'
@@ -60,12 +61,17 @@ export default function App() {
     // live from app open, not just while on /feed. DMs are ingested encrypted;
     // nothing is auto-decrypted. Started on login, stopped/reset on logout.
     let stopDm: (() => void) | null = null
+    let stopDm17: (() => void) | null = null
     const startMessaging = (pk: string) => {
-      stopDm?.()
+      stopDm?.(); stopDm17?.()
       stopDm = useDMStore.getState().start(pk)
+      stopDm17 = useDM17Store.getState().start(pk)
       useNotificationsStore.getState().refresh(pk)
     }
-    const stopMessaging = () => { stopDm?.(); stopDm = null; useDMStore.getState().reset() }
+    const stopMessaging = () => {
+      stopDm?.(); stopDm = null; useDMStore.getState().reset()
+      stopDm17?.(); stopDm17 = null; useDM17Store.getState().reset()
+    }
 
     restoreSession().finally(() => {
       // Build/refresh the Web of Trust graph + load the block list once login is restored.

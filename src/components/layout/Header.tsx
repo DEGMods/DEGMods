@@ -9,6 +9,7 @@ import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useNotificationsStore, selectHasUnread } from '@/stores/notificationsStore'
 import { useHasUnreadDM } from '@/stores/dmStore'
+import { useHasUnreadDM17 } from '@/stores/dm17Store'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
@@ -91,7 +92,7 @@ export function Header() {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const pubkey = useAuthStore(s => s.pubkey)
   const hasUnread = useNotificationsStore(selectHasUnread)
-  const hasUnreadDM = useHasUnreadDM()
+  const hasUnreadDM = useHasUnreadDM() || useHasUnreadDM17()
 
   // Refresh the unread state on login (throttled inside the store).
   useEffect(() => {

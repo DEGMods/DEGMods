@@ -2,14 +2,15 @@ import { useMemo, useState } from 'react'
 import { Search, User, SquarePen } from 'lucide-react'
 import { NewChatModal } from './NewChatModal'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { useDMStore, dmDotState, type DMConversation } from '@/stores/dmStore'
+import { dmDotState } from '@/stores/dmStore'
 import { useUserStore } from '@/stores/userStore'
 import { useBlockStore } from '@/stores/blockStore'
 import { useProfile } from '@/hooks/useProfile'
 import { formatRelativeTime, cn } from '@/lib/utils'
+import type { DMStoreHook, DMViewConversation } from './store'
 
 function ConversationRow({ conv, active, dot, onClick }: {
-  conv: DMConversation
+  conv: DMViewConversation
   active: boolean
   dot: 'purple' | 'gray' | 'none'
   onClick: () => void
@@ -40,12 +41,12 @@ function ConversationRow({ conv, active, dot, onClick }: {
   )
 }
 
-/** Searchable list of DM conversations, newest first. */
-export function ConversationList({ onSelect }: { onSelect: (pubkey: string) => void }) {
-  const conversations = useDMStore((s) => s.conversations)
-  const seenLatest = useDMStore((s) => s.seenLatest)
-  const seenOldest = useDMStore((s) => s.seenOldest)
-  const active = useDMStore((s) => s.active)
+/** Searchable list of DM conversations, newest first. Store-agnostic (NIP-04 / NIP-17). */
+export function ConversationList({ useStore, onSelect }: { useStore: DMStoreHook; onSelect: (pubkey: string) => void }) {
+  const conversations = useStore((s) => s.conversations)
+  const seenLatest = useStore((s) => s.seenLatest)
+  const seenOldest = useStore((s) => s.seenOldest)
+  const active = useStore((s) => s.active)
   const blocked = useBlockStore((s) => s.blockedPubkeys)
   const [q, setQ] = useState('')
   const [newOpen, setNewOpen] = useState(false)

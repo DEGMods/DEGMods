@@ -5,14 +5,14 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useDMStore, type DMMessage } from '@/stores/dmStore'
 import { useProfile } from '@/hooks/useProfile'
+import type { DMStoreHook, DMViewMessage } from './store'
 
 function shortTime(ts: number): string {
   return new Date(ts * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
-function MessageBubble({ m, onDecrypt }: { m: DMMessage; onDecrypt: () => Promise<void> }) {
+function MessageBubble({ m, onDecrypt }: { m: DMViewMessage; onDecrypt: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const decrypted = m.plaintext !== undefined
 
@@ -42,12 +42,12 @@ function MessageBubble({ m, onDecrypt }: { m: DMMessage; onDecrypt: () => Promis
   )
 }
 
-/** A NIP-04 conversation: bottom-pinned messages (reversed flex) + composer. */
-export function DmChatView({ pubkey, onBack }: { pubkey: string; onBack: () => void }) {
-  const conv = useDMStore((s) => s.conversations[pubkey])
-  const decryptConversation = useDMStore((s) => s.decryptConversation)
-  const decryptMessage = useDMStore((s) => s.decryptMessage)
-  const send = useDMStore((s) => s.send)
+/** A DM conversation: bottom-pinned messages + composer. Store-agnostic (NIP-04 / NIP-17). */
+export function DmChatView({ useStore, pubkey, onBack }: { useStore: DMStoreHook; pubkey: string; onBack: () => void }) {
+  const conv = useStore((s) => s.conversations[pubkey])
+  const decryptConversation = useStore((s) => s.decryptConversation)
+  const decryptMessage = useStore((s) => s.decryptMessage)
+  const send = useStore((s) => s.send)
   const { profile, name, npub } = useProfile(pubkey)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
