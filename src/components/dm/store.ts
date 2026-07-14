@@ -12,6 +12,8 @@ export interface DMViewState {
   closeConversation: () => void
   decryptMessage: (pk: string, id: string) => Promise<void>
   decryptConversation: (pk: string) => Promise<void>
+  /** Stop an in-progress batch decrypt (decryptConversation/decryptAll). */
+  cancelBatchDecrypt: () => void
   send: (recipient: string, text: string) => Promise<void>
 }
 

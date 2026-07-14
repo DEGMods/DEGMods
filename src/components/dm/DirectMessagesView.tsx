@@ -28,6 +28,7 @@ function DMPane({ useStore, onDecryptAll, decryptingAll, topExtra, onSwitch, swi
   const active = useStore((s) => s.active)
   const openConversation = useStore((s) => s.openConversation)
   const closeConversation = useStore((s) => s.closeConversation)
+  const cancelBatchDecrypt = useStore((s) => s.cancelBatchDecrypt)
   const convoCount = useStore((s) => Object.keys(s.conversations).length)
 
   return (
@@ -36,8 +37,8 @@ function DMPane({ useStore, onDecryptAll, decryptingAll, topExtra, onSwitch, swi
       <div className="flex h-[70vh] overflow-hidden">
         <div className={cn('w-full flex-col border-r border-[#262626] lg:flex lg:w-72', active ? 'hidden lg:flex' : 'flex')}>
           <div className="border-b border-[#262626] p-2">
-            <Button size="sm" variant="outline" className="w-full gap-1.5 border-[#262626]" disabled={decryptingAll || convoCount === 0} onClick={onDecryptAll}>
-              {decryptingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />} Decrypt all messages
+            <Button size="sm" variant="outline" className="w-full gap-1.5 border-[#262626]" disabled={!decryptingAll && convoCount === 0} onClick={decryptingAll ? () => cancelBatchDecrypt() : onDecryptAll}>
+              {decryptingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cancel</> : <><Lock className="h-3.5 w-3.5" /> Decrypt all messages</>}
             </Button>
           </div>
           <ConversationList useStore={useStore} onSelect={(pk) => { void openConversation(pk) }} />

@@ -55,6 +55,7 @@ export function DmChatView({ useStore, pubkey, onBack, onSwitch, switchLabel }: 
   const conv = useStore((s) => s.conversations[pubkey])
   const decryptConversation = useStore((s) => s.decryptConversation)
   const decryptMessage = useStore((s) => s.decryptMessage)
+  const cancelBatchDecrypt = useStore((s) => s.cancelBatchDecrypt)
   const send = useStore((s) => s.send)
   const { profile, name, npub } = useProfile(pubkey)
   const [text, setText] = useState('')
@@ -99,8 +100,8 @@ export function DmChatView({ useStore, pubkey, onBack, onSwitch, switchLabel }: 
           <Link to={`/profile/${npub}`} className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-200 hover:text-purple-400">
             {name}
           </Link>
-          <Button size="sm" variant="outline" className="gap-1.5 border-[#262626]" onClick={decryptHere} disabled={decrypting || messages.length === 0}>
-            {decrypting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />} Decrypt all here
+          <Button size="sm" variant="outline" className="gap-1.5 border-[#262626]" onClick={decrypting ? () => cancelBatchDecrypt() : decryptHere} disabled={!decrypting && messages.length === 0}>
+            {decrypting ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cancel</> : <><Lock className="h-3.5 w-3.5" /> Decrypt all here</>}
           </Button>
         </div>
         <TooltipProvider delayDuration={150}>

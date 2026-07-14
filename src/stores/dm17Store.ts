@@ -21,6 +21,8 @@ interface PendingWrap { id: string; pubkey: string; content: string; created_at:
 
 // Set by cancelFirstLayer() to stop an in-progress peel between wraps.
 let cancelPeel = false
+// Set by cancelBatchDecrypt() to stop an in-progress "decrypt all" between messages.
+let cancelBatch = false
 
 // Seen-state (own d-tag so NIP-04/NIP-17 track independently).
 const APP_DATA_KIND = 30078
@@ -79,6 +81,7 @@ interface DM17State {
   decryptMessage: (pubkey: string, id: string) => Promise<void>
   decryptConversation: (pubkey: string) => Promise<void>
   decryptAll: () => Promise<void>
+  cancelBatchDecrypt: () => void
   send: (recipient: string, text: string) => Promise<void>
   reset: () => void
 }
@@ -229,21 +232,27 @@ export const useDM17Store = create<DM17State>((set, get) => ({
   decryptConversation: async (pubkey) => {
     const conv = get().conversations[pubkey]
     if (!conv) return
-    // Skip messages that can't be decrypted (non-DM wraps) and keep going.
+    cancelBatch = false
+    // Skip messages that can't be decrypted (non-DM wraps) and keep going; stop if canceled.
     for (const m of conv.messages) {
+      if (cancelBatch) break
       if (m.plaintext === undefined) await get().decryptMessage(pubkey, m.id)
     }
   },
 
   decryptAll: async () => {
+    cancelBatch = false
     for (const pubkey of Object.keys(get().conversations)) {
       const conv = get().conversations[pubkey]
       if (!conv) continue
       for (const m of conv.messages) {
+        if (cancelBatch) return
         if (m.plaintext === undefined) await get().decryptMessage(pubkey, m.id)
       }
     }
   },
+
+  cancelBatchDecrypt: () => { cancelBatch = true },
 
   send: async (recipient, text) => {
     const me = useAuthStore.getState().pubkey!

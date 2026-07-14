@@ -57,6 +57,9 @@ export function dmDotState(lastTs: number, seenLatest: number, seenOldest: numbe
   return 'gray'
 }
 
+// Set by cancelBatchDecrypt() to stop an in-progress "decrypt all" between messages.
+let cancelBatch = false
+
 // Debounced publish so a burst of opens coalesces into one 30078 write.
 let publishTimer: ReturnType<typeof setTimeout> | null = null
 function schedulePublish() {
@@ -108,6 +111,7 @@ interface DMState {
   decryptMessage: (pubkey: string, id: string) => Promise<void>
   decryptConversation: (pubkey: string) => Promise<void>
   decryptAll: () => Promise<void>
+  cancelBatchDecrypt: () => void
 
   send: (recipient: string, text: string) => Promise<void>
   reset: () => void
@@ -256,21 +260,27 @@ export const useDMStore = create<DMState>((set, get) => ({
   decryptConversation: async (pubkey) => {
     const conv = get().conversations[pubkey]
     if (!conv) return
-    // Skip messages that fail to decrypt and keep going (don't halt the batch).
+    cancelBatch = false
+    // Skip messages that fail to decrypt and keep going; stop if canceled.
     for (const m of conv.messages) {
+      if (cancelBatch) break
       if (m.plaintext === undefined) await get().decryptMessage(pubkey, m.id)
     }
   },
 
   decryptAll: async () => {
+    cancelBatch = false
     for (const pubkey of Object.keys(get().conversations)) {
       const conv = get().conversations[pubkey]
       if (!conv) continue
       for (const m of conv.messages) {
+        if (cancelBatch) return
         if (m.plaintext === undefined) await get().decryptMessage(pubkey, m.id)
       }
     }
   },
+
+  cancelBatchDecrypt: () => { cancelBatch = true },
 
   send: async (recipient, text) => {
     const signed = await sendDM(recipient, text)
