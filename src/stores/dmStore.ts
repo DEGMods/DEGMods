@@ -3,6 +3,7 @@ import type { Event as NostrEvent } from 'nostr-tools'
 import { fetchEvents, fetchLatestEvent, subscribe, publishEvent } from '@/lib/nostr/relay-pool'
 import { signEvent } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBlockStore } from '@/stores/blockStore'
 import { DM_KIND, counterpartyOf, decryptContent, sendDM } from '@/lib/nostr/dm'
 
 export interface DMMessage {
@@ -282,8 +283,15 @@ export const useDMStore = create<DMState>((set, get) => ({
   reset: () => set({ me: null, conversations: {}, active: null, historyLoaded: false, loadingHistory: false, seenLoaded: false }),
 }))
 
-/** True when the seen range is loaded AND a conversation has an incoming message
- *  newer than seenLatest. Gated on seenLoaded so a stale cache can't flash the dot. */
-export function selectHasUnreadDM(s: DMState): boolean {
-  return s.seenLoaded && Object.values(s.conversations).some((c) => c.lastIncomingTs > s.seenLatest)
+/** Badge hook: true when the seen range is loaded AND a non-blocked conversation
+ *  has an incoming message newer than seenLatest. Gated on seenLoaded (no stale
+ *  flash) and block-aware (blocked people never light the badge). */
+export function useHasUnreadDM(): boolean {
+  const seenLoaded = useDMStore((s) => s.seenLoaded)
+  const conversations = useDMStore((s) => s.conversations)
+  const seenLatest = useDMStore((s) => s.seenLatest)
+  const blocked = useBlockStore((s) => s.blockedPubkeys)
+  return seenLoaded && Object.values(conversations).some(
+    (c) => !blocked.has(c.pubkey) && c.lastIncomingTs > seenLatest,
+  )
 }

@@ -4,6 +4,7 @@ import { NewChatModal } from './NewChatModal'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { useDMStore, dmDotState, type DMConversation } from '@/stores/dmStore'
 import { useUserStore } from '@/stores/userStore'
+import { useBlockStore } from '@/stores/blockStore'
 import { useProfile } from '@/hooks/useProfile'
 import { formatRelativeTime, cn } from '@/lib/utils'
 
@@ -45,11 +46,14 @@ export function ConversationList({ onSelect }: { onSelect: (pubkey: string) => v
   const seenLatest = useDMStore((s) => s.seenLatest)
   const seenOldest = useDMStore((s) => s.seenOldest)
   const active = useDMStore((s) => s.active)
+  const blocked = useBlockStore((s) => s.blockedPubkeys)
   const [q, setQ] = useState('')
   const [newOpen, setNewOpen] = useState(false)
 
   const list = useMemo(() => {
-    const all = Object.values(conversations).sort((a, b) => b.lastTs - a.lastTs)
+    const all = Object.values(conversations)
+      .filter((c) => !blocked.has(c.pubkey)) // never show chats with blocked users
+      .sort((a, b) => b.lastTs - a.lastTs)
     const query = q.trim().toLowerCase()
     if (!query) return all
     return all.filter((c) => {
@@ -58,7 +62,7 @@ export function ConversationList({ onSelect }: { onSelect: (pubkey: string) => v
       const name = (p?.display_name || p?.name || p?.npub || '').toLowerCase()
       return name.includes(query)
     })
-  }, [conversations, q])
+  }, [conversations, q, blocked])
 
   return (
     <div className="flex h-full flex-col">

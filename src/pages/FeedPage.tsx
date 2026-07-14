@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useFollowsStore } from '@/stores/followsStore'
 import { useNotificationsStore, selectHasUnread } from '@/stores/notificationsStore'
-import { useDMStore, selectHasUnreadDM } from '@/stores/dmStore'
+import { useHasUnreadDM } from '@/stores/dmStore'
 import { PublisherCard } from '@/components/mod/PublisherCard'
 import { FeedView } from '@/components/social/FeedView'
 import { NotificationsView } from '@/components/social/NotificationsView'
@@ -42,7 +42,7 @@ export function FeedPage() {
   const paramView = searchParams.get('view')
   const [view, setView] = useState<View>(paramView === 'notifications' ? 'notifications' : paramView === 'dm' ? 'dm' : 'home')
   const hasUnread = useNotificationsStore(selectHasUnread)
-  const hasUnreadDM = useDMStore(selectHasUnreadDM)
+  const hasUnreadDM = useHasUnreadDM()
 
   // Sync when the ?view= param changes while already on /feed — e.g. clicking the
   // header bell/DM button from the other tab (which only updates the query).
