@@ -43,7 +43,9 @@ export function FeedPage() {
   const paramView = searchParams.get('view')
   const [view, setView] = useState<View>(paramView === 'notifications' ? 'notifications' : paramView === 'dm' ? 'dm' : 'home')
   const hasUnread = useNotificationsStore(selectHasUnread)
-  const hasUnreadDM = useHasUnreadDM() || useHasUnreadDM17()
+  const unreadDM04 = useHasUnreadDM()
+  const unreadDM17 = useHasUnreadDM17()
+  const hasUnreadDM = unreadDM04 || unreadDM17
 
   // Sync when the ?view= param changes while already on /feed — e.g. clicking the
   // header bell/DM button from the other tab (which only updates the query).

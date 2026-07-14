@@ -92,7 +92,9 @@ export function Header() {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const pubkey = useAuthStore(s => s.pubkey)
   const hasUnread = useNotificationsStore(selectHasUnread)
-  const hasUnreadDM = useHasUnreadDM() || useHasUnreadDM17()
+  const unreadDM04 = useHasUnreadDM()
+  const unreadDM17 = useHasUnreadDM17()
+  const hasUnreadDM = unreadDM04 || unreadDM17
 
   // Refresh the unread state on login (throttled inside the store).
   useEffect(() => {
