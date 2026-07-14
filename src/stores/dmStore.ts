@@ -256,12 +256,9 @@ export const useDMStore = create<DMState>((set, get) => ({
   decryptConversation: async (pubkey) => {
     const conv = get().conversations[pubkey]
     if (!conv) return
+    // Skip messages that fail to decrypt and keep going (don't halt the batch).
     for (const m of conv.messages) {
-      if (m.plaintext === undefined) {
-        await get().decryptMessage(pubkey, m.id)
-        // Stop the batch the moment a decrypt is denied, so we don't spam the signer.
-        if (get().conversations[pubkey]?.messages.find((x) => x.id === m.id)?.error) break
-      }
+      if (m.plaintext === undefined) await get().decryptMessage(pubkey, m.id)
     }
   },
 
@@ -270,10 +267,7 @@ export const useDMStore = create<DMState>((set, get) => ({
       const conv = get().conversations[pubkey]
       if (!conv) continue
       for (const m of conv.messages) {
-        if (m.plaintext === undefined) {
-          await get().decryptMessage(pubkey, m.id)
-          if (get().conversations[pubkey]?.messages.find((x) => x.id === m.id)?.error) return
-        }
+        if (m.plaintext === undefined) await get().decryptMessage(pubkey, m.id)
       }
     }
   },

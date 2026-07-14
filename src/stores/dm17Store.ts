@@ -229,11 +229,9 @@ export const useDM17Store = create<DM17State>((set, get) => ({
   decryptConversation: async (pubkey) => {
     const conv = get().conversations[pubkey]
     if (!conv) return
+    // Skip messages that can't be decrypted (non-DM wraps) and keep going.
     for (const m of conv.messages) {
-      if (m.plaintext === undefined) {
-        await get().decryptMessage(pubkey, m.id)
-        if (get().conversations[pubkey]?.messages.find((x) => x.id === m.id)?.error) break // stop on denial
-      }
+      if (m.plaintext === undefined) await get().decryptMessage(pubkey, m.id)
     }
   },
 
@@ -242,10 +240,7 @@ export const useDM17Store = create<DM17State>((set, get) => ({
       const conv = get().conversations[pubkey]
       if (!conv) continue
       for (const m of conv.messages) {
-        if (m.plaintext === undefined) {
-          await get().decryptMessage(pubkey, m.id)
-          if (get().conversations[pubkey]?.messages.find((x) => x.id === m.id)?.error) return // stop on denial
-        }
+        if (m.plaintext === undefined) await get().decryptMessage(pubkey, m.id)
       }
     }
   },
