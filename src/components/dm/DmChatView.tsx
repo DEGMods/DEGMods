@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { User, ArrowLeft, Loader2, Lock, Send, RefreshCw } from 'lucide-react'
+import { User, ArrowLeft, Loader2, Lock, Send, RefreshCw, ArrowLeftRight } from 'lucide-react'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { IdentityLine } from '@/components/social/IdentityLine'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProfile } from '@/hooks/useProfile'
@@ -43,7 +45,13 @@ function MessageBubble({ m, onDecrypt }: { m: DMViewMessage; onDecrypt: () => Pr
 }
 
 /** A DM conversation: bottom-pinned messages + composer. Store-agnostic (NIP-04 / NIP-17). */
-export function DmChatView({ useStore, pubkey, onBack }: { useStore: DMStoreHook; pubkey: string; onBack: () => void }) {
+export function DmChatView({ useStore, pubkey, onBack, onSwitch, switchLabel }: {
+  useStore: DMStoreHook
+  pubkey: string
+  onBack: () => void
+  onSwitch: (pubkey: string) => void
+  switchLabel: string
+}) {
   const conv = useStore((s) => s.conversations[pubkey])
   const decryptConversation = useStore((s) => s.decryptConversation)
   const decryptMessage = useStore((s) => s.decryptMessage)
@@ -77,22 +85,43 @@ export function DmChatView({ useStore, pubkey, onBack }: { useStore: DMStoreHook
   return (
     <div className="flex h-full w-full min-w-0 flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-[#262626] p-3">
-        <button onClick={onBack} className="rounded-md p-1 text-neutral-400 hover:bg-[#262626] hover:text-white lg:hidden" aria-label="Back">
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <Link to={`/profile/${npub}`}>
-          <Avatar className="h-8 w-8">
-            {profile?.picture ? <AvatarImage src={profile.picture} alt={name} /> : null}
-            <AvatarFallback className="bg-[#212121] text-neutral-400"><User className="h-4 w-4" /></AvatarFallback>
-          </Avatar>
-        </Link>
-        <Link to={`/profile/${npub}`} className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-200 hover:text-purple-400">
-          {name}
-        </Link>
-        <Button size="sm" variant="outline" className="gap-1.5 border-[#262626]" onClick={decryptHere} disabled={decrypting || messages.length === 0}>
-          {decrypting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />} Decrypt all here
-        </Button>
+      <div className="border-b border-[#262626]">
+        <div className="flex items-center gap-2 p-3 pb-2">
+          <button onClick={onBack} className="rounded-md p-1 text-neutral-400 hover:bg-[#262626] hover:text-white lg:hidden" aria-label="Back">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <Link to={`/profile/${npub}`}>
+            <Avatar className="h-8 w-8">
+              {profile?.picture ? <AvatarImage src={profile.picture} alt={name} /> : null}
+              <AvatarFallback className="bg-[#212121] text-neutral-400"><User className="h-4 w-4" /></AvatarFallback>
+            </Avatar>
+          </Link>
+          <Link to={`/profile/${npub}`} className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-200 hover:text-purple-400">
+            {name}
+          </Link>
+          <Button size="sm" variant="outline" className="gap-1.5 border-[#262626]" onClick={decryptHere} disabled={decrypting || messages.length === 0}>
+            {decrypting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />} Decrypt all here
+          </Button>
+        </div>
+        <TooltipProvider delayDuration={150}>
+          <div className="flex items-center gap-2 px-3 pb-2.5">
+            <div className="min-w-0 flex-1">
+              <IdentityLine pubkey={pubkey} npub={npub} nip05={profile?.nip05 as string | undefined} />
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => onSwitch(pubkey)}
+                  className="shrink-0 rounded-md border border-[#262626] p-2 text-neutral-400 transition-colors hover:border-[#404040] hover:text-white"
+                  aria-label={`Switch to ${switchLabel}`}
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Switch to {switchLabel}</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </div>
 
       {/* Messages (newest at the bottom; flex-col-reverse keeps it pinned there) */}

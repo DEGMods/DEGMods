@@ -17,11 +17,13 @@ const tabCls = (active: boolean) =>
   cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors', active ? 'bg-[#262626] text-white' : 'text-neutral-400 hover:text-neutral-200')
 
 /** Shared list + chat pane for one protocol. `topExtra` is the NIP-17 first-layer banner. */
-function DMPane({ useStore, onDecryptAll, decryptingAll, topExtra }: {
+function DMPane({ useStore, onDecryptAll, decryptingAll, topExtra, onSwitch, switchLabel }: {
   useStore: DMStoreHook
   onDecryptAll: () => void
   decryptingAll: boolean
   topExtra?: React.ReactNode
+  onSwitch: (pubkey: string) => void
+  switchLabel: string
 }) {
   const active = useStore((s) => s.active)
   const openConversation = useStore((s) => s.openConversation)
@@ -42,7 +44,7 @@ function DMPane({ useStore, onDecryptAll, decryptingAll, topExtra }: {
         </div>
         <div className={cn('min-w-0 flex-1', active ? 'flex' : 'hidden lg:flex')}>
           {active
-            ? <DmChatView useStore={useStore} pubkey={active} onBack={closeConversation} />
+            ? <DmChatView key={active} useStore={useStore} pubkey={active} onBack={closeConversation} onSwitch={onSwitch} switchLabel={switchLabel} />
             : <div className="m-auto px-6 text-center text-sm text-neutral-500">Select a conversation to start messaging.</div>}
         </div>
       </div>
@@ -104,6 +106,10 @@ export function DirectMessagesView() {
     try { await fn() } finally { setter(false) }
   }
 
+  // Jump to the same conversation on the other protocol.
+  const switchToNip17 = (pk: string) => { void useDM17Store.getState().openConversation(pk); setTab('nip17') }
+  const switchToNip04 = (pk: string) => { void useDMStore.getState().openConversation(pk); setTab('nip04') }
+
   return (
     <div className="rounded-lg border border-[#262626] bg-[#1c1c1c]">
       {/* Header: title + tabs + tooltips */}
@@ -140,8 +146,8 @@ export function DirectMessagesView() {
       </div>
 
       {tab === 'nip04'
-        ? (!canDM ? <Unsupported /> : <DMPane useStore={useDMStore as unknown as DMStoreHook} onDecryptAll={run(decryptAll04, setDecrypting04)} decryptingAll={decrypting04} />)
-        : (!canDM17 ? <Unsupported /> : <DMPane useStore={useDM17Store as unknown as DMStoreHook} onDecryptAll={run(decryptAll17, setDecrypting17)} decryptingAll={decrypting17} topExtra={<FirstLayerBanner />} />)}
+        ? (!canDM ? <Unsupported /> : <DMPane useStore={useDMStore as unknown as DMStoreHook} onDecryptAll={run(decryptAll04, setDecrypting04)} decryptingAll={decrypting04} onSwitch={switchToNip17} switchLabel="Extra Private" />)
+        : (!canDM17 ? <Unsupported /> : <DMPane useStore={useDM17Store as unknown as DMStoreHook} onDecryptAll={run(decryptAll17, setDecrypting17)} decryptingAll={decrypting17} topExtra={<FirstLayerBanner />} onSwitch={switchToNip04} switchLabel="Private" />)}
     </div>
   )
 }
