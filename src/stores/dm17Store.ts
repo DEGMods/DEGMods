@@ -14,8 +14,13 @@ export interface DM17Message extends DMMessage {
 }
 type DM17Conversation = Omit<DMConversation, 'messages'> & { messages: DM17Message[] }
 
-/** An undecrypted gift wrap (first layer not yet peeled). */
-interface PendingWrap { id: string; pubkey: string; content: string; created_at: number }
+/** An undecrypted gift wrap (first layer not yet peeled). `failed` marks wraps
+ *  that couldn't be unwrapped (not a NIP-17 DM / bad encryption) so they're
+ *  skipped rather than halting the run. */
+interface PendingWrap { id: string; pubkey: string; content: string; created_at: number; failed?: boolean }
+
+// Set by cancelFirstLayer() to stop an in-progress peel between wraps.
+let cancelPeel = false
 
 // Seen-state (own d-tag so NIP-04/NIP-17 track independently).
 const APP_DATA_KIND = 30078
@@ -64,8 +69,11 @@ interface DM17State {
   loadHistory: () => Promise<void>
   loadSeen: () => Promise<void>
   extendSeen: (ts: number) => void
-  /** Peel every pending wrap's first layer, one signer request at a time; stops on the first denial. */
+  /** Peel every pending wrap's first layer, one signer request at a time. Skips
+   *  wraps that can't be unwrapped (not NIP-17 DMs) and keeps going; call
+   *  cancelFirstLayer() to stop. */
   decryptFirstLayerAll: () => Promise<void>
+  cancelFirstLayer: () => void
   openConversation: (pubkey: string) => void
   closeConversation: () => void
   decryptMessage: (pubkey: string, id: string) => Promise<void>
@@ -163,12 +171,15 @@ export const useDM17Store = create<DM17State>((set, get) => ({
     if (get().peeling) return
     const me = get().me
     if (!me) return
-    const ids = Object.keys(get().pending)
+    cancelPeel = false
+    // Only attempt wraps we haven't already given up on.
+    const ids = Object.keys(get().pending).filter((id) => !get().pending[id]?.failed)
     set({ peeling: true, peelStopped: false, peelProgress: { done: 0, total: ids.length } })
     try {
       for (let i = 0; i < ids.length; i++) {
+        if (cancelPeel) { set({ peelStopped: true }); break }
         const p = get().pending[ids[i]]
-        if (!p) continue
+        if (!p || p.failed) { set((s) => ({ peelProgress: { done: i + 1, total: s.peelProgress.total } })); continue }
         try {
           const { sender, sealContent } = await unwrapFirstLayer({ id: p.id, pubkey: p.pubkey, content: p.content, created_at: p.created_at, kind: GIFT_WRAP_KIND, tags: [], sig: '' } as NostrEvent)
           if (sender !== me) {
@@ -183,8 +194,9 @@ export const useDM17Store = create<DM17State>((set, get) => ({
             set((s) => { const { [p.id]: _drop, ...pending } = s.pending; return other ? { pending, conversations: { ...s.conversations, [other]: upsert(s.conversations[other], other, msg) } } : { pending } })
           }
         } catch {
-          set({ peelStopped: true }) // denial/error → stop, leave the rest pending
-          break
+          // Not a NIP-17 DM (other app's gift wrap) or undecryptable — skip it and
+          // keep going. Flag it so it isn't retried on the next run.
+          set((s) => ({ pending: { ...s.pending, [p.id]: { ...s.pending[p.id], failed: true } } }))
         }
         set((s) => ({ peelProgress: { done: i + 1, total: s.peelProgress.total } }))
       }
@@ -192,6 +204,7 @@ export const useDM17Store = create<DM17State>((set, get) => ({
       set({ peeling: false })
     }
   },
+  cancelFirstLayer: () => { cancelPeel = true },
 
   openConversation: (pubkey) => {
     set({ active: pubkey })
@@ -254,11 +267,11 @@ export { dmDotState }
  *  non-blocked conversation has incoming activity newer than seenLatest). */
 export function useHasUnreadDM17(): boolean {
   const seenLoaded = useDM17Store((s) => s.seenLoaded)
-  const pendingCount = useDM17Store((s) => Object.keys(s.pending).length)
+  const hasPending = useDM17Store((s) => Object.values(s.pending).some((p) => !p.failed))
   const conversations = useDM17Store((s) => s.conversations)
   const seenLatest = useDM17Store((s) => s.seenLatest)
   const blocked = useBlockStore((s) => s.blockedPubkeys)
   if (!seenLoaded) return false
-  if (pendingCount > 0) return true
+  if (hasPending) return true
   return Object.values(conversations).some((c) => !blocked.has(c.pubkey) && c.lastIncomingTs > seenLatest)
 }

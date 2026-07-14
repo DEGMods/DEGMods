@@ -52,23 +52,30 @@ function DMPane({ useStore, onDecryptAll, decryptingAll, topExtra }: {
 
 /** The NIP-17 first-layer banner: peel encrypted wraps one signer request at a time. */
 function FirstLayerBanner() {
-  const pending = useDM17Store((s) => Object.keys(s.pending).length)
+  const activeCount = useDM17Store((s) => Object.values(s.pending).filter((p) => !p.failed).length)
   const peeling = useDM17Store((s) => s.peeling)
   const progress = useDM17Store((s) => s.peelProgress)
   const stopped = useDM17Store((s) => s.peelStopped)
   const decryptFirstLayerAll = useDM17Store((s) => s.decryptFirstLayerAll)
-  if (pending === 0 && !peeling) return null
+  const cancelFirstLayer = useDM17Store((s) => s.cancelFirstLayer)
+  if (activeCount === 0 && !peeling) return null
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-[#262626] bg-[#212121] p-3">
       <Lock className="h-4 w-4 shrink-0 text-purple-400" />
       <div className="min-w-0 flex-1 text-sm text-neutral-300">
         {peeling
           ? <>Revealing senders… {progress.done} / {progress.total}</>
-          : <><span className="font-medium text-white">{pending}</span> message{pending === 1 ? '' : 's'} with undecrypted first layers{stopped ? ' — stopped (a request was declined)' : ''}</>}
+          : <><span className="font-medium text-white">{activeCount}</span> message{activeCount === 1 ? '' : 's'} with undecrypted first layers{stopped ? ' — canceled' : ''}</>}
       </div>
-      <Button size="sm" onClick={() => void decryptFirstLayerAll()} disabled={peeling} className="gap-1.5 bg-purple-600 text-white hover:bg-purple-700">
-        {peeling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />} Decrypt all first layers
-      </Button>
+      {peeling ? (
+        <Button size="sm" variant="outline" className="gap-1.5 border-[#262626]" onClick={() => cancelFirstLayer()}>
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cancel
+        </Button>
+      ) : (
+        <Button size="sm" onClick={() => void decryptFirstLayerAll()} className="gap-1.5 bg-purple-600 text-white hover:bg-purple-700">
+          <Eye className="h-3.5 w-3.5" /> Decrypt all first layers
+        </Button>
+      )}
     </div>
   )
 }

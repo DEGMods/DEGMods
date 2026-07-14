@@ -66,7 +66,7 @@ export function ConversationList({ useStore, onSelect }: { useStore: DMStoreHook
   }, [conversations, q, blocked])
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-[#262626] p-2">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -89,7 +89,7 @@ export function ConversationList({ useStore, onSelect }: { useStore: DMStoreHook
         </div>
       </div>
       <NewChatModal open={newOpen} onClose={() => setNewOpen(false)} onOpen={onSelect} />
-      <div className="flex-1 space-y-0.5 overflow-y-auto p-1.5">
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1.5">
         {list.map((c) => (
           <ConversationRow
             key={c.pubkey}
