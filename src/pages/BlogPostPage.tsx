@@ -270,7 +270,7 @@ export default function BlogPostPage() {
                 {isOwner ? (
                   <>
                     <DropdownMenuItem
-                      onClick={() => navigate(`/write?edit=${naddr}`)}
+                      onClick={() => navigate(`/submit-blog?edit=${naddr}`)}
                       className="cursor-pointer"
                     >
                       <Edit className="h-4 w-4 mr-2" />

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { RefreshIndicator } from '@/components/shared/RefreshIndicator'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -39,6 +39,12 @@ import { FaqPage } from '@/pages/FaqPage'
 import { TosPage } from '@/pages/TosPage'
 import { GuidesPage } from '@/pages/GuidesPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+
+/** Redirect that keeps the query string (so /write?edit=… survives the rename). */
+function LegacyRedirect({ to }: { to: string }) {
+  const { search } = useLocation()
+  return <Navigate to={`${to}${search}`} replace />
+}
 
 /** Renders the login screen as a full-screen overlay, keeping the current page mounted. */
 function LoginModalHost() {
@@ -159,12 +165,16 @@ export default function App() {
           <Route path="/game/:name" element={<GamePage />} />
           <Route path="/mods" element={<ModsPage />} />
           <Route path="/mod/:naddr" element={<ModPage />} />
-          <Route path="/submit" element={<SubmitModPage />} />
+          <Route path="/submit-mod" element={<SubmitModPage />} />
+          {/* legacy path — keep old links/bookmarks working */}
+          <Route path="/submit" element={<LegacyRedirect to="/submit-mod" />} />
           <Route path="/mod/:naddr/edit" element={<EditModPage />} />
           <Route path="/blog" element={<BlogPage />} />
           <Route path="/blog/:naddr" element={<BlogPostPage />} />
           <Route path="/feed" element={<FeedPage />} />
-          <Route path="/write" element={<WriteBlogPage />} />
+          <Route path="/submit-blog" element={<WriteBlogPage />} />
+          {/* legacy path — keep old links/bookmarks (and ?edit=…) working */}
+          <Route path="/write" element={<LegacyRedirect to="/submit-blog" />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/about" element={<AboutPage />} />

@@ -80,7 +80,7 @@ export default function BlogPage() {
           <BookOpen className="h-6 w-6 text-purple-400" />
           <h1 className="text-2xl font-bold text-neutral-100">Blog</h1>
         </div>
-        <Link to="/write">
+        <Link to="/submit-blog">
           <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white text-xs gap-1.5">
             <Plus size={14} />
             Publish Blog

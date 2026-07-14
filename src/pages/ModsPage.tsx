@@ -139,7 +139,7 @@ export function ModsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-white">Mods</h1>
-        <Link to="/submit">
+        <Link to="/submit-mod">
           <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white text-xs gap-1.5">
             <Plus size={14} />
             Submit Mod
