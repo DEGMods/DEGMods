@@ -24,6 +24,7 @@ import { GamesPage } from '@/pages/GamesPage'
 import { GamePage } from '@/pages/GamePage'
 import { ModsPage } from '@/pages/ModsPage'
 import { ModJamsPage } from '@/pages/ModJamsPage'
+import { JamSubmitPage } from '@/pages/JamSubmitPage'
 import ModPage from '@/pages/ModPage'
 import { SubmitModPage } from '@/pages/SubmitModPage'
 import { EditModPage } from '@/pages/EditModPage'
@@ -166,6 +167,7 @@ export default function App() {
           <Route path="/game/:name" element={<GamePage />} />
           <Route path="/mods" element={<ModsPage />} />
           <Route path="/mod-jams" element={<ModJamsPage />} />
+          <Route path="/submit-mod-jam" element={<JamSubmitPage />} />
           <Route path="/mod/:naddr" element={<ModPage />} />
           <Route path="/submit-mod" element={<SubmitModPage />} />
           {/* legacy path — keep old links/bookmarks working */}
