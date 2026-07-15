@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
-import { CalendarDays, Trophy, Gamepad2, Clock, Gift, Users, Scale, HelpCircle, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, Sparkles, MoreHorizontal, Copy, FileJson } from 'lucide-react'
+import { CalendarDays, Trophy, Gamepad2, Clock, Gift, Users, Scale, HelpCircle, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, Sparkles, MoreHorizontal, Copy, FileJson, RefreshCw } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -22,7 +22,8 @@ import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { useNow } from '@/hooks/useNow'
 import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { fetchEvent, fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractJam, jamStatus, jamCountdownLabel, submissionsOpen, type JamDetails } from '@/lib/nostr/jam'
 import { KINDS } from '@/lib/constants'
 import type { NostrTarget } from '@/lib/nostr/social'
@@ -83,26 +84,66 @@ export function JamPage() {
   const [tallyOpen, setTallyOpen] = useState(false)
   const [showRawDialog, setShowRawDialog] = useState(false)
   const [readableRaw, setReadableRaw] = useState(false)
+  const [newerEvent, setNewerEvent] = useState<NostrEvent | null>(null)
 
   const rawJson = useMemo(
     () => (rawEvent ? (readableRaw ? readableEventJson(rawEvent as unknown as Record<string, unknown>) : JSON.stringify(rawEvent, null, 2)) : ''),
     [rawEvent, readableRaw],
   )
 
+  // Render a fetched event into page state (initial or refresh).
+  const applyEvent = useCallback((ev: NostrEvent) => {
+    const j = extractJam(ev)
+    if (!j) { setNotFound(true); setLoading(false); return }
+    setJam(j); setRawEvent(ev); setLoading(false)
+  }, [])
+
   useEffect(() => {
+    if (!naddr) return
     let cancelled = false
-    setLoading(true); setNotFound(false)
-    let decoded
-    try { decoded = nip19.decode(naddr!) } catch { setNotFound(true); setLoading(false); return }
-    if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) { setNotFound(true); setLoading(false); return }
-    const { pubkey, identifier } = decoded.data
-    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-    fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] })
-      .then((ev) => { if (cancelled) return; const j = ev ? extractJam(ev) : null; if (j) { setJam(j); setRawEvent(ev) } else setNotFound(true) })
-      .catch(() => { if (!cancelled) setNotFound(true) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+
+    async function load() {
+      setNotFound(false); setNewerEvent(null)
+      let decoded
+      try { decoded = nip19.decode(naddr!) } catch { setNotFound(true); setLoading(false); return }
+      if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) { setNotFound(true); setLoading(false); return }
+      const { pubkey, identifier } = decoded.data
+      const coord = `${KINDS.JAM}:${pubkey}:${identifier}`
+
+      // 1. Instant render from the shared cache (a prior list fetch or session).
+      await whenEventCacheReady
+      if (cancelled) return
+      const cached = getCachedEvent(coord)
+      if (cached) applyEvent(cached)
+      else setLoading(true)
+
+      // 2. Background re-fetch to catch a newer revision. With a cached copy shown,
+      // use the high-assurance multi-pass fetch; on a cold view, the fast one.
+      try {
+        const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+        const filter = { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] }
+        const ev = cached ? await fetchLatestEvent(relays, filter) : await fetchEvent(relays, filter)
+        if (cancelled) return
+        if (!ev) { if (!cached) { setNotFound(true); setLoading(false) } return }
+        if (!cached) applyEvent(ev)
+        else if (ev.created_at > cached.created_at) setNewerEvent(ev) // prompt, don't force
+      } catch {
+        if (!cancelled && !cached) { setNotFound(true); setLoading(false) }
+      }
+    }
+
+    load()
     return () => { cancelled = true }
-  }, [naddr])
+  }, [naddr, applyEvent])
+
+  // Cooperative rebroadcast: a few seconds in, help keep the jam replicated.
+  useEffect(() => {
+    if (!rawEvent) return
+    const t = setTimeout(() => {
+      import('@/lib/nostr/eventRedundancy').then(({ ensureEventPresent }) => ensureEventPresent(rawEvent))
+    }, 8000)
+    return () => clearTimeout(t)
+  }, [rawEvent])
 
   if (loading) return <div className="flex items-center justify-center py-24 text-neutral-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading jam…</div>
   if (notFound || !jam) return <div className="py-24 text-center text-neutral-400">Mod jam not found.</div>
@@ -264,11 +305,6 @@ export function JamPage() {
           {/* Actions */}
           <TooltipProvider delayDuration={150}>
             <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
-              {isAuthor && (
-                <Button variant="outline" className="w-full gap-2 border-[#262626]" onClick={() => navigate(`/mod-jam/${naddr}/edit`)}>
-                  <Pencil className="h-4 w-4" /> Edit jam
-                </Button>
-              )}
               {isAuthor && votingOver && (
                 <Button variant="outline" className="w-full gap-2 border-[#fc4462]/40 text-[#fc4462] hover:bg-[#fc4462]/10" onClick={() => setTallyOpen(true)}>
                   <Scale className="h-4 w-4" /> {jam.resultsAt ? 'Re-tally votes' : 'Tally votes'}
@@ -301,7 +337,7 @@ export function JamPage() {
           <section className="space-y-2">
             <h2 className="text-lg font-semibold text-neutral-200">Published</h2>
             <p className="text-sm text-neutral-400">{fmtLong(jam.publishedAt)}</p>
-            {jam.client && <p className="text-xs text-neutral-500">from {jam.client}</p>}
+            {jam.client && <p className="text-xs text-neutral-500">on {jam.client}</p>}
           </section>
 
           {naddr && <ShareBox url={`${window.location.origin}/mod-jam/${naddr}`} title={jam.title} />}
@@ -327,6 +363,20 @@ export function JamPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={copyRawJson} className="border-[#262626]"><Copy className="mr-2 h-4 w-4" /> Copy JSON</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Newer version available — prompt instead of force-refreshing */}
+      <Dialog open={!!newerEvent} onOpenChange={(o) => { if (!o) setNewerEvent(null) }}>
+        <DialogContent className="border-[#262626] bg-[#1c1c1c]">
+          <DialogHeader>
+            <DialogTitle className="text-neutral-100">Newer version available</DialogTitle>
+            <DialogDescription className="text-neutral-400">This mod jam was updated since you opened it. Refresh to load the latest version.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewerEvent(null)} className="border-[#262626]">Dismiss</Button>
+            <Button onClick={() => { if (newerEvent) applyEvent(newerEvent); setNewerEvent(null) }} className="bg-[#fc4462] text-white hover:bg-[#e23a56]"><RefreshCw className="mr-2 h-4 w-4" /> Refresh</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,6 +1,7 @@
 import type { Event as NostrEvent, UnsignedEvent } from 'nostr-tools'
 import { nip19 } from 'nostr-tools'
 import { KINDS, CLIENT_NAME } from '@/lib/constants'
+import { cacheEvent } from '@/lib/nostr/eventCache'
 
 // ─── Jam event (kind 31143) — see docs/jam-event.md ──────────────────
 
@@ -181,6 +182,7 @@ export function buildJamEvent(form: JamFormState): UnsignedEvent {
 
 export function extractJam(event: NostrEvent): JamDetails | null {
   if (event.kind !== KINDS.JAM) return null
+  cacheEvent(event) // warm the shared cache so opening the jam is instant
   const get = (name: string) => event.tags.find((t) => t[0] === name)?.[1] ?? ''
   const all = (name: string) => event.tags.filter((t) => t[0] === name)
   const dTag = get('d')
