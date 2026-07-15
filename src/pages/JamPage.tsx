@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
-import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, Sparkles, MoreHorizontal, Copy, FileJson, RefreshCw } from 'lucide-react'
+import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -217,7 +217,7 @@ export function JamPage() {
             </div>
             {jam.theme && (
               <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border border-[#fc4462]/40 bg-[#fc4462]/10 px-3.5 py-2.5">
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#fc4462]"><Sparkles className="h-4 w-4" /> Theme</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-[#fc4462]">Theme</span>
                 <span className="text-lg font-semibold text-white">{jam.theme}</span>
               </div>
             )}

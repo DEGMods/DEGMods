@@ -7,6 +7,7 @@ import { JamEditor } from '@/components/jam/JamEditor'
 import { buildJamEvent, extractJam, type JamFormState, type JamDetails } from '@/lib/nostr/jam'
 import { signAndPublish } from '@/lib/nostr/publish'
 import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { getCachedEvent, whenEventCacheReady, cacheEvent } from '@/lib/nostr/eventCache'
 import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
@@ -28,21 +29,39 @@ export function JamSubmitPage() {
   useEffect(() => {
     if (!isEdit) return
     let cancelled = false
-    setLoading(true); setLoadError(null)
-    let decoded
-    try { decoded = nip19.decode(naddr!) } catch { setLoadError('Invalid jam link.'); setLoading(false); return }
-    if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) { setLoadError('That link is not a mod jam.'); setLoading(false); return }
-    const { pubkey: author, identifier } = decoded.data
-    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-    fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [author], '#d': [identifier] })
-      .then((ev) => {
+    setLoadError(null)
+
+    async function load() {
+      let decoded
+      try { decoded = nip19.decode(naddr!) } catch { setLoadError('Invalid jam link.'); setLoading(false); return }
+      if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) { setLoadError('That link is not a mod jam.'); setLoading(false); return }
+      const { pubkey: author, identifier } = decoded.data
+      const coord = `${KINDS.JAM}:${author}:${identifier}`
+
+      // 1. Instant: seed the editor from the shared cache (e.g. the jam post the
+      // user just came from). JamEditor is keyed by created_at, so a newer
+      // revision arriving below remounts it with fresh data.
+      await whenEventCacheReady
+      if (cancelled) return
+      const cached = getCachedEvent(coord)
+      if (cached) { const j = extractJam(cached); if (j) { setEditJam(j); setLoading(false) } }
+      else setLoading(true)
+
+      // 2. Fetch the true latest to edit against.
+      try {
+        const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+        const ev = await fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [author], '#d': [identifier] })
         if (cancelled) return
         const j = ev ? extractJam(ev) : null
-        if (!j) setLoadError('Mod jam not found.')
-        else setEditJam(j)
-      })
-      .catch(() => { if (!cancelled) setLoadError('Failed to load the mod jam.') })
-      .finally(() => { if (!cancelled) setLoading(false) })
+        if (!j) { if (!cached) { setLoadError('Mod jam not found.'); setLoading(false) } return }
+        if (!cached || (ev && ev.created_at > cached.created_at)) setEditJam(j)
+        setLoading(false)
+      } catch {
+        if (!cancelled && !cached) { setLoadError('Failed to load the mod jam.'); setLoading(false) }
+      }
+    }
+
+    load()
     return () => { cancelled = true }
   }, [naddr, isEdit])
 
@@ -70,7 +89,10 @@ export function JamSubmitPage() {
         if (status === 'signing') toast.loading('Signing…', { id: 'jam' })
         if (status === 'publishing') toast.loading('Publishing…', { id: 'jam' })
       })
-      if (!result.success) throw new Error(result.error || 'Failed to publish')
+      if (!result.success || !result.event) throw new Error(result.error || 'Failed to publish')
+      // Cache the just-published revision so the jam post shows YOUR new version
+      // immediately (newest-wins), instead of a stale cache + "newer version" prompt.
+      cacheEvent(result.event)
       toast.success(isEdit ? 'Mod jam updated!' : 'Mod jam published!', { id: 'jam' })
       const naddrOut = nip19.naddrEncode({ identifier: form.dTag, pubkey: pubkey!, kind: KINDS.JAM })
       navigate(`/mod-jam/${naddrOut}`)
@@ -88,7 +110,7 @@ export function JamSubmitPage() {
         <h1 className="text-2xl font-bold text-white">{isEdit ? 'Edit Mod Jam' : 'Submit a Mod Jam'}</h1>
         <p className="mt-1 text-sm text-neutral-400">Run a time-boxed modding event with optional voting and prizes.</p>
       </div>
-      <JamEditor editJam={editJam ?? undefined} onPublish={handlePublish} publishing={publishing} />
+      <JamEditor key={editJam?.createdAt ?? 'new'} editJam={editJam ?? undefined} onPublish={handlePublish} publishing={publishing} />
     </div>
   )
 }
