@@ -51,10 +51,6 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
     return () => { cancelled = true }
   }, [mod?.pubkey, mod?.id])
 
-  // Shares the fetch + hash-verification with the foreground <SkeletonImage>
-  // below, so the blurred background never fetches the image a second time.
-  const bgUrl = useResolvedImageSrc(mod?.featuredImageUrl)
-
   if (count === 0 || !mod) return null
 
   // Legacy mods are kind 30402, not 31142 — encode the mod's actual kind so the
@@ -69,37 +65,7 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
   const authorName = author?.display_name || `${npub.slice(0, 10)}…`
 
   return (
-    <div className="relative overflow-hidden bg-[#0d0d0d]">
-      {/* Blurred, darkened background that crossfades with the slide */}
-      <AnimatePresence initial={false}>
-        {bgUrl && (
-          <motion.div
-            key={bgUrl}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration }}
-            className="absolute inset-0"
-            aria-hidden
-          >
-            <img
-              src={bgUrl}
-              alt=""
-              className="h-full w-full scale-110 object-cover blur-2xl brightness-[0.3]"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <div className="absolute inset-0 bg-black/25" aria-hidden />
-      {/* Side vignette over the background (still under the peeks + slide):
-          black → transparent → black, with the transparent middle 50% wide so
-          each black side is 25%. */}
-      <div
-        className="absolute inset-0"
-        style={{ background: 'linear-gradient(to right, #000 0%, transparent 25%, transparent 75%, #000 100%)' }}
-        aria-hidden
-      />
-
+    <div className="relative overflow-hidden bg-surface-background pt-0 md:pt-6">
       {/* Prev/next peeks, anchored to the centered content's edges (so they sit
           right beside the slide at any width). Desktop only — no room < 1080px. */}
       {count > 1 && (
@@ -287,10 +253,10 @@ function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'rig
       onClick={onClick}
       aria-label={side === 'left' ? 'Previous slide' : 'Next slide'}
       style={{
-        // Fade the outer edge deep into the peek. The flat transparent zone at
-        // the edge (0–15%) also swallows the rounded corners on that side.
-        maskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent 15%, #000 65%)`,
-        WebkitMaskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent 15%, #000 65%)`,
+        // Flat fully-transparent zone at the outer edge (0–15%, also swallows the
+        // rounded corners there), then a fade ramping to opaque at the inner edge.
+        maskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent 15%, #000 100%)`,
+        WebkitMaskImage: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, transparent 15%, #000 100%)`,
       }}
       className={cn(
         'pointer-events-auto absolute top-1/2 aspect-video w-[36rem] -translate-y-1/2 overflow-hidden rounded-xl',
