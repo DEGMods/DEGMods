@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
-import { CalendarDays, Trophy, Gamepad2, Clock, Gift, Users, Scale, HelpCircle, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, Sparkles, MoreHorizontal, Copy, FileJson, RefreshCw } from 'lucide-react'
+import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, Sparkles, MoreHorizontal, Copy, FileJson, RefreshCw } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -64,9 +64,9 @@ function InfoRow({ label, value, active }: { label: string; value: string; activ
   )
 }
 
-const Section = ({ icon: Icon, title, children }: { icon: typeof Trophy; title: string; children: React.ReactNode }) => (
+const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <section className="space-y-3 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
-    <h2 className="flex items-center gap-2 text-lg font-semibold text-white"><Icon className="h-5 w-5 text-[#fc4462]" /> {title}</h2>
+    <h2 className="text-lg font-semibold text-white">{title}</h2>
     {children}
   </section>
 )
@@ -226,11 +226,11 @@ export function JamPage() {
           {jam.content && <CollapsibleMarkdown content={jam.content} />}
 
           {jam.screenshots.length > 0 && (
-            <Section icon={Gamepad2} title="Gallery"><ModScreenshots screenshots={jam.screenshots} blurred={hasWarning} onReveal={() => setRevealed(true)} /></Section>
+            <Section title="Gallery"><ModScreenshots screenshots={jam.screenshots} blurred={hasWarning} onReveal={() => setRevealed(true)} /></Section>
           )}
 
           {/* Schedule */}
-          <Section icon={CalendarDays} title="Schedule">
+          <Section title="Schedule">
             <InfoRow label="Starts" value={fmt(jam.start)} active={status === 'upcoming'} />
             <InfoRow label="Submissions close" value={fmt(jam.end)} active={status === 'active'} />
             {jam.votingEnd && <InfoRow label="Voting ends" value={fmt(jam.votingEnd)} active={status === 'voting'} />}
@@ -239,7 +239,7 @@ export function JamPage() {
 
           {/* Voting */}
           {(jam.votingEnabled || jam.userVotingEnabled) && (
-            <Section icon={Scale} title="Voting">
+            <Section title="Voting">
               <div className="flex flex-wrap gap-2 text-xs">
                 {jam.votingEnabled && <span className="rounded-md bg-[#262626] px-2 py-1 text-neutral-200">Judge voting</span>}
                 {jam.userVotingEnabled && <span className="rounded-md bg-[#262626] px-2 py-1 text-neutral-200">Community voting</span>}
@@ -263,7 +263,7 @@ export function JamPage() {
 
           {/* Rewards */}
           {(jam.rewards.length > 0 || jam.rewardNote) && (
-            <Section icon={Gift} title="Rewards">
+            <Section title="Rewards">
               {jam.rewards.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {jam.rewards.map((r, i) => (
@@ -279,7 +279,7 @@ export function JamPage() {
 
           {/* FAQ */}
           {jam.faq.length > 0 && (
-            <Section icon={HelpCircle} title="FAQ">
+            <Section title="FAQ">
               <div className="space-y-3">
                 {jam.faq.map((f, i) => (
                   <div key={i}><p className="text-sm font-medium text-neutral-200">{f.question}</p><p className="mt-0.5 text-sm text-neutral-400">{f.answer}</p></div>
@@ -292,7 +292,7 @@ export function JamPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6 lg:sticky lg:top-20 self-start">
+        <div className="space-y-6">
           <PublisherCard pubkey={jam.pubkey} />
 
           {/* Reactions + zaps */}

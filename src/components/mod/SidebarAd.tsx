@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { ADMIN_PUBKEY, KINDS } from '@/lib/constants'
 import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { extractAds, ADS_DTAG, type AdEntry } from '@/lib/nostr/events'
@@ -61,7 +62,10 @@ export function SidebarAd() {
 
   return (
     <div className="border-t border-[#262626] pt-6">
-      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">Handpicked Ad</p>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Handpicked Ad</p>
+        <Link to="/ads" className="text-[11px] font-medium text-purple-400 hover:text-purple-300">View all ads</Link>
+      </div>
       <AdCard ad={ad} />
     </div>
   )
