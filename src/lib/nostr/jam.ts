@@ -99,6 +99,19 @@ export function monthBuckets(startTs: number, endTs: number): string[] {
   return out
 }
 
+/** UTC month bucket key ("YYYY-MM") for a unix timestamp — matches monthBuckets(). */
+export function monthKey(ts: number): string {
+  const d = new Date(ts * 1000)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+/** Human label for a "YYYY-MM" bucket, e.g. "Feb 2026". */
+export function monthLabel(bucket: string): string {
+  const [y, m] = bucket.split('-').map(Number)
+  if (!y || !m) return bucket
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' })
+}
+
 export function buildJamEvent(form: JamFormState): UnsignedEvent {
   const now = Math.floor(Date.now() / 1000)
   const createdAt = form.isEdit && form.previousCreatedAt ? form.previousCreatedAt + 1 : now

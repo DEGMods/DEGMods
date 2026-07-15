@@ -26,6 +26,7 @@ import { ModsPage } from '@/pages/ModsPage'
 import { ModJamsPage } from '@/pages/ModJamsPage'
 import { JamSubmitPage } from '@/pages/JamSubmitPage'
 import { JamPage } from '@/pages/JamPage'
+import { JamSubmissionsPage } from '@/pages/JamSubmissionsPage'
 import ModPage from '@/pages/ModPage'
 import { SubmitModPage } from '@/pages/SubmitModPage'
 import { EditModPage } from '@/pages/EditModPage'
@@ -171,6 +172,7 @@ export default function App() {
           <Route path="/submit-mod-jam" element={<JamSubmitPage />} />
           <Route path="/mod-jam/:naddr" element={<JamPage />} />
           <Route path="/mod-jam/:naddr/edit" element={<JamSubmitPage />} />
+          <Route path="/mod-jam/:naddr/submissions" element={<JamSubmissionsPage />} />
           <Route path="/mod/:naddr" element={<ModPage />} />
           <Route path="/submit-mod" element={<SubmitModPage />} />
           {/* legacy path — keep old links/bookmarks working */}
