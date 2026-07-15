@@ -88,6 +88,9 @@ export const KINDS = {
   BLOSSOM_LIST: 10063,
   BLOG: 30023,
   MOD: 31142,
+  JAM: 31143, // mod/game jam event
+  JAM_BALLOT: 31243, // one voter's scores for one jam entry
+  JAM_RESULT: 31343, // creator's published tally (paged)
   GAME_DB: 30078, // NIP-78 app-specific data (d tag: games-db)
 } as const
 
