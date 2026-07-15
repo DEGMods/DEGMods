@@ -226,6 +226,31 @@ export function jamStatus(jam: Pick<JamDetails, 'start' | 'end' | 'votingEnd' | 
   return 'ended'
 }
 
+/** Compact countdown like "2mo 3d 4h" — the top 3 significant units, down to seconds. */
+export function formatCountdown(secondsLeft: number): string {
+  let s = Math.max(0, Math.floor(secondsLeft))
+  const units: [number, string][] = [[31536000, 'y'], [2592000, 'mo'], [86400, 'd'], [3600, 'h'], [60, 'm'], [1, 's']]
+  const parts: string[] = []
+  for (const [size, label] of units) {
+    const v = Math.floor(s / size)
+    s -= v * size
+    if (parts.length === 0 && v === 0) continue // skip leading zeros
+    parts.push(`${v}${label}`)
+    if (parts.length === 3) break
+  }
+  return parts.length ? parts.join(' ') : '0s'
+}
+
+/** The countdown label shown on cards/pages for the jam's current phase. */
+export function jamCountdownLabel(jam: JamDetails, now: number): string {
+  switch (jamStatus(jam, now)) {
+    case 'upcoming': return `Starting in ${formatCountdown(jam.start - now)}`
+    case 'active': return `Ending in ${formatCountdown(jam.end - now)}`
+    case 'voting': return `Voting ends in ${formatCountdown((jam.votingEnd ?? jam.end) - now)}`
+    default: return 'Ended'
+  }
+}
+
 /** Submissions become viewable once the jam ends (i.e. voting has started, or there's no voting). */
 export function submissionsOpen(jam: Pick<JamDetails, 'start' | 'end' | 'votingEnd' | 'votingEnabled' | 'userVotingEnabled'>, now: number): boolean {
   return now >= jam.end
