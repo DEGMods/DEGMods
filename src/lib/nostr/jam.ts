@@ -226,6 +226,22 @@ export function jamStatus(jam: Pick<JamDetails, 'start' | 'end' | 'votingEnd' | 
   return 'ended'
 }
 
+/** Combine a local "YYYY-MM-DD" date and "HH:mm" time into a UTC unix timestamp (seconds). */
+export function localToUnix(date: string, time: string): number | null {
+  if (!date || !time) return null
+  const [y, mo, d] = date.split('-').map(Number)
+  const [h, mi] = time.split(':').map(Number)
+  if (!y || !mo || !d || Number.isNaN(h) || Number.isNaN(mi)) return null
+  return Math.floor(new Date(y, mo - 1, d, h, mi).getTime() / 1000)
+}
+
+/** Split a UTC unix timestamp into local "YYYY-MM-DD" + "HH:mm" for editing. */
+export function unixToLocal(ts: number): { date: string; time: string } {
+  const d = new Date(ts * 1000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` }
+}
+
 /** Compact countdown like "2mo 3d 4h" — the top 3 significant units, down to seconds. */
 export function formatCountdown(secondsLeft: number): string {
   let s = Math.max(0, Math.floor(secondsLeft))
