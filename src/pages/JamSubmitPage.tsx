@@ -84,7 +84,7 @@ export function JamSubmitPage() {
 
   return (
     <div className="py-6">
-      <div className="mx-auto mb-6 max-w-3xl">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">{isEdit ? 'Edit Mod Jam' : 'Submit a Mod Jam'}</h1>
         <p className="mt-1 text-sm text-neutral-400">Run a time-boxed modding event with optional voting and prizes.</p>
       </div>
