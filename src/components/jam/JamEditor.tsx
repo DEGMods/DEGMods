@@ -171,8 +171,8 @@ function ChipInput({ items, onChange, placeholder, transform, maxLength }: { ite
 /** Games chip input with games-DB autocomplete on the entry field. */
 function GameChipInput({ games, onChange, maxLength }: { games: string[]; onChange: (v: string[]) => void; maxLength?: number }) {
   const [val, setVal] = useState('')
-  const add = () => {
-    const v = val.trim()
+  const add = (game?: string) => {
+    const v = (game ?? val).trim()
     if (v && !games.includes(v)) onChange([...games, v])
     setVal('')
   }
@@ -180,9 +180,9 @@ function GameChipInput({ games, onChange, maxLength }: { games: string[]; onChan
     <div className="space-y-2">
       <div className="flex gap-2">
         <div className="flex-1" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}>
-          <GameAutocomplete value={val} onChange={setVal} maxLength={maxLength} placeholder="Add a game and press Enter" className={inputCls} />
+          <GameAutocomplete value={val} onChange={setVal} onSelect={(g) => add(g)} maxLength={maxLength} placeholder="Add a game and press Enter" className={inputCls} />
         </div>
-        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add}><Plus className="h-4 w-4" /></Button>
+        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={() => add()}><Plus className="h-4 w-4" /></Button>
       </div>
       {games.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

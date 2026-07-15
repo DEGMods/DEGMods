@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/input'
 interface SuggestInputProps {
   value: string
   onChange: (val: string) => void
+  /** Fired when a suggestion is picked from the dropdown (falls back to onChange). */
+  onSelect?: (val: string) => void
   /** Candidate suggestions to match against. Free text is always allowed. */
   items: string[]
   /** Min query length before suggestions appear. 0 = show all on focus. */
@@ -20,8 +22,9 @@ interface SuggestInputProps {
  * Radix DropdownMenu) so all such dropdowns look identical.
  */
 export function SuggestInput({
-  value, onChange, items, minChars = 1, placeholder, className, maxLength, disabled,
+  value, onChange, onSelect, items, minChars = 1, placeholder, className, maxLength, disabled,
 }: SuggestInputProps) {
+  const pick = onSelect ?? onChange
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const q = value.trim().toLowerCase()
@@ -69,7 +72,7 @@ export function SuggestInput({
               key={s}
               type="button"
               className="flex w-full cursor-pointer select-none items-center rounded-md px-2 py-1.5 text-left text-sm text-neutral-200 transition-colors hover:bg-[#262626]"
-              onMouseDown={(e) => { e.preventDefault(); onChange(s); setOpen(false) }}
+              onMouseDown={(e) => { e.preventDefault(); pick(s); setOpen(false) }}
             >
               {s}
             </button>

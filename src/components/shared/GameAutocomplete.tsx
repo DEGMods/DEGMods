@@ -5,6 +5,8 @@ import { SuggestInput } from '@/components/shared/SuggestInput'
 interface GameAutocompleteProps {
   value: string
   onChange: (val: string) => void
+  /** Fired when a game is picked from the suggestions dropdown. */
+  onSelect?: (val: string) => void
   className?: string
   maxLength?: number
   placeholder?: string
@@ -18,6 +20,7 @@ interface GameAutocompleteProps {
 export function GameAutocomplete({
   value,
   onChange,
+  onSelect,
   className,
   maxLength,
   placeholder = 'Type or search game name',
@@ -30,6 +33,7 @@ export function GameAutocomplete({
     <SuggestInput
       value={value}
       onChange={onChange}
+      onSelect={onSelect}
       items={items}
       minChars={2}
       placeholder={placeholder}
