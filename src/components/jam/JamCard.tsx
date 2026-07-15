@@ -7,17 +7,8 @@ import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
+import { useNow } from '@/hooks/useNow'
 import { jamStatus, jamCountdownLabel, type JamDetails } from '@/lib/nostr/jam'
-
-/** Re-render every second so the countdown ticks. */
-function useNow(): number {
-  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
-  useEffect(() => {
-    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000)
-    return () => clearInterval(id)
-  }, [])
-  return now
-}
 
 const STATUS_COLOR: Record<string, string> = {
   upcoming: 'text-sky-400',

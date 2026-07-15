@@ -436,6 +436,25 @@ For each chain the author enters, the event carries three kinds of tags, **all d
 
 ---
 
+### `l` — Type Label (NIP-32)
+
+```json
+["l", "jam-entry"]
+```
+
+- **Required:** No
+- **Repeatable:** Yes
+- **Value:** A bare NIP-32 label describing *what this release is*, beyond "a mod." A single-letter, relay-indexed tag, so values are directly filterable (`#l: ["jam-entry"]`).
+- **Purpose:** Classifies a mod's kind/purpose in an open-ended, extensible way without changing the event kind. The first use is **jam entries**:
+  - `"jam-entry"` — this mod is an entry in a jam. It appears alongside an `["a", "31143:<pubkey>:<d>"]` tag pointing at the jam (which jam), while `l` says *what it is*. See [jam-event.md](./jam-event.md#submissions--linking-an-entry-to-a-jam).
+- **No `L` namespace:** deliberately used bare (no NIP-32 `L` namespace tag), to avoid centralized/branded categorization. Values are plain, human-readable strings.
+- **Extensible:** the same `l` slot is reused by the future game event for release types (`"demo"`, `"dlc"`, `"playtest"`, …). It is *not* used to turn a mod into a game — mods and games are separate kinds; `l` only sub-classifies within a kind.
+
+**Query all jam entries (any jam):** `{ "kinds":[31142], "#l":["jam-entry"] }`
+**Query one jam's entries:** `{ "kinds":[31142], "#l":["jam-entry"], "#a":["31143:<pubkey>:<d>"] }`
+
+---
+
 ## Tag Summary Table
 
 | Tag | Required | Repeatable | Format | Example |
@@ -460,3 +479,4 @@ For each chain the author enters, the event carries three kinds of tags, **all d
 | `f` | No | Yes | Segment string (anywhere index) | `reshade` |
 | `m` | No | No | Mod name, naddr, or link | `naddr1...` |
 | `dependencies` | No | Yes | `title` + value (name/naddr/link) | `["dependencies","ReShade","https://reshade.me/"]` |
+| `l` | No | Yes | Bare NIP-32 label | `jam-entry` (a jam submission; pairs with an `a` tag to the jam) |

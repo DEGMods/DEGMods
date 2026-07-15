@@ -1,19 +1,50 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
 import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
 import { JamEditor } from '@/components/jam/JamEditor'
-import { buildJamEvent, type JamFormState } from '@/lib/nostr/jam'
+import { buildJamEvent, extractJam, type JamFormState, type JamDetails } from '@/lib/nostr/jam'
 import { signAndPublish } from '@/lib/nostr/publish'
+import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { useAuthStore } from '@/stores/authStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { KINDS } from '@/lib/constants'
 
 export function JamSubmitPage() {
   const navigate = useNavigate()
+  const { naddr } = useParams<{ naddr: string }>()
+  const isEdit = !!naddr
   const pubkey = useAuthStore((s) => s.pubkey)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [publishing, setPublishing] = useState(false)
+
+  // Edit mode: load the jam we're editing.
+  const [editJam, setEditJam] = useState<JamDetails | null>(null)
+  const [loading, setLoading] = useState(isEdit)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isEdit) return
+    let cancelled = false
+    setLoading(true); setLoadError(null)
+    let decoded
+    try { decoded = nip19.decode(naddr!) } catch { setLoadError('Invalid jam link.'); setLoading(false); return }
+    if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) { setLoadError('That link is not a mod jam.'); setLoading(false); return }
+    const { pubkey: author, identifier } = decoded.data
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [author], '#d': [identifier] })
+      .then((ev) => {
+        if (cancelled) return
+        const j = ev ? extractJam(ev) : null
+        if (!j) setLoadError('Mod jam not found.')
+        else setEditJam(j)
+      })
+      .catch(() => { if (!cancelled) setLoadError('Failed to load the mod jam.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [naddr, isEdit])
 
   if (!isAuthenticated) {
     return (
@@ -25,6 +56,12 @@ export function JamSubmitPage() {
     )
   }
 
+  if (isEdit && loading) return <div className="flex items-center justify-center py-24 text-neutral-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading jam…</div>
+  if (isEdit && loadError) return <div className="py-24 text-center text-neutral-400">{loadError}</div>
+  if (isEdit && editJam && editJam.pubkey !== pubkey) {
+    return <div className="py-24 text-center text-neutral-400">You can only edit your own mod jams.</div>
+  }
+
   const handlePublish = async (form: JamFormState) => {
     setPublishing(true)
     try {
@@ -34,9 +71,9 @@ export function JamSubmitPage() {
         if (status === 'publishing') toast.loading('Publishing…', { id: 'jam' })
       })
       if (!result.success) throw new Error(result.error || 'Failed to publish')
-      toast.success('Mod jam published!', { id: 'jam' })
-      const naddr = nip19.naddrEncode({ identifier: form.dTag, pubkey: pubkey!, kind: KINDS.JAM })
-      navigate(`/mod-jam/${naddr}`)
+      toast.success(isEdit ? 'Mod jam updated!' : 'Mod jam published!', { id: 'jam' })
+      const naddrOut = nip19.naddrEncode({ identifier: form.dTag, pubkey: pubkey!, kind: KINDS.JAM })
+      navigate(`/mod-jam/${naddrOut}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Publish failed', { id: 'jam' })
       throw err
@@ -48,10 +85,10 @@ export function JamSubmitPage() {
   return (
     <div className="py-6">
       <div className="mx-auto mb-6 max-w-3xl">
-        <h1 className="text-2xl font-bold text-white">Submit a Mod Jam</h1>
+        <h1 className="text-2xl font-bold text-white">{isEdit ? 'Edit Mod Jam' : 'Submit a Mod Jam'}</h1>
         <p className="mt-1 text-sm text-neutral-400">Run a time-boxed modding event with optional voting and prizes.</p>
       </div>
-      <JamEditor onPublish={handlePublish} publishing={publishing} />
+      <JamEditor editJam={editJam ?? undefined} onPublish={handlePublish} publishing={publishing} />
     </div>
   )
 }

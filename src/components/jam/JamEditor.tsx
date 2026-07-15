@@ -10,7 +10,7 @@ import { DatePicker } from './DatePicker'
 import { TimePicker, browserUses12h } from './TimePicker'
 import { IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { localToUnix, type JamFormState, type JamReward, type JamCriterion, type JamFaq } from '@/lib/nostr/jam'
+import { localToUnix, unixToLocal, type JamFormState, type JamReward, type JamCriterion, type JamFaq, type JamDetails } from '@/lib/nostr/jam'
 import { cn } from '@/lib/utils'
 
 interface EditorState {
@@ -51,6 +51,23 @@ function emptyState(): EditorState {
     votingEndDate: '', votingEndTime: '',
     customCriteria: false, criteria: [{ label: '', max: 10 }, { label: '', max: 10 }],
     rewards: [], rewardNote: '', relays, faq: [],
+  }
+}
+
+/** Prefill the editor from an existing jam (edit flow). */
+function stateFromJam(jam: JamDetails): EditorState {
+  const start = unixToLocal(jam.start), end = unixToLocal(jam.end)
+  const ve = jam.votingEnd ? unixToLocal(jam.votingEnd) : { date: '', time: '' }
+  return {
+    title: jam.title, image: jam.image, video: jam.video, summary: jam.summary, content: jam.content,
+    contentWarning: !!jam.contentWarning, contentWarningReason: jam.contentWarning ?? '',
+    screenshots: [...jam.screenshots], games: [...jam.games], tags: [...jam.tags],
+    startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
+    votingEnabled: jam.votingEnabled, userVotingEnabled: jam.userVotingEnabled, judges: [...jam.judges],
+    votingEndDate: ve.date, votingEndTime: ve.time,
+    customCriteria: jam.criteria.length > 0,
+    criteria: jam.criteria.length ? jam.criteria.map((c) => ({ ...c })) : [{ label: '', max: 10 }, { label: '', max: 10 }],
+    rewards: jam.rewards.map((r) => ({ ...r })), rewardNote: jam.rewardNote, relays: [...jam.relays], faq: jam.faq.map((f) => ({ ...f })),
   }
 }
 
@@ -111,12 +128,12 @@ function DateTimeRow({ label, required, date, time, onDate, onTime, use12h, minD
   )
 }
 
-export function JamEditor({ initial, onPublish, publishing }: {
-  initial?: Partial<EditorState>
+export function JamEditor({ editJam, onPublish, publishing }: {
+  editJam?: JamDetails
   onPublish: (form: JamFormState) => Promise<void>
   publishing: boolean
 }) {
-  const [s, setS] = useState<EditorState>(() => ({ ...emptyState(), ...initial }))
+  const [s, setS] = useState<EditorState>(() => (editJam ? stateFromJam(editJam) : emptyState()))
   const [use12h, setUse12h] = useState(browserUses12h())
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) => setS((p) => ({ ...p, [k]: v }))
 
@@ -144,7 +161,10 @@ export function JamEditor({ initial, onPublish, publishing }: {
     if (s.relays.length === 0) return toast.error('Add at least one relay for votes')
 
     const form: JamFormState = {
-      dTag: crypto.randomUUID(),
+      dTag: editJam?.dTag ?? crypto.randomUUID(),
+      isEdit: !!editJam,
+      previousCreatedAt: editJam?.createdAt,
+      publishedAt: editJam?.publishedAt,
       title: s.title.trim(),
       featuredImageUrl: s.image.trim(),
       featuredVideoUrl: s.video.trim(),
@@ -306,7 +326,7 @@ export function JamEditor({ initial, onPublish, publishing }: {
       </Section>
 
       <Button onClick={submit} disabled={publishing} className="w-full gap-2 bg-[#fc4462] text-white hover:bg-[#e23a56]">
-        {publishing ? <><Loader2 className="h-4 w-4 animate-spin" /> Publishing…</> : 'Publish Mod Jam'}
+        {publishing ? <><Loader2 className="h-4 w-4 animate-spin" /> Publishing…</> : editJam ? 'Save changes' : 'Publish Mod Jam'}
       </Button>
     </div>
   )
