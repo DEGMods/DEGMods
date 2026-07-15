@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { nip19 } from 'nostr-tools'
-import { CalendarDays, Trophy, Gamepad2, Clock, Gift, Users, Scale, HelpCircle, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { nip19, type Event as NostrEvent } from 'nostr-tools'
+import { toast } from 'sonner'
+import { CalendarDays, Trophy, Gamepad2, Clock, Gift, Users, Scale, HelpCircle, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, Sparkles, MoreHorizontal, Copy, FileJson } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CollapsibleMarkdown } from '@/components/mod/CollapsibleMarkdown'
 import { ModScreenshots } from '@/components/mod/ModScreenshots'
 import { ShareBox } from '@/components/mod/ShareBox'
@@ -25,8 +29,30 @@ import type { NostrTarget } from '@/lib/nostr/social'
 import { cn } from '@/lib/utils'
 
 const fmt = (ts: number) => new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const fmtLong = (ts: number) => new Date(ts * 1000).toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 const STATUS_COLOR: Record<string, string> = { upcoming: 'text-sky-400', active: 'text-[#fc4462]', voting: 'text-amber-400', ended: 'text-neutral-500' }
+
+/** Pretty-print a raw event, expanding any JSON-encoded tag values. */
+function readableEventJson(ev: Record<string, unknown>): string {
+  const out = { ...ev }
+  if (Array.isArray(out.tags)) {
+    out.tags = (out.tags as unknown[]).map((tag) =>
+      Array.isArray(tag)
+        ? tag.map((el) => {
+            if (typeof el === 'string') {
+              const t = el.trim()
+              if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+                try { return JSON.parse(t) } catch { /* leave as string */ }
+              }
+            }
+            return el
+          })
+        : tag,
+    )
+  }
+  return JSON.stringify(out, null, 2)
+}
 
 function InfoRow({ label, value, active }: { label: string; value: string; active?: boolean }) {
   return (
@@ -50,10 +76,18 @@ export function JamPage() {
   const myPubkey = useAuthStore((s) => s.pubkey)
   const now = useNow()
   const [jam, setJam] = useState<JamDetails | null>(null)
+  const [rawEvent, setRawEvent] = useState<NostrEvent | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [revealed, setRevealed] = useState(false)
   const [tallyOpen, setTallyOpen] = useState(false)
+  const [showRawDialog, setShowRawDialog] = useState(false)
+  const [readableRaw, setReadableRaw] = useState(false)
+
+  const rawJson = useMemo(
+    () => (rawEvent ? (readableRaw ? readableEventJson(rawEvent as unknown as Record<string, unknown>) : JSON.stringify(rawEvent, null, 2)) : ''),
+    [rawEvent, readableRaw],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -64,7 +98,7 @@ export function JamPage() {
     const { pubkey, identifier } = decoded.data
     const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
     fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] })
-      .then((ev) => { if (cancelled) return; const j = ev ? extractJam(ev) : null; if (j) setJam(j); else setNotFound(true) })
+      .then((ev) => { if (cancelled) return; const j = ev ? extractJam(ev) : null; if (j) { setJam(j); setRawEvent(ev) } else setNotFound(true) })
       .catch(() => { if (!cancelled) setNotFound(true) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -83,6 +117,10 @@ export function JamPage() {
   const subsTip = 'Available once submissions close'
   const hasVoting = jam.votingEnabled || jam.userVotingEnabled
   const votingOver = hasVoting && !!jam.votingEnd && now > jam.votingEnd
+
+  const copyNaddr = () => { if (naddr) { navigator.clipboard.writeText(naddr); toast.success('Note ID copied to clipboard') } }
+  const copyNpub = () => { navigator.clipboard.writeText(nip19.npubEncode(jam.pubkey)); toast.success('Author npub copied to clipboard') }
+  const copyRawJson = () => { if (rawJson) { navigator.clipboard.writeText(rawJson); toast.success(readableRaw ? 'Readable JSON copied to clipboard' : 'Raw JSON copied to clipboard') } }
 
   return (
     <div className="py-6">
@@ -115,8 +153,27 @@ export function JamPage() {
               <Gamepad2 className="h-4 w-4" />
               {jam.games.length === 0 ? <span>Any game</span> : jam.games.map((g) => <span key={g} className="rounded-md bg-[#fc4462]/15 px-2 py-0.5">{g}</span>)}
             </div>
-            <h1 className="text-3xl font-bold text-white">{jam.title}</h1>
-            {jam.summary && <p className="text-lg leading-relaxed text-neutral-300">{jam.summary}</p>}
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="text-3xl font-bold text-white">{jam.title}</h1>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="shrink-0 text-neutral-400 hover:bg-[#262626] hover:text-white">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="border-[#262626] bg-[#1c1c1c]">
+                  <DropdownMenuItem onClick={copyNaddr} className="cursor-pointer"><Copy className="mr-2 h-4 w-4" /> Copy Note ID</DropdownMenuItem>
+                  <DropdownMenuItem onClick={copyNpub} className="cursor-pointer"><Copy className="mr-2 h-4 w-4" /> Copy Author npub</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowRawDialog(true)} className="cursor-pointer"><FileJson className="mr-2 h-4 w-4" /> View Raw Event</DropdownMenuItem>
+                  {isAuthor && (
+                    <>
+                      <DropdownMenuSeparator className="bg-[#262626]" />
+                      <DropdownMenuItem onClick={() => navigate(`/mod-jam/${naddr}/edit`)} className="cursor-pointer"><Pencil className="mr-2 h-4 w-4" /> Edit jam</DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             {jam.theme && (
               <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border border-[#fc4462]/40 bg-[#fc4462]/10 px-3.5 py-2.5">
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#fc4462]"><Sparkles className="h-4 w-4" /> Theme</span>
@@ -125,14 +182,7 @@ export function JamPage() {
             )}
           </div>
 
-          {/* Reactions + zap */}
-          <div className="flex items-center gap-2">
-            <ReactionButton target={target} bucket="positive" />
-            <ReactionButton target={target} content="💩" bucket="negative" icon={PoopIcon} />
-            <ZapButton target={target} />
-          </div>
-
-          {jam.content && <div className="rounded-xl border border-[#262626] bg-[#1c1c1c] p-4"><CollapsibleMarkdown content={jam.content} /></div>}
+          {jam.content && <CollapsibleMarkdown content={jam.content} />}
 
           {jam.screenshots.length > 0 && (
             <Section icon={Gamepad2} title="Gallery"><ModScreenshots screenshots={jam.screenshots} blurred={hasWarning} onReveal={() => setRevealed(true)} /></Section>
@@ -201,7 +251,17 @@ export function JamPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-4 lg:sticky lg:top-20 self-start">
+        <div className="space-y-6 lg:sticky lg:top-20 self-start">
+          <PublisherCard pubkey={jam.pubkey} />
+
+          {/* Reactions + zaps */}
+          <div className="flex flex-wrap items-center gap-2">
+            <ReactionButton target={target} bucket="positive" />
+            <ReactionButton target={target} content="💩" bucket="negative" icon={PoopIcon} />
+            <ZapButton target={target} />
+          </div>
+
+          {/* Actions */}
           <TooltipProvider delayDuration={150}>
             <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
               {isAuthor && (
@@ -237,17 +297,39 @@ export function JamPage() {
             </div>
           </TooltipProvider>
 
-          <PublisherCard pubkey={jam.pubkey} />
-          <div className="rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-500">Published</p>
-            <p className="text-sm text-neutral-300">{fmt(jam.publishedAt)}</p>
-          </div>
+          {/* Published */}
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold text-neutral-200">Published</h2>
+            <p className="text-sm text-neutral-400">{fmtLong(jam.publishedAt)}</p>
+            {jam.client && <p className="text-xs text-neutral-500">from {jam.client}</p>}
+          </section>
+
           {naddr && <ShareBox url={`${window.location.origin}/mod-jam/${naddr}`} title={jam.title} />}
           <SidebarAd />
         </div>
       </div>
 
       {tallyOpen && <JamTallyModal open={tallyOpen} onOpenChange={setTallyOpen} jam={jam} />}
+
+      {/* Raw Event dialog */}
+      <Dialog open={showRawDialog} onOpenChange={setShowRawDialog}>
+        <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col border-[#262626] bg-[#1c1c1c]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-neutral-100"><FileJson className="h-5 w-5 text-[#fc4462]" /> Raw Event</DialogTitle>
+            <DialogDescription className="text-neutral-400">The raw Nostr event data for this mod jam.</DialogDescription>
+          </DialogHeader>
+          <label className="flex cursor-pointer items-center justify-end gap-2">
+            <span className="text-xs text-neutral-400">Readable</span>
+            <Switch checked={readableRaw} onCheckedChange={setReadableRaw} />
+          </label>
+          <div className="flex-1 overflow-auto rounded-lg border border-[#262626] bg-[#171717] p-4">
+            <pre className="whitespace-pre-wrap break-all font-mono text-xs text-neutral-300"><code>{rawJson}</code></pre>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={copyRawJson} className="border-[#262626]"><Copy className="mr-2 h-4 w-4" /> Copy JSON</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

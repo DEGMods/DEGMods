@@ -49,6 +49,7 @@ export interface JamDetails {
   rewardNote: string
   relays: string[]
   faq: JamFaq[]
+  client: string // NIP-89 publishing client
   resultsAt: number | null
 }
 
@@ -232,6 +233,7 @@ export function extractJam(event: NostrEvent): JamDetails | null {
     rewardNote: get('reward_note'),
     relays: (all('relays')[0] ?? []).slice(1).filter(Boolean),
     faq: all('faq').filter((t) => t[1] && t[2]).map((t) => ({ question: t[1], answer: t[2] })),
+    client: get('client'),
     resultsAt: Number(get('results')) || null,
   }
 }
