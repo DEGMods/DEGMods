@@ -62,6 +62,7 @@ export interface ModDetails {
   emulation: boolean      // mod targets an emulated version of the game
   emulatedPlatform?: string // platform the game is emulated from (e.g. "Xbox 360")
   forMod?: string         // m tag: this mod is for another mod (name, naddr, or link)
+  jamCoordinate?: string  // a tag (31143:…) when this mod is a jam entry (l=jam-entry)
   dependencies: Dependency[] // dependencies tags (other mods/software/files)
   screenshots: string[]  // image URLs
   tags: string[]         // t tags
@@ -101,6 +102,8 @@ export interface ModFormState {
   emulatedPlatform: string
   forModEnabled: boolean
   forMod: string
+  jamEnabled: boolean
+  jamNaddr: string
   dependenciesEnabled: boolean
   dependencies: Dependency[]
   screenshots: string[]
@@ -168,6 +171,8 @@ export function createEmptyFormState(): ModFormState {
     emulatedPlatform: '',
     forModEnabled: false,
     forMod: '',
+    jamEnabled: false,
+    jamNaddr: '',
     dependenciesEnabled: false,
     dependencies: [{ title: '', value: '' }],
     screenshots: [''],

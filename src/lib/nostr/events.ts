@@ -10,6 +10,7 @@ import { KINDS, CLIENT_NAME, CATEGORY_MAX_DEPTH, CATEGORY_MAX_CHAINS, CATEGORY_S
 import { cacheEvent } from '@/lib/nostr/eventCache'
 import type { ModFormState, DownloadEntry, PermissionsData } from '@/types/mod'
 import type { BlogFormState } from '@/types/blog'
+import { submissionTags, jamCoordinateFromNaddr, JAM_ENTRY_LABEL } from '@/lib/nostr/jam'
 
 // ─── Categories (c = maximal chains, h = rooted prefixes, f = segments) ──
 //
@@ -122,6 +123,12 @@ export function buildModEvent(form: ModFormState): UnsignedEvent {
 
   // For another mod (optional): name, naddr, or link.
   if (form.forModEnabled && form.forMod.trim()) tags.push(['m', form.forMod.trim()])
+
+  // Mod jam entry (optional): links this mod to a jam (kind 31143) via a + l tags.
+  if (form.jamEnabled && form.jamNaddr.trim()) {
+    const coord = jamCoordinateFromNaddr(form.jamNaddr)
+    if (coord) tags.push(...submissionTags(coord))
+  }
 
   // Dependencies (optional): one tag per item — ['dependencies', title, value].
   if (form.dependenciesEnabled) {
@@ -311,6 +318,12 @@ export function extractModData(event: NostrEvent): ModDetails {
   // Deleted check
   const isDeleted = event.tags.some(t => t[0] === 'deleted' && t[1] === 'true')
 
+  // Jam entry: an `a` coordinate pointing at a jam (31143:…) paired with l=jam-entry.
+  const isJamEntry = event.tags.some(t => t[0] === 'l' && t[1] === JAM_ENTRY_LABEL)
+  const jamCoordinate = isJamEntry
+    ? event.tags.find(t => t[0] === 'a' && t[1]?.startsWith(`${KINDS.JAM}:`))?.[1]
+    : undefined
+
   const dTag = getTag('d')
 
   return {
@@ -331,6 +344,7 @@ export function extractModData(event: NostrEvent): ModDetails {
     emulation,
     emulatedPlatform,
     forMod: getTag('m') || undefined,
+    jamCoordinate,
     dependencies: event.tags
       .filter(t => t[0] === 'dependencies')
       .map(t => ({ title: t[1] || '', value: t[2] || '' }))

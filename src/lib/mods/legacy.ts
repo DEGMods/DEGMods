@@ -170,6 +170,8 @@ export function legacyToForm(mod: ModDetails): ModFormState {
     emulatedPlatform: '',
     forModEnabled: false,
     forMod: '',
+    jamEnabled: false,
+    jamNaddr: '',
     dependenciesEnabled: false,
     dependencies: [],
     screenshots: mod.screenshots.length ? mod.screenshots : [''],

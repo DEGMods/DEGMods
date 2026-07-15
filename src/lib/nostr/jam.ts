@@ -279,6 +279,31 @@ export function submissionTags(jamCoordinate: string): string[][] {
   return [['a', jamCoordinate], ['l', JAM_ENTRY_LABEL]]
 }
 
+/** Decode a jam naddr into its `31143:<pubkey>:<d>` coordinate (null if not a jam naddr). */
+export function jamCoordinateFromNaddr(naddr: string): string | null {
+  try {
+    const decoded = nip19.decode(naddr.trim())
+    if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) return null
+    return `${KINDS.JAM}:${decoded.data.pubkey}:${decoded.data.identifier}`
+  } catch {
+    return null
+  }
+}
+
+/** Encode a `31143:<pubkey>:<d>` coordinate back into a jam naddr (null if malformed). */
+export function jamNaddrFromCoordinate(coordinate: string): string | null {
+  const parts = coordinate.split(':')
+  if (parts.length < 3 || Number(parts[0]) !== KINDS.JAM) return null
+  const pubkey = parts[1]
+  const identifier = parts.slice(2).join(':')
+  if (!pubkey || !identifier) return null
+  try {
+    return nip19.naddrEncode({ kind: KINDS.JAM, pubkey, identifier })
+  } catch {
+    return null
+  }
+}
+
 /** Whether a mod event references this jam as an entry (has the a + l tags). */
 export function isJamEntry(mod: NostrEvent, jamCoordinate: string): boolean {
   const hasA = mod.tags.some((t) => t[0] === 'a' && t[1] === jamCoordinate)

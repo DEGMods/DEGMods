@@ -29,6 +29,7 @@ import {
   Boxes,
   RotateCcw,
   GripVertical,
+  Trophy,
 } from 'lucide-react'
 import { Reorder, useDragControls } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -50,6 +51,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
+import { JamSubmissionField } from '@/components/mod/JamSubmissionField'
 import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
 import { Markdown } from '@/components/shared/Markdown'
 import type {
@@ -112,6 +114,8 @@ function hashFromUrl(url: string): string | null {
 interface ModEditorProps {
   initialState?: Partial<ModFormState>
   isEdit?: boolean
+  /** Jam naddr from the submit flow (?jam=…): forces the "for a mod jam" section on. */
+  prefillJam?: string
   onPublish: (form: ModFormState) => Promise<void>
   publishing?: boolean
 }
@@ -279,6 +283,7 @@ function ScreenshotRow({
 export function ModEditor({
   initialState,
   isEdit = false,
+  prefillJam,
   onPublish,
   publishing = false,
 }: ModEditorProps) {
@@ -332,6 +337,14 @@ export function ModEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Came here from a jam's "Submit a mod" button (?jam=…): force the jam section
+  // on with that address, overriding any restored draft. Runs after draft restore.
+  useEffect(() => {
+    if (!prefillJam) return
+    setForm((prev) => ({ ...prev, jamEnabled: true, jamNaddr: prefillJam }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillJam])
 
   // Auto-save as the user edits (skipping the initial render).
   useEffect(() => {
@@ -634,6 +647,29 @@ export function ModEditor({
               />
               <Counter value={form.forMod} max={LIMITS.forMod} />
               <p className="text-xs text-neutral-500">Typing a name shows as text; pasting a mod post address becomes a “View mod” button to open it on this same platform; adding a link becomes a button that opens it in a new browser tab.</p>
+            </>
+          )}
+        </div>
+      </Section>
+
+      {/* ── 1c. For a mod jam ───────────────────────────────────── */}
+      <Section icon={Trophy} label="For a mod jam" step={1} order={4}>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <Switch
+              checked={form.jamEnabled}
+              onCheckedChange={(v) => updateField('jamEnabled', v)}
+            />
+            <span className="text-sm text-neutral-300">This mod is an entry for a mod jam</span>
+          </label>
+          {form.jamEnabled && (
+            <>
+              <JamSubmissionField
+                value={form.jamNaddr}
+                onChange={(v) => updateField('jamNaddr', v)}
+                inputClass={inputClass}
+              />
+              <p className="text-xs text-neutral-500">Paste the mod jam’s address (from its page’s share button). Your mod is linked to that jam as a submission. Only mods published during the jam’s window count as valid entries.</p>
             </>
           )}
         </div>

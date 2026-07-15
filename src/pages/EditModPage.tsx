@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ModEditor } from '@/components/mod/ModEditor'
 import { buildModEvent, extractModData } from '@/lib/nostr/events'
+import { jamNaddrFromCoordinate } from '@/lib/nostr/jam'
 import { signAndPublish } from '@/lib/nostr/publish'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { cacheEvent } from '@/lib/nostr/eventCache'
@@ -63,6 +64,8 @@ export function EditModPage() {
           emulatedPlatform: modData.emulatedPlatform || '',
           forModEnabled: !!modData.forMod,
           forMod: modData.forMod || '',
+          jamEnabled: !!modData.jamCoordinate,
+          jamNaddr: modData.jamCoordinate ? (jamNaddrFromCoordinate(modData.jamCoordinate) || '') : '',
           dependenciesEnabled: modData.dependencies.length > 0,
           dependencies: modData.dependencies.length > 0 ? modData.dependencies : [{ title: '', value: '' }],
           screenshots: modData.screenshots.length > 0 ? modData.screenshots : [''],

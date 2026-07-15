@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ModEditor } from '@/components/mod/ModEditor'
 import { buildModEvent } from '@/lib/nostr/events'
 import { signAndPublish } from '@/lib/nostr/publish'
@@ -12,6 +12,8 @@ import type { ModFormState } from '@/types/mod'
 
 export function SubmitModPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const prefillJam = searchParams.get('jam') || undefined
   const pubkey = useAuthStore(s => s.pubkey)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const [publishing, setPublishing] = useState(false)
@@ -67,7 +69,7 @@ export function SubmitModPage() {
         <h1 className="text-2xl font-bold text-white">Submit a Mod</h1>
         <p className="text-sm text-neutral-400 mt-1">Publish a new game mod to the Nostr network</p>
       </div>
-      <ModEditor onPublish={handlePublish} publishing={publishing} />
+      <ModEditor prefillJam={prefillJam} onPublish={handlePublish} publishing={publishing} />
     </div>
   )
 }
