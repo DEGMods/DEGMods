@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
 import { CalendarDays, Trophy, Gamepad2, Clock, Gift, Users, Scale, HelpCircle, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle } from 'lucide-react'
+import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CollapsibleMarkdown } from '@/components/mod/CollapsibleMarkdown'
@@ -52,6 +53,7 @@ export function JamPage() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [revealed, setRevealed] = useState(false)
+  const [tallyOpen, setTallyOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -79,6 +81,8 @@ export function JamPage() {
   const canViewSubs = submissionsOpen(jam, now)
   const submitTip = status === 'upcoming' ? `Opens when the jam starts (${jamCountdownLabel(jam, now)})` : 'Submissions are closed'
   const subsTip = 'Available once submissions close'
+  const hasVoting = jam.votingEnabled || jam.userVotingEnabled
+  const votingOver = hasVoting && !!jam.votingEnd && now > jam.votingEnd
 
   return (
     <div className="py-6">
@@ -199,6 +203,11 @@ export function JamPage() {
                   <Pencil className="h-4 w-4" /> Edit jam
                 </Button>
               )}
+              {isAuthor && votingOver && (
+                <Button variant="outline" className="w-full gap-2 border-[#fc4462]/40 text-[#fc4462] hover:bg-[#fc4462]/10" onClick={() => setTallyOpen(true)}>
+                  <Scale className="h-4 w-4" /> {jam.resultsAt ? 'Re-tally votes' : 'Tally votes'}
+                </Button>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="block">
@@ -231,6 +240,8 @@ export function JamPage() {
           <SidebarAd />
         </div>
       </div>
+
+      {tallyOpen && <JamTallyModal open={tallyOpen} onOpenChange={setTallyOpen} jam={jam} />}
     </div>
   )
 }

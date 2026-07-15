@@ -1,15 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
-import { ChevronLeft, ChevronRight, Loader2, ArrowLeft, Plus, Trophy } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, ArrowLeft, Plus, Trophy, Medal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ModCard } from '@/components/mod/ModCard'
 import { SearchBar } from '@/components/search/SearchBar'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { fetchAllEvents } from '@/lib/nostr/relay-pool'
+import { fetchAllEvents, fetchEvents } from '@/lib/nostr/relay-pool'
 import { extractModData } from '@/lib/nostr/events'
 import { extractJam, isValidSubmission, jamStatus, monthBuckets, monthKey, monthLabel, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
+import { mergeResultPages, type JamResultRow } from '@/lib/nostr/jamVoting'
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
 import { useWotModFilter } from '@/hooks/useWot'
@@ -26,6 +27,7 @@ export function JamSubmissionsPage() {
 
   const [jam, setJam] = useState<JamDetails | null>(null)
   const [mods, setMods] = useState<ModDetails[]>([])
+  const [results, setResults] = useState<Map<string, JamResultRow>>(new Map())
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
@@ -61,6 +63,11 @@ export function JamSubmissionsPage() {
         const jamData = newestJam ? extractJam(newestJam) : null
         if (!jamData) { setNotFound(true); return }
         setJam(jamData)
+
+        // Published results (if any) → rank pills on each entry.
+        fetchEvents([...new Set([...relays, ...jamData.relays])], { kinds: [KINDS.JAM_RESULT], authors: [pubkey], '#a': [coordinate] })
+          .then((evs) => { if (!cancelled) setResults(mergeResultPages(evs)) })
+          .catch(() => { /* no results yet */ })
 
         // Newest event per mod coordinate.
         const byCoord = new Map<string, typeof subEvents[number]>()
@@ -182,7 +189,25 @@ export function JamSubmissionsPage() {
         </div>
       ) : paginated.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {paginated.map((mod) => <ModCard key={mod.aTag} mod={mod} />)}
+          {paginated.map((mod) => {
+            const rank = results.get(mod.aTag)
+            const showRank = rank && (rank.jRank > 0 || rank.uRank > 0)
+            return (
+              <div key={mod.aTag} className="relative">
+                {showRank && (
+                  <div className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-1">
+                    {jam?.votingEnabled && rank!.jRank > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 backdrop-blur-sm"><Medal className="h-3 w-3" /> Judges’ #{rank!.jRank}</span>
+                    )}
+                    {jam?.userVotingEnabled && rank!.uRank > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 backdrop-blur-sm"><Medal className="h-3 w-3" /> Community #{rank!.uRank}</span>
+                    )}
+                  </div>
+                )}
+                <ModCard mod={mod} />
+              </div>
+            )
+          })}
         </div>
       ) : (
         <p className="py-16 text-center text-neutral-500">
