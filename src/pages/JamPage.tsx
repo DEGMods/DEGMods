@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
-import { CalendarDays, Trophy, Gamepad2, Clock, Gift, Users, Scale, HelpCircle, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle } from 'lucide-react'
+import { CalendarDays, Trophy, Gamepad2, Clock, Gift, Users, Scale, HelpCircle, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -117,6 +117,12 @@ export function JamPage() {
             </div>
             <h1 className="text-3xl font-bold text-white">{jam.title}</h1>
             {jam.summary && <p className="text-lg leading-relaxed text-neutral-300">{jam.summary}</p>}
+            {jam.theme && (
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border border-[#fc4462]/40 bg-[#fc4462]/10 px-3.5 py-2.5">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#fc4462]"><Sparkles className="h-4 w-4" /> Theme</span>
+                <span className="text-lg font-semibold text-white">{jam.theme}</span>
+              </div>
+            )}
           </div>
 
           {/* Reactions + zap */}

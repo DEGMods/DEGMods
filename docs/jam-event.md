@@ -34,6 +34,7 @@ The three kinds in the jam family:
     ["image", "https://image.nostr.build/winterjam-banner.jpg"],
     ["video", "https://video.nostr.build/winterjam-trailer.mp4"],
     ["summary", "A two-week jam for winter-survival mods, with judge + community voting."],
+    ["theme", "Frozen wasteland"],
     ["screenshots",
       "https://image.nostr.build/winterjam-promo-01.png",
       "https://image.nostr.build/winterjam-promo-02.png"
@@ -132,6 +133,17 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 | `screenshots` | No | Optional promo gallery (multi-value). |
 | `t` | Yes (≥1) | Keywords, one per tag, lowercase. |
 | `content-warning` | No | NIP-36 sensitive flag; omit if not sensitive. Legacy `["nsfw","true"]` accepted on read. |
+
+### `theme` — Jam Theme
+
+```json
+["theme", "Frozen wasteland"]
+```
+
+- **Required:** No.
+- **Format:** `["theme", "<text>"]` — a free-text word or phrase (client cap: 200 chars). Omitted when empty.
+- **Purpose:** The creative theme/prompt for the jam, shown prominently on the jam post.
+- **Note:** It is public the moment the jam is published. To reveal a theme only once the jam starts, the creator publishes the jam without it and adds it in a later edit.
 
 ### `g` — Game(s) the jam is for
 
@@ -333,6 +345,7 @@ A jam is "a mod event minus the mod-specific parts, plus jam parts." Removed fro
 | `image` | Yes | No | Image URL | |
 | `video` | No | No | Video URL | |
 | `summary` | Yes | No | Text | |
+| `theme` | No | No | Text | Theme word/phrase; public on publish |
 | `screenshots` | No | No (multi-value) | Image URLs | Promo gallery |
 | `t` | Yes (≥1) | Yes | Keyword | |
 | `content-warning` | No | No | Reason string | NIP-36 |

@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 // ─── Character limits ───────────────────────────────────────────────
 const LIMITS = {
   title: 150,
+  theme: 200,
   summary: 300,
   content: 30000,
   imageUrl: 200,
@@ -50,6 +51,7 @@ interface EditorState {
   image: string
   video: string
   summary: string
+  theme: string
   content: string
   contentWarning: boolean
   screenshots: string[]
@@ -95,7 +97,7 @@ function defaultVoteRelays(): VoteRelay[] {
 
 function emptyState(): EditorState {
   return {
-    title: '', image: '', video: '', summary: '', content: '',
+    title: '', image: '', video: '', summary: '', theme: '', content: '',
     contentWarning: false,
     screenshots: [], games: [], tags: [],
     startDate: '', startTime: '', endDate: '', endTime: '',
@@ -111,7 +113,7 @@ function stateFromJam(jam: JamDetails): EditorState {
   const start = unixToLocal(jam.start), end = unixToLocal(jam.end)
   const ve = jam.votingEnd ? unixToLocal(jam.votingEnd) : { date: '', time: '' }
   return {
-    title: jam.title, image: jam.image, video: jam.video, summary: jam.summary, content: jam.content,
+    title: jam.title, image: jam.image, video: jam.video, summary: jam.summary, theme: jam.theme, content: jam.content,
     contentWarning: !!jam.contentWarning,
     screenshots: [...jam.screenshots], games: [...jam.games], tags: [...jam.tags],
     startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
@@ -293,6 +295,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       featuredImageUrl: s.image.trim(),
       featuredVideoUrl: s.video.trim(),
       summary: s.summary.trim(),
+      theme: s.theme.trim(),
       content: s.content,
       contentWarning: s.contentWarning,
       contentWarningReason: 'nsfw',
@@ -339,6 +342,12 @@ export function JamEditor({ editJam, onPublish, publishing }: {
           <Label>Summary <span className="text-[#fc4462]">*</span></Label>
           <Textarea value={s.summary} onChange={(e) => set('summary', e.target.value)} rows={2} placeholder="One or two lines shown on cards" maxLength={LIMITS.summary} className={inputCls} />
           <Counter value={s.summary} max={LIMITS.summary} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Theme <span className="text-neutral-600">(a word or phrase)</span></Label>
+          <Input value={s.theme} onChange={(e) => set('theme', e.target.value)} placeholder="e.g. “Frozen wasteland”" maxLength={LIMITS.theme} className={inputCls} />
+          <Counter value={s.theme} max={LIMITS.theme} />
+          <p className="flex items-start gap-1.5 text-[11px] text-amber-400/90"><Info className="mt-0.5 h-3 w-3 shrink-0" /> The theme is shown on the jam the moment you publish — if you want to keep it a surprise until the jam starts, add it in a later edit.</p>
         </div>
         <div className="space-y-1.5">
           <Label>Details <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(markdown)</span></Label>

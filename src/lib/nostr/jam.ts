@@ -29,6 +29,7 @@ export interface JamDetails {
   image: string
   video: string
   summary: string
+  theme: string // the jam's theme word/phrase (public the moment it's published)
   content: string
   contentWarning: string | null
   screenshots: string[]
@@ -61,6 +62,7 @@ export interface JamFormState {
   featuredImageUrl: string
   featuredVideoUrl: string
   summary: string
+  theme: string
   content: string
   contentWarning: boolean
   contentWarningReason: string
@@ -134,6 +136,7 @@ export function buildJamEvent(form: JamFormState): UnsignedEvent {
   for (const g of form.games.map((s) => s.trim()).filter(Boolean)) tags.push(['g', g])
   for (const b of monthBuckets(form.start, bucketEnd)) tags.push(['y', b])
 
+  if (form.theme.trim()) tags.push(['theme', form.theme.trim()])
   if (form.featuredVideoUrl.trim()) tags.push(['video', form.featuredVideoUrl.trim()])
   if (form.contentWarning) tags.push(['content-warning', form.contentWarningReason || 'nsfw'])
   const shots = form.screenshots.map((s) => s.trim()).filter(Boolean)
@@ -210,6 +213,7 @@ export function extractJam(event: NostrEvent): JamDetails | null {
     image: get('image'),
     video: get('video'),
     summary: get('summary'),
+    theme: get('theme'),
     content: event.content,
     contentWarning: cwTag ? (cwTag[1] || 'nsfw') : nsfwLegacy ? 'nsfw' : null,
     screenshots: (all('screenshots')[0] ?? []).slice(1).filter(Boolean),
