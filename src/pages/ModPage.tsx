@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import type { ModDetails } from '@/types/mod'
 
 import { CollapsibleMarkdown } from '@/components/mod/CollapsibleMarkdown'
+import { ModJamBanner } from '@/components/jam/ModJamBanner'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { ModScreenshots } from '@/components/mod/ModScreenshots'
 import { ModDownloads } from '@/components/mod/ModDownloads'
@@ -661,6 +662,16 @@ export default function ModPage() {
                 })}
               </div>
             </section>
+          )}
+
+          {/* Mod jam entry: link back to the jam + rank + voting */}
+          {mod.jamCoordinate && (
+            <ModJamBanner
+              jamCoordinate={mod.jamCoordinate}
+              submissionCoordinate={mod.aTag}
+              submissionDTag={mod.dTag}
+              submissionTitle={mod.title}
+            />
           )}
 
           {/* For another mod */}

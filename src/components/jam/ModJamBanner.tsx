@@ -1,0 +1,174 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Trophy, Gavel, Eye, Medal } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { useNow } from '@/hooks/useNow'
+import { useAuthStore } from '@/stores/authStore'
+import { useLoginModalStore } from '@/stores/loginModalStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { fetchLatestEvent, fetchEvents } from '@/lib/nostr/relay-pool'
+import { extractJam, jamStatus, type JamDetails } from '@/lib/nostr/jam'
+import {
+  extractBallot, ballotDTag, judgeHexSet, mergeResultPages,
+  type JamBallot, type JamResultRow,
+} from '@/lib/nostr/jamVoting'
+import { KINDS } from '@/lib/constants'
+import { JamVoteModal } from './JamVoteModal'
+
+/**
+ * Shown on a mod post that is a jam entry: links back to the jam, shows the
+ * entry's rank once results are published, and (within the voting window) opens
+ * the scoring modal for eligible voters.
+ */
+export function ModJamBanner({
+  jamCoordinate,
+  submissionCoordinate,
+  submissionDTag,
+  submissionTitle,
+}: {
+  jamCoordinate: string
+  submissionCoordinate: string
+  submissionDTag: string
+  submissionTitle: string
+}) {
+  const now = useNow(30000)
+  const myPubkey = useAuthStore((s) => s.pubkey)
+
+  const [jam, setJam] = useState<JamDetails | null>(null)
+  const [ballot, setBallot] = useState<JamBallot | null>(null)
+  const [rank, setRank] = useState<JamResultRow | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+
+  // Load the jam (window, criteria, judges, relays).
+  useEffect(() => {
+    let cancelled = false
+    const parts = jamCoordinate.split(':')
+    if (parts.length < 3) return
+    const pubkey = parts[1]
+    const identifier = parts.slice(2).join(':')
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] })
+      .then((ev) => { if (!cancelled && ev) setJam(extractJam(ev)) })
+      .catch(() => { /* jam unavailable — banner just won't render */ })
+    return () => { cancelled = true }
+  }, [jamCoordinate])
+
+  // Load the published results (if any) to show this entry's rank.
+  useEffect(() => {
+    let cancelled = false
+    if (!jam) return
+    const relays = [...new Set([...useSettingsStore.getState().getAllEnabledRelayUrls('read'), ...jam.relays])]
+    fetchEvents(relays, { kinds: [KINDS.JAM_RESULT], authors: [jam.pubkey], '#a': [jamCoordinate] })
+      .then((events) => {
+        if (cancelled) return
+        const rows = mergeResultPages(events)
+        setRank(rows.get(submissionCoordinate) ?? null)
+      })
+      .catch(() => { /* no results yet */ })
+    return () => { cancelled = true }
+  }, [jam, jamCoordinate, submissionCoordinate])
+
+  // Load my existing ballot for this entry.
+  useEffect(() => {
+    let cancelled = false
+    if (!jam || !myPubkey) { setBallot(null); return }
+    const relays = [...new Set([...useSettingsStore.getState().getAllEnabledRelayUrls('read'), ...jam.relays])]
+    fetchLatestEvent(relays, {
+      kinds: [KINDS.JAM_BALLOT],
+      authors: [myPubkey],
+      '#d': [ballotDTag(jam.dTag, submissionDTag)],
+    })
+      .then((ev) => { if (!cancelled) setBallot(ev ? extractBallot(ev) : null) })
+      .catch(() => { /* ignore */ })
+    return () => { cancelled = true }
+  }, [jam, myPubkey, submissionDTag])
+
+  if (!jam) return null
+
+  const hasVoting = jam.votingEnabled || jam.userVotingEnabled
+  const status = jamStatus(jam, now)
+  const inWindow = !!jam.votingEnd && now >= jam.end && now <= jam.votingEnd
+  const isJudge = !!myPubkey && judgeHexSet(jam.judges).has(myPubkey)
+  const eligible = jam.userVotingEnabled || (jam.votingEnabled && isJudge)
+
+  // Vote button state → { label, disabled, reason }.
+  let voteBtn: { label: string; disabled: boolean; reason?: string; icon: typeof Gavel } | null = null
+  if (hasVoting) {
+    if (ballot) {
+      voteBtn = { label: 'View your vote', disabled: false, icon: Eye }
+    } else if (!myPubkey) {
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Gavel }
+    } else if (!eligible) {
+      voteBtn = { label: 'Judges only', disabled: true, reason: 'Only the jam’s judges can score entries.', icon: Gavel }
+    } else if (status === 'upcoming' || status === 'active') {
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting opens when submissions close.', icon: Gavel }
+    } else if (!inWindow) {
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting has ended.', icon: Gavel }
+    } else {
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Gavel }
+    }
+  }
+
+  const onVoteClick = () => {
+    if (!myPubkey) { useLoginModalStore.getState().open(); return }
+    setModalOpen(true)
+  }
+
+  const naddr = jam.naddr
+  const VoteIcon = voteBtn?.icon ?? Gavel
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-2 rounded-lg border border-[#fc4462]/30 bg-[#fc4462]/10 px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Link to={`/mod-jam/${naddr}`} className="flex min-w-0 items-center gap-2 text-sm text-[#fc9db0] hover:text-[#fc4462]">
+            <Trophy className="h-4 w-4 shrink-0 text-[#fc4462]" />
+            <span className="truncate">Entry in the <span className="font-medium text-white">{jam.title}</span> mod jam</span>
+          </Link>
+
+          {voteBtn && (
+            voteBtn.disabled ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button size="sm" disabled className="gap-1.5 bg-[#fc4462]/40 text-xs text-white"><VoteIcon className="h-3.5 w-3.5" /> {voteBtn.label}</Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{voteBtn.reason}</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button size="sm" onClick={onVoteClick} className="gap-1.5 bg-[#fc4462] text-xs text-white hover:bg-[#e23a56]"><VoteIcon className="h-3.5 w-3.5" /> {voteBtn.label}</Button>
+            )
+          )}
+        </div>
+
+        {/* Rank pills once results are published */}
+        {rank && (rank.jRank > 0 || rank.uRank > 0) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {jam.votingEnabled && rank.jRank > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-amber-300"><Medal className="h-3 w-3" /> Judges’ #{rank.jRank} · {rank.judge.avg.toFixed(1)} avg</span>
+            )}
+            {jam.userVotingEnabled && rank.uRank > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-sky-300"><Medal className="h-3 w-3" /> Community #{rank.uRank} · {rank.user.avg.toFixed(1)} avg</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {modalOpen && (
+        <JamVoteModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          jam={jam}
+          submissionCoordinate={submissionCoordinate}
+          submissionDTag={submissionDTag}
+          submissionTitle={submissionTitle}
+          existingBallot={ballot}
+          readOnly={!!ballot}
+          onVoted={(b) => setBallot(b)}
+        />
+      )}
+    </TooltipProvider>
+  )
+}

@@ -29,15 +29,18 @@ export interface PublishResult {
  * @param unsignedEvent - The event to publish (pubkey can be empty, signer fills it)
  * @param onStatus - Optional callback for status updates
  * @param publishTimeoutMs - Timeout for publishing to relays (default 10s)
+ * @param extraRelays - Additional relays to publish to, unioned with the write relays
+ *                      (e.g. a mod jam's declared ballot/result relays)
  */
 export async function signAndPublish(
   unsignedEvent: UnsignedEvent,
   onStatus?: (status: PublishStatus) => void,
   publishTimeoutMs: number = 10000,
+  extraRelays: string[] = [],
 ): Promise<PublishResult> {
   const settings = useSettingsStore.getState()
   const difficulty = settings.powDifficulty
-  const writeRelays = settings.getAllEnabledRelayUrls('write')
+  const writeRelays = [...new Set([...settings.getAllEnabledRelayUrls('write'), ...extraRelays])]
 
   if (writeRelays.length === 0) {
     return { success: false, error: 'No write relays configured' }
