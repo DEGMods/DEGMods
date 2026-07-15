@@ -42,7 +42,8 @@ export interface JamDetails {
   userVotingEnabled: boolean
   judges: string[] // names or npubs
   votingEnd: number | null
-  criteria: JamCriterion[] // empty = single "overall" 0-10
+  criteria: JamCriterion[] // empty = single "overall" score
+  scoreMax: number // shared 0-max scale for every criterion (and the overall score); default 10
   rewards: JamReward[]
   rewardNote: string
   relays: string[]
@@ -75,6 +76,7 @@ export interface JamFormState {
   judges: string[]
   votingEnd: number | null
   criteria: JamCriterion[]
+  scoreMax: number
   rewards: JamReward[]
   rewardNote: string
   relays: string[]
@@ -143,9 +145,12 @@ export function buildJamEvent(form: JamFormState): UnsignedEvent {
   if (form.votingEnabled) for (const j of form.judges.map((s) => s.trim()).filter(Boolean)) tags.push(['judge', j])
   if ((form.votingEnabled || form.userVotingEnabled) && form.votingEnd) tags.push(['voting_end', String(form.votingEnd)])
   if (form.votingEnabled || form.userVotingEnabled) {
+    // One shared max scale for the whole jam (every criterion + the overall score).
+    const scoreMax = form.scoreMax || 10
+    tags.push(['score_max', String(scoreMax)])
     for (const c of form.criteria) {
       const label = c.label.trim()
-      if (label) tags.push(['criterion', label, String(c.max || 10)])
+      if (label) tags.push(['criterion', label, String(scoreMax)])
     }
   }
 
@@ -217,7 +222,8 @@ export function extractJam(event: NostrEvent): JamDetails | null {
     userVotingEnabled,
     judges: all('judge').map((t) => t[1]).filter(Boolean),
     votingEnd: votingEndRaw || null,
-    criteria: all('criterion').map((t) => ({ label: t[1], max: Number(t[2]) || 10 })).filter((c) => c.label),
+    criteria: all('criterion').map((t) => ({ label: t[1], max: Number(get('score_max')) || Number(t[2]) || 10 })).filter((c) => c.label),
+    scoreMax: Number(get('score_max')) || Number(all('criterion')[0]?.[2]) || 10,
     rewards,
     rewardNote: get('reward_note'),
     relays: (all('relays')[0] ?? []).slice(1).filter(Boolean),

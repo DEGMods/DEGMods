@@ -230,6 +230,17 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 - **Purpose:** When voting closes.
 - **Constraint:** Must be **≥ `end`** (voting can't close before submissions do). The voting window is **`[end, voting_end]`** — see [Voting Window](#voting-window).
 
+### `score_max` — Shared Score Scale
+
+```json
+["score_max", "10"]
+```
+
+- **Required:** No (defaults to `10`).
+- **Format:** `["score_max", "<2…100>"]`. One scale for the **whole jam** — every criterion **and** the single "overall" score use it. `min` is always `0`.
+- **Why one shared max:** the tally averages each criterion's scores and then averages those together, so mixing per-criterion scales (e.g. one `0–10`, one `0–20`) would make the composite meaningless. A single scale keeps it coherent and gives voters one mental model.
+- Clients write it whenever a voting track is enabled. It is the authoritative max; the per-criterion `max` field below is written equal to it for backward compatibility.
+
 ### `criterion` — Scoring Criteria
 
 ```json
@@ -239,10 +250,10 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 
 - **Required:** No.
 - **Repeatable:** Yes.
-- **Format:** `["criterion", "<label>", "<max?>"]`. `max` defaults to `10`; min is always `0`.
+- **Format:** `["criterion", "<label>", "<max?>"]`. `max` mirrors `score_max` (all criteria share it); readers should prefer `score_max` and fall back to this, then to `10`.
 - **Purpose:** Defines the dimensions ballots score. The ballot UI is generated from these.
 - **Rules:**
-  - **No `criterion` tags** → voting is a single **overall** `0–10` score (ballots carry `["score","overall","<n>"]`).
+  - **No `criterion` tags** → voting is a single **overall** `0–score_max` score (ballots carry `["score","overall","<n>"]`).
   - **Custom criteria** → **2 to 6** criteria (a single custom criterion is just a renamed "overall", so ≥2 is required; the cap of 6 keeps ballots fast to fill and the event small).
 - Only meaningful when a voting track is enabled.
 

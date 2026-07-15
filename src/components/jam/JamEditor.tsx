@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BlossomUploadField } from '@/components/upload/BlossomUploadField'
 import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
+import { JudgeList } from './JudgeList'
 import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
 import { Markdown } from '@/components/shared/Markdown'
 import { CharCounter } from '@/components/shared/CharCounter'
@@ -60,7 +62,8 @@ interface EditorState {
   judges: string[]
   votingEndDate: string; votingEndTime: string
   customCriteria: boolean
-  criteria: JamCriterion[]
+  criteria: string[] // labels only — every criterion shares scoreMax
+  scoreMax: number
   rewards: JamReward[]
   rewardNote: string
   relays: VoteRelay[]
@@ -98,7 +101,7 @@ function emptyState(): EditorState {
     startDate: '', startTime: '', endDate: '', endTime: '',
     votingEnabled: false, userVotingEnabled: false, judges: [],
     votingEndDate: '', votingEndTime: '',
-    customCriteria: false, criteria: [{ label: '', max: 10 }, { label: '', max: 10 }],
+    customCriteria: false, criteria: ['', ''], scoreMax: 10,
     rewards: [], rewardNote: '', relays: defaultVoteRelays(), faq: [],
   }
 }
@@ -115,7 +118,8 @@ function stateFromJam(jam: JamDetails): EditorState {
     votingEnabled: jam.votingEnabled, userVotingEnabled: jam.userVotingEnabled, judges: [...jam.judges],
     votingEndDate: ve.date, votingEndTime: ve.time,
     customCriteria: jam.criteria.length > 0,
-    criteria: jam.criteria.length ? jam.criteria.map((c) => ({ ...c })) : [{ label: '', max: 10 }, { label: '', max: 10 }],
+    criteria: jam.criteria.length ? jam.criteria.map((c) => c.label) : ['', ''],
+    scoreMax: jam.scoreMax || 10,
     rewards: jam.rewards.map((r) => ({ ...r })), rewardNote: jam.rewardNote,
     relays: jam.relays.map((url) => ({ url, enabled: true })), faq: jam.faq.map((f) => ({ ...f })),
   }
@@ -250,6 +254,8 @@ export function JamEditor({ editJam, onPublish, publishing }: {
 }) {
   const [s, setS] = useState<EditorState>(() => (editJam ? stateFromJam(editJam) : emptyState()))
   const [use12h, setUse12h] = useState(browserUses12h())
+  // "Adjust max score" disclosure — collapsed by default so most jams stay at 0–10.
+  const [adjustMax, setAdjustMax] = useState(() => (editJam ? (editJam.scoreMax || 10) !== 10 : false))
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) => setS((p) => ({ ...p, [k]: v }))
 
@@ -272,9 +278,10 @@ export function JamEditor({ editJam, onPublish, publishing }: {
     if (votingOn && !votingEnd) return toast.error('Set when voting ends')
     if (votingOn && votingEnd && votingEnd < end) return toast.error('Voting must end on or after the jam ends')
     if (s.votingEnabled && s.judges.length === 0) return toast.error('Add at least one judge (or turn off judge voting)')
-    const criteria = s.customCriteria ? s.criteria.filter((c) => c.label.trim()) : []
-    if (s.customCriteria && criteria.length < 2) return toast.error('Custom scoring needs at least 2 criteria')
-    if (criteria.length > 6) return toast.error('Up to 6 criteria')
+    const labels = s.customCriteria ? s.criteria.map((c) => c.trim()).filter(Boolean) : []
+    if (s.customCriteria && labels.length < 2) return toast.error('Custom scoring needs at least 2 criteria')
+    if (labels.length > 6) return toast.error('Up to 6 criteria')
+    const criteria: JamCriterion[] = labels.map((label) => ({ label, max: s.scoreMax }))
     if (relays.length === 0) return toast.error('Enable at least one relay for votes')
 
     const form: JamFormState = {
@@ -299,6 +306,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       judges: s.judges,
       votingEnd,
       criteria,
+      scoreMax: s.scoreMax,
       rewards: s.rewards,
       rewardNote: s.rewardNote,
       relays,
@@ -403,7 +411,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
         </div>
 
         {s.votingEnabled && (
-          <div className="space-y-1.5"><Label>Judges <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(name or npub)</span></Label><ChipInput items={s.judges} onChange={(v) => set('judges', v)} placeholder="Add a judge and press Enter" maxLength={LIMITS.judge} /></div>
+          <div className="space-y-1.5"><Label>Judges <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(name or npub)</span></Label><JudgeList judges={s.judges} onChange={(v) => set('judges', v)} maxLength={LIMITS.judge} /></div>
         )}
 
         {votingOn && (
@@ -411,21 +419,34 @@ export function JamEditor({ editJam, onPublish, publishing }: {
             <DateTimeRow label="Voting ends" required date={s.votingEndDate} time={s.votingEndTime} onDate={(v) => set('votingEndDate', v)} onTime={(v) => set('votingEndTime', v)} use12h={use12h} minDate={s.endDate} />
 
             <div className="flex items-center justify-between rounded-lg bg-[#212121] px-3 py-2">
-              <div><p className="text-sm text-neutral-200">Custom scoring criteria</p><p className="text-[11px] text-neutral-500">Off = a single overall 0–10 score.</p></div>
+              <div><p className="text-sm text-neutral-200">Custom scoring criteria</p><p className="text-[11px] text-neutral-500">Off = a single overall score.</p></div>
               <Switch checked={s.customCriteria} onCheckedChange={(v) => set('customCriteria', v)} />
             </div>
             {s.customCriteria && (
               <div className="space-y-2">
-                {s.criteria.map((c, i) => (
+                {s.criteria.map((label, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <Input value={c.label} onChange={(e) => set('criteria', s.criteria.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} placeholder="Criterion (e.g. Graphics)" maxLength={LIMITS.criterion} className={`${inputCls} flex-1`} />
-                    <Input type="number" value={c.max} onChange={(e) => set('criteria', s.criteria.map((x, j) => j === i ? { ...x, max: Number(e.target.value) || 10 } : x))} className={`${inputCls} w-20`} title="Max score" />
+                    <Input value={label} onChange={(e) => set('criteria', s.criteria.map((x, j) => j === i ? e.target.value : x))} placeholder="Criterion (e.g. Graphics)" maxLength={LIMITS.criterion} className={`${inputCls} flex-1`} />
                     {s.criteria.length > 2 && <button type="button" onClick={() => set('criteria', s.criteria.filter((_, j) => j !== i))} className="text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
                   </div>
                 ))}
-                {s.criteria.length < 6 && <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('criteria', [...s.criteria, { label: '', max: 10 }])}><Plus className="mr-1 h-3 w-3" /> Add criterion</Button>}
+                {s.criteria.length < 6 && <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('criteria', [...s.criteria, ''])}><Plus className="mr-1 h-3 w-3" /> Add criterion</Button>}
               </div>
             )}
+
+            {/* Max score — hidden behind a toggle; governs every criterion and the overall score. */}
+            <div className="space-y-2 rounded-lg bg-[#212121] px-3 py-2">
+              <label className="flex cursor-pointer items-center justify-between">
+                <div><p className="text-sm text-neutral-200">Adjust max score</p><p className="text-[11px] text-neutral-500">{s.customCriteria ? 'Each criterion is scored' : 'The overall score is'} 0–{adjustMax ? s.scoreMax : 10}.</p></div>
+                <Switch checked={adjustMax} onCheckedChange={(v) => { setAdjustMax(v); if (!v) set('scoreMax', 10) }} />
+              </label>
+              {adjustMax && (
+                <div className="flex items-center gap-3 pt-1">
+                  <Slider min={2} max={100} step={1} value={[s.scoreMax]} onValueChange={([v]) => set('scoreMax', v)} className="flex-1" />
+                  <span className="w-10 text-right text-sm font-semibold tabular-nums text-[#fc4462]">{s.scoreMax}</span>
+                </div>
+              )}
+            </div>
           </>
         )}
       </Section>

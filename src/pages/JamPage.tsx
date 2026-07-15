@@ -150,7 +150,7 @@ export function JamPage() {
               <div>
                 <p className="mb-1.5 text-xs font-medium text-neutral-400">Scored on</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {(jam.criteria.length ? jam.criteria.map((c) => `${c.label} (0–${c.max})`) : ['Overall (0–10)']).map((c) => (
+                  {(jam.criteria.length ? jam.criteria.map((c) => `${c.label} (0–${c.max})`) : [`Overall (0–${jam.scoreMax})`]).map((c) => (
                     <span key={c} className="rounded-md border border-[#262626] px-2 py-1 text-xs text-neutral-300">{c}</span>
                   ))}
                 </div>

@@ -37,8 +37,8 @@ export function ballotDTag(jamDTag: string, submissionDTag: string): string {
 }
 
 /** The scoring criteria a ballot must fill for a jam (overall, or the custom set). */
-export function ballotCriteria(jam: Pick<JamDetails, 'criteria'>): JamCriterion[] {
-  return jam.criteria.length ? jam.criteria : [{ label: OVERALL_CRITERION, max: OVERALL_MAX }]
+export function ballotCriteria(jam: Pick<JamDetails, 'criteria' | 'scoreMax'>): JamCriterion[] {
+  return jam.criteria.length ? jam.criteria : [{ label: OVERALL_CRITERION, max: jam.scoreMax || OVERALL_MAX }]
 }
 
 export function buildBallotEvent(form: JamBallotFormState): UnsignedEvent {
@@ -85,7 +85,7 @@ export function extractBallot(event: NostrEvent): JamBallot | null {
 /** True if the ballot's created_at falls inside the voting window and scores are well-formed. */
 export function isBallotCounted(
   event: NostrEvent,
-  jam: Pick<JamDetails, 'end' | 'votingEnd' | 'criteria'>,
+  jam: Pick<JamDetails, 'end' | 'votingEnd' | 'criteria' | 'scoreMax'>,
 ): boolean {
   if (!jam.votingEnd) return false
   if (event.created_at < jam.end || event.created_at > jam.votingEnd) return false
