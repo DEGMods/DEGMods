@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
-import { ChevronLeft, ChevronRight, Loader2, ArrowLeft, Plus, Trophy, Medal } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, Check, Loader2, ArrowLeft, Plus, Medal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ModCard } from '@/components/mod/ModCard'
 import { SearchBar } from '@/components/search/SearchBar'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -21,6 +22,33 @@ import { cn } from '@/lib/utils'
 const PER_PAGE = 20
 
 type SortKey = 'newest' | 'oldest' | 'title'
+
+/** A dropdown select matching the filter menus used elsewhere in the client. */
+function FilterSelect({ value, onChange, options }: {
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  const current = options.find((o) => o.value === value)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="group inline-flex items-center gap-1.5 rounded-lg border border-[#262626] bg-[#1c1c1c] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040] focus:outline-none">
+          {current?.label ?? options[0]?.label}
+          <ChevronDown className="h-4 w-4 text-neutral-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-64 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto border-[#262626] bg-[#1c1c1c]">
+        {options.map((o) => (
+          <DropdownMenuItem key={o.value} onClick={() => onChange(o.value)} className="cursor-pointer justify-between gap-6 text-neutral-200">
+            {o.label}
+            {value === o.value && <Check className="h-4 w-4 text-[#fc4462]" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export function JamSubmissionsPage() {
   const { naddr } = useParams<{ naddr: string }>()
@@ -129,8 +157,6 @@ export function JamSubmissionsPage() {
   const status = jam ? jamStatus(jam, Math.floor(Date.now() / 1000)) : null
   const canSubmit = status === 'active'
 
-  const selectCls = 'rounded-md border border-[#262626] bg-[#212121] px-2.5 py-1.5 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-[#fc4462]'
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -138,9 +164,7 @@ export function JamSubmissionsPage() {
           <Link to={`/mod-jam/${naddr}`} className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-[#fc4462]">
             <ArrowLeft className="h-3.5 w-3.5" /> Back to the jam
           </Link>
-          <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white">
-            <Trophy className="h-5 w-5 text-[#fc4462]" /> Submissions
-          </h1>
+          <h1 className="mt-1 text-2xl font-bold text-white">Submissions</h1>
           {jam && <p className="truncate text-sm text-neutral-400">{jam.title}</p>}
         </div>
         {canSubmit && (
@@ -155,22 +179,24 @@ export function JamSubmissionsPage() {
         <SearchBar value={search} onChange={setSearch} placeholder="Search entries by title, game, or tags…" />
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-neutral-500">Published</span>
-          <select value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} className={selectCls}>
-            <option value="">From: any</option>
-            {monthOptions.map((b) => <option key={b} value={b}>{monthLabel(b)}</option>)}
-          </select>
+          <FilterSelect
+            value={fromMonth}
+            onChange={setFromMonth}
+            options={[{ value: '', label: 'From: any' }, ...monthOptions.map((b) => ({ value: b, label: monthLabel(b) }))]}
+          />
           <span className="text-neutral-600">→</span>
-          <select value={toMonth} onChange={(e) => setToMonth(e.target.value)} className={selectCls}>
-            <option value="">To: any</option>
-            {monthOptions.map((b) => <option key={b} value={b}>{monthLabel(b)}</option>)}
-          </select>
+          <FilterSelect
+            value={toMonth}
+            onChange={setToMonth}
+            options={[{ value: '', label: 'To: any' }, ...monthOptions.map((b) => ({ value: b, label: monthLabel(b) }))]}
+          />
           <span className="ml-auto flex items-center gap-2">
             <span className="text-neutral-500">Sort</span>
-            <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className={selectCls}>
-              <option value="newest">Newest</option>
-              <option value="oldest">Oldest</option>
-              <option value="title">Title A–Z</option>
-            </select>
+            <FilterSelect
+              value={sort}
+              onChange={(v) => setSort(v as SortKey)}
+              options={[{ value: 'newest', label: 'Newest' }, { value: 'oldest', label: 'Oldest' }, { value: 'title', label: 'Title A–Z' }]}
+            />
           </span>
         </div>
         {!loading && <p className="text-xs text-neutral-500">{filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}</p>}

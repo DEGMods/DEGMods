@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SearchBar } from '@/components/search/SearchBar'
 import { JamCard } from '@/components/jam/JamCard'
+import { MonthPicker } from '@/components/jam/MonthPicker'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { extractJam, jamStatus, type JamDetails, type JamStatus } from '@/lib/nostr/jam'
@@ -127,11 +128,11 @@ export function ModJamsPage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-neutral-400">
+        <div className="flex items-center gap-2 text-xs text-neutral-400">
           <span>From</span>
-          <input type="month" value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} className="rounded-md border border-[#262626] bg-[#212121] px-2 py-1 text-neutral-200 [color-scheme:dark]" />
+          <MonthPicker value={fromMonth} onChange={setFromMonth} placeholder="Any month" />
           <span>to</span>
-          <input type="month" value={toMonth} onChange={(e) => setToMonth(e.target.value)} className="rounded-md border border-[#262626] bg-[#212121] px-2 py-1 text-neutral-200 [color-scheme:dark]" />
+          <MonthPicker value={toMonth} onChange={setToMonth} placeholder="Any month" />
           {(fromMonth || toMonth) && (
             <button onClick={() => { setFromMonth(''); setToMonth('') }} className="text-neutral-500 hover:text-neutral-300">clear</button>
           )}
