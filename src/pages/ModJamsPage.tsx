@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SearchBar } from '@/components/search/SearchBar'
 import { JamCard } from '@/components/jam/JamCard'
-import { MonthPicker } from '@/components/jam/MonthPicker'
 import { JamFiltersBar } from '@/components/jam/JamFiltersBar'
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
 import { useModerationFilter } from '@/hooks/useModeration'
@@ -16,7 +15,8 @@ import { useFollowedSet } from '@/hooks/useFollowedSet'
 import { useJamFiltersStore } from '@/stores/jamFiltersStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { applyJamFilters } from '@/lib/jams/filterJams'
-import { constructJamListFromEvents, jamStatus, monthBuckets, monthLabel, type JamDetails, type JamStatus } from '@/lib/nostr/jam'
+import { effectiveRange, monthToTs } from '@/lib/jams/monthRange'
+import { constructJamListFromEvents, jamStatus, monthBuckets, type JamDetails, type JamStatus } from '@/lib/nostr/jam'
 import { KINDS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
@@ -36,47 +36,12 @@ function compareJams(a: JamDetails, b: JamDetails, now: number): number {
   }
 }
 
-function monthToTs(m: string, endOfMonth = false): number {
-  const [y, mo] = m.split('-').map(Number)
-  const d = new Date(Date.UTC(y, mo - 1, 1))
-  if (endOfMonth) { d.setUTCMonth(d.getUTCMonth() + 1); return Math.floor(d.getTime() / 1000) - 1 }
-  return Math.floor(d.getTime() / 1000)
-}
-
-// A picked range is capped so the relay-side `#y` filter stays small: one `y`
-// value per month, so 12 months = at most 12 tag values in the query.
-const MAX_SPAN = 12
-
-const monthKeyOf = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-
-function addMonths(m: string, n: number): string {
-  const [y, mo] = m.split('-').map(Number)
-  return monthKeyOf(new Date(Date.UTC(y, mo - 1 + n, 1)))
-}
-
-/**
- * The month range to query, or null when the user hasn't picked one (the default:
- * just page through the newest jams). A single picked bound is extrapolated to a
- * full span, and a range wider than MAX_SPAN is clamped.
- */
-function effectiveRange(from: string, to: string): { from: string; to: string } | null {
-  if (!from && !to) return null
-  if (from && to) {
-    const cap = addMonths(from, MAX_SPAN - 1)
-    return { from, to: to > cap ? cap : to }
-  }
-  if (from) return { from, to: addMonths(from, MAX_SPAN - 1) }
-  return { from: addMonths(to, -(MAX_SPAN - 1)), to }
-}
-
 export function ModJamsPage() {
   const [search, setSearch] = useState('')
-  const [fromMonth, setFromMonth] = useState('')
-  const [toMonth, setToMonth] = useState('')
   const [page, setPage] = useState(1)
   const now = Math.floor(Date.now() / 1000)
 
-  const { nsfwMode, status, sources, searchTags, excludedTags } = useJamFiltersStore()
+  const { nsfwMode, status, fromMonth, toMonth, sources, searchTags, excludedTags } = useJamFiltersStore()
   const minPow = useSettingsStore((s) => s.powFilterDifficulty)
   const powExempt = useFollowedSet()
   const moderate = useModerationFilter()
@@ -169,37 +134,6 @@ export function ModJamsPage() {
       <SearchBar value={search} onChange={setSearch} placeholder="Quick local search by title, game, or tags…" />
 
       <JamFiltersBar availableClients={availableClients} resultCount={filtered.length} wotHiddenCount={wotHiddenCount} />
-
-      {/* Month range */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 text-xs text-neutral-400">
-          <span>From</span>
-          <MonthPicker
-            value={fromMonth}
-            onChange={setFromMonth}
-            placeholder="Any month"
-            minMonth={toMonth ? addMonths(toMonth, -(MAX_SPAN - 1)) : undefined}
-            maxMonth={toMonth || undefined}
-          />
-          <span>to</span>
-          <MonthPicker
-            value={toMonth}
-            onChange={setToMonth}
-            placeholder="Any month"
-            minMonth={fromMonth || undefined}
-            maxMonth={fromMonth ? addMonths(fromMonth, MAX_SPAN - 1) : undefined}
-          />
-          {(fromMonth || toMonth) && (
-            <button onClick={() => { setFromMonth(''); setToMonth('') }} className="text-neutral-500 hover:text-neutral-300">clear</button>
-          )}
-        </div>
-      </div>
-
-      {range && (
-        <p className="-mt-2 text-[11px] text-neutral-500">
-          Filtering {monthLabel(range.from)} – {monthLabel(range.to)} · up to {MAX_SPAN} months at a time.
-        </p>
-      )}
 
       {loading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

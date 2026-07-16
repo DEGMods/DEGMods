@@ -23,6 +23,9 @@ const DEFAULT_SOURCES: SourceEntry[] = [
 interface JamFiltersState {
   nsfwMode: NsfwMode
   status: JamStatusFilter
+  /** Month range ("YYYY-MM", '' = unset). Drives the relay-side `y` filter. */
+  fromMonth: string
+  toMonth: string
   sources: SourceEntry[]
   searchTags: string[]
   excludedTags: string[]
@@ -32,6 +35,7 @@ interface JamFiltersState {
 
   setNsfwMode: (m: NsfwMode) => void
   setStatus: (s: JamStatusFilter) => void
+  setRange: (from: string, to: string) => void
   setSources: (s: SourceEntry[]) => void
   setSearchTags: (t: string[]) => void
   setExcludedTags: (t: string[]) => void
@@ -46,6 +50,8 @@ export const useJamFiltersStore = create<JamFiltersState>()(
     (set, get) => ({
       nsfwMode: 'hide',
       status: 'all',
+      fromMonth: '',
+      toMonth: '',
       sources: DEFAULT_SOURCES,
       searchTags: [],
       excludedTags: DEFAULT_EXCLUDED_TAGS,
@@ -53,6 +59,7 @@ export const useJamFiltersStore = create<JamFiltersState>()(
 
       setNsfwMode: (nsfwMode) => set({ nsfwMode }),
       setStatus: (status) => set({ status }),
+      setRange: (fromMonth, toMonth) => set({ fromMonth, toMonth }),
       setSources: (sources) => set({ sources }),
       setSearchTags: (searchTags) => set({ searchTags }),
       setExcludedTags: (excludedTags) => set({ excludedTags, excludedTagsTouched: true }),
