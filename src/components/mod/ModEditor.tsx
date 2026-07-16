@@ -29,7 +29,6 @@ import {
   Boxes,
   RotateCcw,
   GripVertical,
-  Trophy,
 } from 'lucide-react'
 import { Reorder, useDragControls } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -51,6 +50,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
+import { JamIcon } from '@/components/shared/JamIcon'
 import { JamSubmissionField } from '@/components/mod/JamSubmissionField'
 import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
 import { Markdown } from '@/components/shared/Markdown'
@@ -653,7 +653,7 @@ export function ModEditor({
       </Section>
 
       {/* ── 1c. For a mod jam ───────────────────────────────────── */}
-      <Section icon={Trophy} label="For a mod jam" step={1} order={4}>
+      <Section icon={JamIcon} label="For a mod jam" step={1} order={4}>
         <div className="space-y-3">
           <label className="flex items-center gap-3 cursor-pointer">
             <Switch

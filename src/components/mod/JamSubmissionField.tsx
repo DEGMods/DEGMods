@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, CheckCircle2, AlertCircle, Trophy } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
@@ -91,7 +91,6 @@ export function JamSubmissionField({
           {resolved.state === 'ok' && (
             <span className="inline-flex items-center gap-1.5 text-[#fc4462]">
               <CheckCircle2 className="h-3 w-3" />
-              <Trophy className="h-3 w-3" />
               <span className="font-medium text-neutral-200">{resolved.title}</span>
               <span className="text-neutral-500">· {STATUS_LABEL[resolved.status] ?? resolved.status}</span>
             </span>
