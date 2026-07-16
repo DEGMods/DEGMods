@@ -51,7 +51,7 @@ const MAX = {
   judges: 25,
   rewards: 20,
   faq: 30,
-  criteria: 25,
+  criteria: 15,
 } as const
 
 /** A small "N/max" item-count badge (amber once the cap is hit). */
@@ -522,7 +522,14 @@ export function JamEditor({ editJam, onPublish, publishing }: {
               )}
               <button type="button" onClick={() => set('rewards', s.rewards.filter((_, j) => j !== i))} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>
             </div>
-            {r.type === 'other' && <Counter value={r.text} max={LIMITS.rewardText} />}
+            {r.type === 'monetary' ? (
+              <div className="flex justify-end gap-4">
+                <Counter value={r.currency} max={LIMITS.rewardCurrency} />
+                <Counter value={r.amount} max={LIMITS.rewardAmount} />
+              </div>
+            ) : (
+              <Counter value={r.text} max={LIMITS.rewardText} />
+            )}
           </div>
         ))}
         <div className="flex items-center justify-between">

@@ -266,7 +266,7 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 - **Purpose:** Defines the dimensions ballots score. The ballot UI is generated from these.
 - **Rules:**
   - **No `criterion` tags** → voting is a single **overall** `0–score_max` score (ballots carry `["score","overall","<n>"]`).
-  - **Custom criteria** → **2 to 25** criteria (a single custom criterion is just a renamed "overall", so ≥2 is required; the upper cap keeps ballots and the event bounded — though many criteria make ballots slower to fill).
+  - **Custom criteria** → **2 to 15** criteria (a single custom criterion is just a renamed "overall", so ≥2 is required; the upper cap keeps ballots and the event bounded — though many criteria make ballots slower to fill).
 - Only meaningful when a voting track is enabled.
 
 ### `reward` — Prize(s)
