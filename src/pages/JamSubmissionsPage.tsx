@@ -8,7 +8,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ModCard } from '@/components/mod/ModCard'
 import { SearchBar } from '@/components/search/SearchBar'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { fetchAllEvents, fetchEvents } from '@/lib/nostr/relay-pool'
+import { fetchAllEvents, fetchEvents, fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractModData } from '@/lib/nostr/events'
 import { extractJam, isValidSubmission, jamStatus, submissionWindow, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
 import { mergeResultPages, type JamResultRow } from '@/lib/nostr/jamVoting'
@@ -77,27 +78,12 @@ export function JamSubmissionsPage() {
     const coordinate = `${KINDS.JAM}:${pubkey}:${identifier}`
     const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
 
-    ;(async () => {
+    /** Entries, bounded at the relay to the window a valid submission must fall in. */
+    const loadEntries = async (jamData: JamDetails) => {
       try {
-        // The jam first — its window bounds the submissions query below.
-        const jamEvents = await fetchAllEvents(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] }, { maxRounds: 2 })
-        if (cancelled) return
-        const newestJam = jamEvents.sort((a, b) => b.created_at - a.created_at)[0]
-        const jamData = newestJam ? extractJam(newestJam) : null
-        if (!jamData) { setNotFound(true); return }
-        setJam(jamData)
-
-        // Published results (if any) → rank pills on each entry.
-        fetchEvents([...new Set([...relays, ...jamData.relays])], { kinds: [KINDS.JAM_RESULT], authors: [pubkey], '#a': [coordinate] })
-          .then((evs) => { if (!cancelled) setResults(mergeResultPages(evs)) })
-          .catch(() => { /* no results yet */ })
-
-        // Entries, bounded at the relay to the created_at window a valid submission
-        // must fall in — no point paging through revisions outside the jam.
         const { since, until } = submissionWindow(jamData)
         const subEvents = await fetchAllEvents(relays, { kinds: [KINDS.MOD], '#a': [coordinate], '#l': [JAM_ENTRY_LABEL], since, until })
         if (cancelled) return
-
         // Newest event per mod coordinate.
         const byCoord = new Map<string, typeof subEvents[number]>()
         for (const ev of subEvents) {
@@ -113,9 +99,43 @@ export function JamSubmissionsPage() {
           .map(extractModData)
         setMods(valid)
       } catch {
-        if (!cancelled) setNotFound(true)
+        /* keep whatever we already have — the jam itself still resolved */
       } finally {
         if (!cancelled) setLoading(false)
+      }
+    }
+
+    const loadResults = (jamData: JamDetails) => {
+      fetchEvents([...new Set([...relays, ...jamData.relays])], { kinds: [KINDS.JAM_RESULT], authors: [pubkey], '#a': [coordinate] })
+        .then((evs) => { if (!cancelled) setResults(mergeResultPages(evs)) })
+        .catch(() => { /* no results yet */ })
+    }
+
+    ;(async () => {
+      // 1. The jam is usually already cached (the user just came from its post),
+      // so its window is on hand and entries can load without a round trip first.
+      await whenEventCacheReady
+      if (cancelled) return
+      const cachedEv = getCachedEvent(coordinate)
+      const cachedJam = cachedEv ? extractJam(cachedEv) : null
+      if (cachedJam) { setJam(cachedJam); loadResults(cachedJam); loadEntries(cachedJam) }
+
+      // 2. Confirm we're on the newest revision — its window bounds that query.
+      try {
+        const latestEv = await fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] })
+        if (cancelled) return
+        const latestJam = latestEv ? extractJam(latestEv) : null
+        if (!latestJam) { if (!cachedJam) { setNotFound(true); setLoading(false) } return }
+
+        if (!cachedJam) { setJam(latestJam); loadResults(latestJam); loadEntries(latestJam); return }
+        // Cached copy was stale: refresh it, and only re-query entries if the
+        // window actually moved (that's the only thing bounding the query).
+        if (latestEv!.created_at > cachedEv!.created_at) {
+          setJam(latestJam)
+          if (latestJam.start !== cachedJam.start || latestJam.end !== cachedJam.end) loadEntries(latestJam)
+        }
+      } catch {
+        if (!cancelled && !cachedJam) { setNotFound(true); setLoading(false) }
       }
     })()
 
