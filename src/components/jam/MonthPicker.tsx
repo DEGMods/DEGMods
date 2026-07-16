@@ -12,10 +12,13 @@ function parse(s: string) {
   return { year: y, month: m - 1 }
 }
 
-export function MonthPicker({ value, onChange, placeholder = 'Any month' }: {
+export function MonthPicker({ value, onChange, placeholder = 'Any month', minMonth, maxMonth }: {
   value: string
   onChange: (value: string) => void
   placeholder?: string
+  /** Inclusive "YYYY-MM" bounds; months outside are disabled. */
+  minMonth?: string
+  maxMonth?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -30,13 +33,18 @@ export function MonthPicker({ value, onChange, placeholder = 'Any month' }: {
     return () => document.removeEventListener('mousedown', h)
   }, [open])
 
+  const key = (m: number) => `${viewYear}-${String(m + 1).padStart(2, '0')}`
+
   const select = (m: number) => {
-    onChange(`${viewYear}-${String(m + 1).padStart(2, '0')}`)
+    if (isDisabled(m)) return
+    onChange(key(m))
     setOpen(false)
   }
 
   const isSelected = (m: number) => selected != null && m === selected.month && viewYear === selected.year
   const isThisMonth = (m: number) => m === now.getMonth() && viewYear === now.getFullYear()
+  // "YYYY-MM" strings compare correctly lexicographically.
+  const isDisabled = (m: number) => (!!minMonth && key(m) < minMonth) || (!!maxMonth && key(m) > maxMonth)
 
   return (
     <div ref={ref} className="relative">
@@ -60,21 +68,26 @@ export function MonthPicker({ value, onChange, placeholder = 'Any month' }: {
             <button type="button" onClick={() => setViewYear(viewYear + 1)} className="rounded p-1 text-neutral-400 transition-colors hover:bg-[#262626] hover:text-white"><ChevronRight size={14} /></button>
           </div>
           <div className="grid grid-cols-3 gap-1">
-            {SHORT.map((m, i) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => select(i)}
-                className={cn(
-                  'h-8 rounded-md text-xs font-medium transition-all',
-                  isSelected(i) ? 'bg-[#fc4462] text-white'
-                    : isThisMonth(i) ? 'font-bold text-[#fc4462] hover:bg-[#262626]'
-                      : 'text-neutral-300 hover:bg-[#262626]',
-                )}
-              >
-                {m}
-              </button>
-            ))}
+            {SHORT.map((m, i) => {
+              const disabled = isDisabled(i)
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => select(i)}
+                  disabled={disabled}
+                  className={cn(
+                    'h-8 rounded-md text-xs font-medium transition-all',
+                    disabled ? 'cursor-not-allowed text-neutral-700'
+                      : isSelected(i) ? 'bg-[#fc4462] text-white'
+                        : isThisMonth(i) ? 'font-bold text-[#fc4462] hover:bg-[#262626]'
+                          : 'text-neutral-300 hover:bg-[#262626]',
+                  )}
+                >
+                  {m}
+                </button>
+              )
+            })}
           </div>
           {value && (
             <button type="button" onClick={() => { onChange(''); setOpen(false) }} className="mt-2 w-full rounded-md py-1 text-[11px] text-neutral-500 transition-colors hover:bg-[#262626] hover:text-neutral-300">
