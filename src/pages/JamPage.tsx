@@ -71,6 +71,24 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
   </section>
 )
 
+/** An FAQ accordion row that expands/collapses smoothly (grid-rows 0fr↔1fr). */
+function FaqItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-lg border border-[#262626] bg-[#212121]">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm font-medium text-neutral-200">
+        {question}
+        <ChevronDown className={cn('h-4 w-4 shrink-0 text-neutral-500 transition-transform duration-200', open && 'rotate-180')} />
+      </button>
+      <div className="grid transition-[grid-template-rows] duration-200 ease-out" style={{ gridTemplateRows: open ? '1fr' : '0fr' }}>
+        <div className="overflow-hidden">
+          <p className="whitespace-pre-wrap px-3 pb-3 text-sm text-neutral-400">{answer}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function JamPage() {
   const { naddr } = useParams<{ naddr: string }>()
   const navigate = useNavigate()
@@ -282,13 +300,7 @@ export function JamPage() {
             <Section title="FAQ">
               <div className="space-y-2">
                 {jam.faq.map((f, i) => (
-                  <details key={i} className="group rounded-lg border border-[#262626] bg-[#212121] px-3 py-2.5">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-neutral-200">
-                      {f.question}
-                      <ChevronDown className="h-4 w-4 shrink-0 text-neutral-500 transition-transform group-open:rotate-180" />
-                    </summary>
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-400">{f.answer}</p>
-                  </details>
+                  <FaqItem key={i} question={f.question} answer={f.answer} />
                 ))}
               </div>
             </Section>
