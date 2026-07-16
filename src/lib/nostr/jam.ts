@@ -294,11 +294,6 @@ export function jamCountdownLabel(jam: JamDetails, now: number): string {
   }
 }
 
-/** Submissions become viewable once the jam ends (i.e. voting has started, or there's no voting). */
-export function submissionsOpen(jam: Pick<JamDetails, 'start' | 'end' | 'votingEnd' | 'votingEnabled' | 'userVotingEnabled'>, now: number): boolean {
-  return now >= jam.end
-}
-
 // ─── Submission linking (a mod entered into a jam) ───────────────────
 
 /** The two tags a mod carries to become a jam entry. */

@@ -24,7 +24,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent, fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
-import { extractJam, jamStatus, jamCountdownLabel, submissionsOpen, type JamDetails } from '@/lib/nostr/jam'
+import { extractJam, jamStatus, jamCountdownLabel, type JamDetails } from '@/lib/nostr/jam'
 import { KINDS } from '@/lib/constants'
 import type { NostrTarget } from '@/lib/nostr/social'
 import { cn } from '@/lib/utils'
@@ -171,9 +171,7 @@ export function JamPage() {
   const hasWarning = !!jam.contentWarning && !revealed
   const isAuthor = myPubkey === jam.pubkey
   const canSubmit = status === 'active'
-  const canViewSubs = submissionsOpen(jam, now)
   const submitTip = status === 'upcoming' ? `Opens when the jam starts (${jamCountdownLabel(jam, now)})` : 'Submissions are closed'
-  const subsTip = 'Available once submissions close'
   const hasVoting = jam.votingEnabled || jam.userVotingEnabled
   const votingOver = hasVoting && !!jam.votingEnd && now > jam.votingEnd
 
@@ -336,16 +334,11 @@ export function JamPage() {
                 </TooltipTrigger>
                 {!canSubmit && <TooltipContent>{submitTip}</TooltipContent>}
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="block">
-                    <Button variant="outline" disabled={!canViewSubs} onClick={() => navigate(`/mod-jam/${naddr}/submissions`)} className="w-full gap-2 border-[#262626] disabled:opacity-50">
-                      <ListOrdered className="h-4 w-4" /> Show submissions
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {!canViewSubs && <TooltipContent>{subsTip}</TooltipContent>}
-              </Tooltip>
+              {/* Always available: entries are public on relays anyway, so gating
+                  this in the UI would only inconvenience honest visitors. */}
+              <Button variant="outline" onClick={() => navigate(`/mod-jam/${naddr}/submissions`)} className="w-full gap-2 border-[#262626]">
+                <ListOrdered className="h-4 w-4" /> Show submissions
+              </Button>
             </div>
           </TooltipProvider>
 
