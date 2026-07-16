@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvents, fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { extractModData } from '@/lib/nostr/events'
 import { signAndPublish } from '@/lib/nostr/publish'
-import { isValidSubmission, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
+import { isValidSubmission, submissionWindow, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
 import {
   extractBallot, isBallotCounted, judgeHexSet, aggregateResults, aggregateToRow, resultPages,
   buildResultPageEvent, type JamResultRow,
@@ -57,8 +57,10 @@ export function JamTallyModal({
     try {
       const rd = relays()
 
-      // 1. Entries — newest per coordinate, valid submissions only.
-      const entryEvents = await fetchEvents(rd, { kinds: [KINDS.MOD], '#l': [JAM_ENTRY_LABEL], '#a': [jam.coordinate] })
+      // 1. Entries — newest per coordinate, valid submissions only. Bounded at the
+      // relay to the window a valid submission's created_at must fall in.
+      const entryWindow = submissionWindow(jam)
+      const entryEvents = await fetchEvents(rd, { kinds: [KINDS.MOD], '#l': [JAM_ENTRY_LABEL], '#a': [jam.coordinate], since: entryWindow.since, until: entryWindow.until })
       const byCoord = new Map<string, typeof entryEvents[number]>()
       for (const ev of entryEvents) {
         const d = ev.tags.find((t) => t[0] === 'd')?.[1] ?? ''

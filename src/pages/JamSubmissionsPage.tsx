@@ -10,7 +10,7 @@ import { SearchBar } from '@/components/search/SearchBar'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchAllEvents, fetchEvents } from '@/lib/nostr/relay-pool'
 import { extractModData } from '@/lib/nostr/events'
-import { extractJam, isValidSubmission, jamStatus, monthBuckets, monthKey, monthLabel, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
+import { extractJam, isValidSubmission, jamStatus, submissionWindow, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
 import { mergeResultPages, type JamResultRow } from '@/lib/nostr/jamVoting'
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
@@ -60,8 +60,6 @@ export function JamSubmissionsPage() {
   const [notFound, setNotFound] = useState(false)
 
   const [search, setSearch] = useState('')
-  const [fromMonth, setFromMonth] = useState('')
-  const [toMonth, setToMonth] = useState('')
   const [sort, setSort] = useState<SortKey>('newest')
   const [page, setPage] = useState(1)
 
@@ -81,11 +79,8 @@ export function JamSubmissionsPage() {
 
     ;(async () => {
       try {
-        // The jam itself (for the window + title) and its submissions in parallel.
-        const [jamEvents, subEvents] = await Promise.all([
-          fetchAllEvents(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] }, { maxRounds: 2 }),
-          fetchAllEvents(relays, { kinds: [KINDS.MOD], '#a': [coordinate], '#l': [JAM_ENTRY_LABEL] }),
-        ])
+        // The jam first — its window bounds the submissions query below.
+        const jamEvents = await fetchAllEvents(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] }, { maxRounds: 2 })
         if (cancelled) return
         const newestJam = jamEvents.sort((a, b) => b.created_at - a.created_at)[0]
         const jamData = newestJam ? extractJam(newestJam) : null
@@ -96,6 +91,12 @@ export function JamSubmissionsPage() {
         fetchEvents([...new Set([...relays, ...jamData.relays])], { kinds: [KINDS.JAM_RESULT], authors: [pubkey], '#a': [coordinate] })
           .then((evs) => { if (!cancelled) setResults(mergeResultPages(evs)) })
           .catch(() => { /* no results yet */ })
+
+        // Entries, bounded at the relay to the created_at window a valid submission
+        // must fall in — no point paging through revisions outside the jam.
+        const { since, until } = submissionWindow(jamData)
+        const subEvents = await fetchAllEvents(relays, { kinds: [KINDS.MOD], '#a': [coordinate], '#l': [JAM_ENTRY_LABEL], since, until })
+        if (cancelled) return
 
         // Newest event per mod coordinate.
         const byCoord = new Map<string, typeof subEvents[number]>()
@@ -121,9 +122,6 @@ export function JamSubmissionsPage() {
     return () => { cancelled = true }
   }, [naddr])
 
-  // Month options span the jam's submission window [start, end].
-  const monthOptions = useMemo(() => (jam ? monthBuckets(jam.start, jam.end) : []), [jam])
-
   const filtered = useMemo(() => {
     let result = wotFilter(blockFilter(moderate(mods)))
 
@@ -135,18 +133,15 @@ export function JamSubmissionsPage() {
         m.tags.some((t) => t.toLowerCase().includes(q)),
       )
     }
-    if (fromMonth) result = result.filter((m) => monthKey(m.publishedAt) >= fromMonth)
-    if (toMonth) result = result.filter((m) => monthKey(m.publishedAt) <= toMonth)
-
     result = [...result].sort((a, b) => {
       if (sort === 'title') return a.title.localeCompare(b.title)
       if (sort === 'oldest') return a.publishedAt - b.publishedAt
       return b.publishedAt - a.publishedAt
     })
     return result
-  }, [mods, moderate, blockFilter, wotFilter, search, fromMonth, toMonth, sort])
+  }, [mods, moderate, blockFilter, wotFilter, search, sort])
 
-  useEffect(() => { setPage(1) }, [search, fromMonth, toMonth, sort])
+  useEffect(() => { setPage(1) }, [search, sort])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
   const currentPage = Math.min(page, totalPages)
@@ -178,18 +173,6 @@ export function JamSubmissionsPage() {
       <div className="space-y-3">
         <SearchBar value={search} onChange={setSearch} placeholder="Search entries by title, game, or tags…" />
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-neutral-500">Published</span>
-          <FilterSelect
-            value={fromMonth}
-            onChange={setFromMonth}
-            options={[{ value: '', label: 'From: any' }, ...monthOptions.map((b) => ({ value: b, label: monthLabel(b) }))]}
-          />
-          <span className="text-neutral-600">→</span>
-          <FilterSelect
-            value={toMonth}
-            onChange={setToMonth}
-            options={[{ value: '', label: 'To: any' }, ...monthOptions.map((b) => ({ value: b, label: monthLabel(b) }))]}
-          />
           <span className="ml-auto flex items-center gap-2">
             <span className="text-neutral-500">Sort</span>
             <FilterSelect

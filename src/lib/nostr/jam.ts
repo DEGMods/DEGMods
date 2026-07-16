@@ -105,12 +105,6 @@ export function monthBuckets(startTs: number, endTs: number): string[] {
   return out
 }
 
-/** UTC month bucket key ("YYYY-MM") for a unix timestamp — matches monthBuckets(). */
-export function monthKey(ts: number): string {
-  const d = new Date(ts * 1000)
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-}
-
 /** Human label for a "YYYY-MM" bucket, e.g. "Feb 2026". */
 export function monthLabel(bucket: string): string {
   const [y, m] = bucket.split('-').map(Number)
@@ -333,6 +327,19 @@ export function isJamEntry(mod: NostrEvent, jamCoordinate: string): boolean {
   return hasA && hasL
 }
 
+/** Upper headroom on a submission's created_at — edits drift it up by +1 per revision. */
+export const SUBMISSION_GRACE_SECONDS = 24 * 60 * 60
+
+/**
+ * The created_at window every valid submission falls in. Used to bound the relay
+ * query for a jam's entries; isValidSubmission re-checks the same bounds on what
+ * comes back, so the query and the rule can't drift apart. Note this ends at
+ * `end` (when submissions close), not voting_end — that governs ballots.
+ */
+export function submissionWindow(jam: Pick<JamDetails, 'start' | 'end'>): { since: number; until: number } {
+  return { since: jam.start, until: jam.end + SUBMISSION_GRACE_SECONDS }
+}
+
 /**
  * A submission is valid (shown/counted) only if it was originally published during
  * the jam and isn't a repost. See docs/jam-event.md "Valid submission".
@@ -343,8 +350,8 @@ export function isValidSubmission(mod: NostrEvent, jam: Pick<JamDetails, 'start'
   if (isRepost) return false
   // published_at is the authoritative gate; created_at only as a lower-bound sanity
   // check (+ a generous upper grace, since edits drift created_at up via +1).
-  const GRACE = 24 * 60 * 60
   if (publishedAt < jam.start || publishedAt > jam.end) return false
-  if (mod.created_at < jam.start || mod.created_at > jam.end + GRACE) return false
+  const { since, until } = submissionWindow(jam)
+  if (mod.created_at < since || mod.created_at > until) return false
   return true
 }
