@@ -234,6 +234,22 @@ export function extractJam(event: NostrEvent): JamDetails | null {
   }
 }
 
+/**
+ * Newest event per coordinate → JamDetails (relays may return stale revisions).
+ * Unsorted: callers order by status/date themselves, which needs the current time.
+ */
+export function constructJamListFromEvents(events: NostrEvent[]): JamDetails[] {
+  const byCoord = new Map<string, NostrEvent>()
+  for (const ev of events) {
+    const d = ev.tags.find((t) => t[0] === 'd')?.[1]
+    if (!d) continue
+    const key = `${ev.pubkey}:${d}`
+    const prev = byCoord.get(key)
+    if (!prev || ev.created_at > prev.created_at) byCoord.set(key, ev)
+  }
+  return [...byCoord.values()].map(extractJam).filter((j): j is JamDetails => !!j && !!j.title)
+}
+
 // ─── Lifecycle ───────────────────────────────────────────────────────
 
 export type JamStatus = 'upcoming' | 'active' | 'voting' | 'ended'
