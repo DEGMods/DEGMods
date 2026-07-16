@@ -7,23 +7,21 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { SearchBar } from '@/components/search/SearchBar'
 import { JamCard } from '@/components/jam/JamCard'
 import { MonthPicker } from '@/components/jam/MonthPicker'
+import { JamFiltersBar } from '@/components/jam/JamFiltersBar'
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
+import { useModerationFilter } from '@/hooks/useModeration'
+import { useBlockFilter } from '@/hooks/useBlock'
+import { useWotModFilter, useWotHiddenCount } from '@/hooks/useWot'
+import { useFollowedSet } from '@/hooks/useFollowedSet'
+import { useJamFiltersStore } from '@/stores/jamFiltersStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { applyJamFilters } from '@/lib/jams/filterJams'
 import { constructJamListFromEvents, jamStatus, monthBuckets, monthLabel, type JamDetails, type JamStatus } from '@/lib/nostr/jam'
 import { KINDS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
 const JAMS_PER_PAGE = 20
 const BATCH = 100
-
-type StatusFilter = 'all' | JamStatus
-
-const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active' },
-  { key: 'upcoming', label: 'Upcoming' },
-  { key: 'voting', label: 'Voting' },
-  { key: 'ended', label: 'Ended' },
-]
 
 // Sort: active → upcoming → voting → ended, each by its nearest relevant date.
 const STATUS_RANK: Record<JamStatus, number> = { active: 0, upcoming: 1, voting: 2, ended: 3 }
@@ -73,11 +71,17 @@ function effectiveRange(from: string, to: string): { from: string; to: string } 
 
 export function ModJamsPage() {
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<StatusFilter>('all')
   const [fromMonth, setFromMonth] = useState('')
   const [toMonth, setToMonth] = useState('')
   const [page, setPage] = useState(1)
   const now = Math.floor(Date.now() / 1000)
+
+  const { nsfwMode, status, sources, searchTags, excludedTags } = useJamFiltersStore()
+  const minPow = useSettingsStore((s) => s.powFilterDifficulty)
+  const powExempt = useFollowedSet()
+  const moderate = useModerationFilter()
+  const blockFilter = useBlockFilter()
+  const wotFilter = useWotModFilter()
 
   const range = useMemo(() => effectiveRange(fromMonth, toMonth), [fromMonth, toMonth])
 
@@ -92,30 +96,44 @@ export function ModJamsPage() {
   const { events, loading, loadingMore, reachedEnd, loadMore } = useProgressiveEvents(baseFilter, BATCH)
   const jams = useMemo(() => constructJamListFromEvents(events), [events])
 
-  const filtered = useMemo(() => {
-    let list = [...jams]
-    if (status !== 'all') list = list.filter((j) => jamStatus(j, now) === status)
+  const availableClients = useMemo(
+    () => [...new Set(jams.map((j) => j.client).filter(Boolean))].sort(),
+    [jams],
+  )
+
+  const preWot = useMemo(() => {
+    let list = blockFilter(moderate(applyJamFilters(jams, {
+      nsfwMode, status, minPow, sources, searchTags, excludedTags, powExempt, now,
+    })))
+
     // `y` is an untrusted, coarse index that can only ever over-include, so when a
     // range is picked the real window is re-derived from start/end/voting_end.
     if (range) {
       const rs = monthToTs(range.from), re = monthToTs(range.to, true)
       list = list.filter((j) => (j.votingEnd ?? j.end) >= rs && j.start <= re)
     }
+
     const q = search.trim().toLowerCase()
     if (q) list = list.filter((j) =>
       j.title.toLowerCase().includes(q) ||
       j.games.some((g) => g.toLowerCase().includes(q)) ||
       j.tags.some((t) => t.toLowerCase().includes(q)),
     )
-    return list.sort((a, b) => compareJams(a, b, now))
-  }, [jams, status, search, range, now])
+    return list
+  }, [jams, moderate, blockFilter, nsfwMode, status, minPow, sources, searchTags, excludedTags, powExempt, search, range, now])
+
+  const filtered = useMemo(
+    () => wotFilter(preWot).sort((a, b) => compareJams(a, b, now)),
+    [wotFilter, preWot, now],
+  )
+  const wotHiddenCount = useWotHiddenCount(preWot)
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / JAMS_PER_PAGE))
   const currentPage = Math.min(page, totalPages)
   const paginated = filtered.slice((currentPage - 1) * JAMS_PER_PAGE, currentPage * JAMS_PER_PAGE)
 
   // Reset to page 1 on filter changes.
-  useEffect(() => { setPage(1) }, [search, status, fromMonth, toMonth])
+  useEffect(() => { setPage(1) }, [search, status, fromMonth, toMonth, nsfwMode, sources, searchTags, excludedTags, minPow])
 
   // Prefetch an older batch as the user nears the last loaded page.
   useEffect(() => {
@@ -150,22 +168,10 @@ export function ModJamsPage() {
 
       <SearchBar value={search} onChange={setSearch} placeholder="Quick local search by title, game, or tags…" />
 
-      {/* Status tabs + month range */}
+      <JamFiltersBar availableClients={availableClients} resultCount={filtered.length} wotHiddenCount={wotHiddenCount} />
+
+      {/* Month range */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {STATUS_TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setStatus(t.key)}
-              className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                status === t.key ? 'bg-[#fc4462] text-white' : 'bg-[#212121] text-neutral-400 hover:text-neutral-200',
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
         <div className="flex items-center gap-2 text-xs text-neutral-400">
           <span>From</span>
           <MonthPicker
@@ -207,7 +213,7 @@ export function ModJamsPage() {
         </div>
       ) : paginated.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {paginated.map((jam) => <JamCard key={jam.coordinate} jam={jam} />)}
+          {paginated.map((jam) => <JamCard key={jam.aTag} jam={jam} />)}
         </div>
       ) : (
         <p className="py-16 text-center text-neutral-500">

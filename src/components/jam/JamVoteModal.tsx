@@ -62,7 +62,7 @@ export function JamVoteModal({
     setPublishing(true)
     try {
       const form: JamBallotFormState = {
-        jamCoordinate: jam.coordinate,
+        jamCoordinate: jam.aTag,
         jamDTag: jam.dTag,
         submissionCoordinate,
         submissionDTag,
@@ -86,7 +86,7 @@ export function JamVoteModal({
         pubkey: result.event.pubkey,
         dTag: result.event.tags.find((t) => t[0] === 'd')?.[1] ?? '',
         createdAt: result.event.created_at,
-        jamCoordinate: jam.coordinate,
+        jamCoordinate: jam.aTag,
         submissionCoordinate,
         scores: form.scores,
         comment: comment.trim(),

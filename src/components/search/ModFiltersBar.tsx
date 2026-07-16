@@ -126,7 +126,7 @@ export function TagEditor({ tags, onChange, placeholder }: {
   )
 }
 
-function SourcesEditor({ sources, onChange, availableClients }: {
+export function SourcesEditor({ sources, onChange, availableClients }: {
   sources: SourceEntry[]
   onChange: (s: SourceEntry[]) => void
   availableClients: string[]

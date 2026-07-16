@@ -1,15 +1,15 @@
 import { useMemo } from 'react'
 import { useBlockStore } from '@/stores/blockStore'
-import type { ModDetails } from '@/types/mod'
 
 /**
- * Removes mods authored by users you've blocked (your personal mute list).
- * Always applies — blocking is an explicit, personal action.
+ * Removes posts authored by users you've blocked (your personal mute list).
+ * Always applies — blocking is an explicit, personal action. Works on anything
+ * carrying an author pubkey (mods, jams, …).
  */
-export function useBlockFilter(): (mods: ModDetails[]) => ModDetails[] {
+export function useBlockFilter(): <T extends { pubkey: string }>(items: T[]) => T[] {
   const blocked = useBlockStore((s) => s.blockedPubkeys)
   return useMemo(
-    () => (mods) => (blocked.size ? mods.filter((m) => !blocked.has(m.pubkey)) : mods),
+    () => <T extends { pubkey: string }>(items: T[]) => (blocked.size ? items.filter((m) => !blocked.has(m.pubkey)) : items),
     [blocked],
   )
 }

@@ -167,7 +167,7 @@ export function JamPage() {
   if (notFound || !jam) return <div className="py-24 text-center text-neutral-400">Mod jam not found.</div>
 
   const status = jamStatus(jam, now)
-  const target: NostrTarget = { id: jam.id, pubkey: jam.pubkey, kind: KINDS.JAM, aTag: jam.coordinate }
+  const target: NostrTarget = { id: jam.id, pubkey: jam.pubkey, kind: KINDS.JAM, aTag: jam.aTag }
   const hasWarning = !!jam.contentWarning && !revealed
   const isAuthor = myPubkey === jam.pubkey
   const canSubmit = status === 'active'

@@ -16,6 +16,7 @@ import { persist } from 'zustand/middleware'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { useModFiltersStore } from '@/stores/modFiltersStore'
+import { useJamFiltersStore } from '@/stores/jamFiltersStore'
 import {
   KINDS, ADMIN_PUBKEY, MODERATION_EXCLUDED_TAGS_DTAG, BLOCKED_MODS_DTAG,
   DEFAULT_EXCLUDED_TAGS,
@@ -74,7 +75,9 @@ export const useModerationStore = create<ModerationState>()(
               .filter((t) => t[0] === 't' && t[1])
               .map((t) => t[1].toLowerCase())
             next.excludedTags = tags
+            // Both listings track the admin defaults until the user customizes.
             useModFiltersStore.getState().applyExcludedTagsDefaults(tags)
+            useJamFiltersStore.getState().applyExcludedTagsDefaults(tags)
           }
           if (blockedEvent) next.blockedMods = parseBlockedMods(blockedEvent)
           if (muteEvent) {

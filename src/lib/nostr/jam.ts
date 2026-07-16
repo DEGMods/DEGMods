@@ -21,7 +21,7 @@ export interface JamDetails {
   id: string
   pubkey: string
   dTag: string
-  coordinate: string // 31143:<pubkey>:<d>
+  aTag: string // addressable coordinate: 31143:<pubkey>:<d>
   naddr: string
   createdAt: number
   publishedAt: number
@@ -202,7 +202,7 @@ export function extractJam(event: NostrEvent): JamDetails | null {
     id: event.id,
     pubkey: event.pubkey,
     dTag,
-    coordinate: `${KINDS.JAM}:${event.pubkey}:${dTag}`,
+    aTag: `${KINDS.JAM}:${event.pubkey}:${dTag}`,
     naddr,
     createdAt: event.created_at,
     publishedAt: Number(get('published_at')) || event.created_at,

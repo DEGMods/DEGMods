@@ -60,7 +60,7 @@ export function JamTallyModal({
       // 1. Entries — newest per coordinate, valid submissions only. Bounded at the
       // relay to the window a valid submission's created_at must fall in.
       const entryWindow = submissionWindow(jam)
-      const entryEvents = await fetchEvents(rd, { kinds: [KINDS.MOD], '#l': [JAM_ENTRY_LABEL], '#a': [jam.coordinate], since: entryWindow.since, until: entryWindow.until })
+      const entryEvents = await fetchEvents(rd, { kinds: [KINDS.MOD], '#l': [JAM_ENTRY_LABEL], '#a': [jam.aTag], since: entryWindow.since, until: entryWindow.until })
       const byCoord = new Map<string, typeof entryEvents[number]>()
       for (const ev of entryEvents) {
         const d = ev.tags.find((t) => t[0] === 'd')?.[1] ?? ''
@@ -85,7 +85,7 @@ export function JamTallyModal({
       for (let round = 0; round < 300; round++) {
         const batch = await fetchEvents(rd, {
           kinds: [KINDS.JAM_BALLOT],
-          '#a': [jam.coordinate],
+          '#a': [jam.aTag],
           since: jam.end,
           until,
           limit: 500,
@@ -133,7 +133,7 @@ export function JamTallyModal({
       setPageTotal(pages.length); setPagePublished(0)
 
       for (let i = 0; i < pages.length; i++) {
-        const ev = buildResultPageEvent(jam.coordinate, jam.dTag, i, pages.length, pages[i])
+        const ev = buildResultPageEvent(jam.aTag, jam.dTag, i, pages.length, pages[i])
         let ok = false
         for (let attempt = 0; attempt < 3 && !ok; attempt++) {
           const res = await signAndPublish(ev, undefined, 10000, jam.relays)

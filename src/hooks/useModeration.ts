@@ -5,24 +5,25 @@ import { useAuthStore } from '@/stores/authStore'
 import type { ModDetails } from '@/types/mod'
 
 /**
- * Returns a filter that removes admin-hidden mods (blocked mods + blocked
- * users) from discovery surfaces, unless the user has disabled soft moderation.
+ * Returns a filter that removes admin-hidden posts (blocked coordinates +
+ * blocked users) from discovery surfaces, unless the user has disabled soft
+ * moderation. Works on anything addressable (mods, jams, …).
  *
- * Authors are always exempt for their own mods: a blocked author still sees
+ * Authors are always exempt for their own posts: a blocked author still sees
  * their post in discovery (with the warning pill) so moderation doesn't bait
  * them into reposting / ban-evading. Everyone else gets the hidden behavior.
  */
-export function useModerationFilter(): (mods: ModDetails[]) => ModDetails[] {
+export function useModerationFilter(): <T extends { pubkey: string; aTag: string }>(items: T[]) => T[] {
   const blockedMods = useModerationStore((s) => s.blockedMods)
   const blockedUsers = useModerationStore((s) => s.blockedUsers)
   const softOn = usePreferencesStore((s) => s.softModeration)
   const myPubkey = useAuthStore((s) => s.pubkey)
 
   return useMemo(() => {
-    if (!softOn) return (mods) => mods
+    if (!softOn) return <T extends { pubkey: string; aTag: string }>(items: T[]) => items
     const coords = new Set(blockedMods.map((b) => b.coord))
     const users = new Set(blockedUsers)
-    return (mods) => mods.filter((m) =>
+    return <T extends { pubkey: string; aTag: string }>(items: T[]) => items.filter((m) =>
       m.pubkey === myPubkey || (!coords.has(m.aTag) && !users.has(m.pubkey))
     )
   }, [blockedMods, blockedUsers, softOn, myPubkey])
