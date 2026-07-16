@@ -43,6 +43,22 @@ const LIMITS = {
 
 const Counter = CharCounter
 
+// How many of each list a jam may have.
+const MAX = {
+  screenshots: 15,
+  games: 10,
+  tags: 20,
+  judges: 25,
+  rewards: 20,
+  faq: 30,
+  criteria: 25,
+} as const
+
+/** A small "N/max" item-count badge (amber once the cap is hit). */
+const CountBadge = ({ n, max }: { n: number; max: number }) => (
+  <span className={cn('text-[10px] tabular-nums', n >= max ? 'text-amber-400' : 'text-neutral-600')}>{n}/{max}</span>
+)
+
 /** One vote relay row: enabled toggle + url + remove. */
 interface VoteRelay { url: string; enabled: boolean }
 
@@ -140,10 +156,12 @@ const Label = ({ children, hint }: { children: React.ReactNode; hint?: string })
 
 const inputCls = 'border-[#262626] bg-[#212121] text-white placeholder:text-neutral-500'
 
-/** A chip-list input (tags, judges): type + Enter to add, click × to remove. */
-function ChipInput({ items, onChange, placeholder, transform, maxLength }: { items: string[]; onChange: (v: string[]) => void; placeholder: string; transform?: (s: string) => string; maxLength?: number }) {
+/** A chip-list input (tags): type + Enter to add, click × to remove. */
+function ChipInput({ items, onChange, placeholder, transform, maxLength, max }: { items: string[]; onChange: (v: string[]) => void; placeholder: string; transform?: (s: string) => string; maxLength?: number; max?: number }) {
   const [val, setVal] = useState('')
+  const full = max !== undefined && items.length >= max
   const add = () => {
+    if (full) return
     const v = (transform ? transform(val) : val).trim()
     if (v && !items.includes(v)) onChange([...items, v])
     setVal('')
@@ -151,8 +169,12 @@ function ChipInput({ items, onChange, placeholder, transform, maxLength }: { ite
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
-        <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} placeholder={placeholder} maxLength={maxLength} className={inputCls} />
-        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add}><Plus className="h-4 w-4" /></Button>
+        <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} placeholder={placeholder} maxLength={maxLength} disabled={full} className={inputCls} />
+        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add} disabled={full}><Plus className="h-4 w-4" /></Button>
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        {maxLength && <Counter value={val} max={maxLength} />}
+        {max !== undefined && <CountBadge n={items.length} max={max} />}
       </div>
       {items.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -169,9 +191,11 @@ function ChipInput({ items, onChange, placeholder, transform, maxLength }: { ite
 }
 
 /** Games chip input with games-DB autocomplete on the entry field. */
-function GameChipInput({ games, onChange, maxLength }: { games: string[]; onChange: (v: string[]) => void; maxLength?: number }) {
+function GameChipInput({ games, onChange, maxLength, max }: { games: string[]; onChange: (v: string[]) => void; maxLength?: number; max?: number }) {
   const [val, setVal] = useState('')
+  const full = max !== undefined && games.length >= max
   const add = (game?: string) => {
+    if (full) return
     const v = (game ?? val).trim()
     if (v && !games.includes(v)) onChange([...games, v])
     setVal('')
@@ -180,9 +204,13 @@ function GameChipInput({ games, onChange, maxLength }: { games: string[]; onChan
     <div className="space-y-2">
       <div className="flex gap-2">
         <div className="flex-1" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}>
-          <GameAutocomplete value={val} onChange={setVal} onSelect={(g) => add(g)} maxLength={maxLength} placeholder="Add a game and press Enter" className={inputCls} />
+          <GameAutocomplete value={val} onChange={setVal} onSelect={(g) => add(g)} maxLength={maxLength} placeholder="Add a game and press Enter" className={inputCls} disabled={full} />
         </div>
-        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={() => add()}><Plus className="h-4 w-4" /></Button>
+        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={() => add()} disabled={full}><Plus className="h-4 w-4" /></Button>
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        {maxLength && <Counter value={val} max={maxLength} />}
+        {max !== undefined && <CountBadge n={games.length} max={max} />}
       </div>
       {games.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -226,6 +254,7 @@ function VoteRelayList({ relays, onChange }: { relays: VoteRelay[]; onChange: (v
         <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} placeholder="wss://…" maxLength={LIMITS.relay} className={`${inputCls} font-mono text-xs`} />
         <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add}><Plus className="h-4 w-4" /></Button>
       </div>
+      <div className="flex justify-end"><Counter value={val} max={LIMITS.relay} /></div>
       <Button type="button" variant="outline" size="sm" className="gap-1.5 border-[#262626] text-xs" onClick={() => onChange(defaultVoteRelays())}>
         <RotateCcw className="h-3 w-3" /> Reset to defaults
       </Button>
@@ -282,7 +311,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
     if (s.votingEnabled && s.judges.length === 0) return toast.error('Add at least one judge (or turn off judge voting)')
     const labels = s.customCriteria ? s.criteria.map((c) => c.trim()).filter(Boolean) : []
     if (s.customCriteria && labels.length < 2) return toast.error('Custom scoring needs at least 2 criteria')
-    if (labels.length > 6) return toast.error('Up to 6 criteria')
+    if (labels.length > MAX.criteria) return toast.error(`Up to ${MAX.criteria} criteria`)
     const criteria: JamCriterion[] = labels.map((label) => ({ label, max: s.scoreMax }))
     if (relays.length === 0) return toast.error('Enable at least one relay for votes')
 
@@ -376,11 +405,16 @@ export function JamEditor({ editJam, onPublish, publishing }: {
 
       {/* Games + tags + screenshots */}
       <Section title="Games & tags">
-        <div className="space-y-1.5"><Label>Games <span className="text-neutral-600">(leave empty for a general "any game" jam)</span></Label><GameChipInput games={s.games} onChange={(v) => set('games', v)} maxLength={LIMITS.game} /></div>
-        <div className="space-y-1.5"><Label>Tags <span className="text-[#fc4462]">*</span></Label><ChipInput items={s.tags} onChange={(v) => set('tags', v)} placeholder="Add a tag and press Enter" transform={(x) => x.toLowerCase()} maxLength={LIMITS.tag} /></div>
+        <div className="space-y-1.5"><Label>Games <span className="text-neutral-600">(leave empty for a general "any game" jam)</span></Label><GameChipInput games={s.games} onChange={(v) => set('games', v)} maxLength={LIMITS.game} max={MAX.games} /></div>
+        <div className="space-y-1.5"><Label>Tags <span className="text-[#fc4462]">*</span></Label><ChipInput items={s.tags} onChange={(v) => set('tags', v)} placeholder="Add a tag and press Enter" transform={(x) => x.toLowerCase()} maxLength={LIMITS.tag} max={MAX.tags} /></div>
         <div className="space-y-1.5">
-          <Label>Promo screenshots</Label>
-          <BlossomUploadField accept={IMAGE_UPLOAD_ACCEPT} label="Upload a screenshot" onUploaded={(r) => set('screenshots', [...s.screenshots, r.url])} resetAfter />
+          <div className="flex items-center justify-between">
+            <Label>Promo screenshots</Label>
+            <CountBadge n={s.screenshots.length} max={MAX.screenshots} />
+          </div>
+          {s.screenshots.length < MAX.screenshots
+            ? <BlossomUploadField accept={IMAGE_UPLOAD_ACCEPT} label="Upload a screenshot" onUploaded={(r) => set('screenshots', [...s.screenshots, r.url])} resetAfter />
+            : <p className="rounded-lg border border-[#262626] bg-[#212121] px-3 py-2 text-xs text-neutral-500">Maximum of {MAX.screenshots} screenshots reached.</p>}
           {s.screenshots.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {s.screenshots.map((url, i) => (
@@ -420,7 +454,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
         </div>
 
         {s.votingEnabled && (
-          <div className="space-y-1.5"><Label>Judges <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(name or npub)</span></Label><JudgeList judges={s.judges} onChange={(v) => set('judges', v)} maxLength={LIMITS.judge} /></div>
+          <div className="space-y-1.5"><Label>Judges <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(name or npub)</span></Label><JudgeList judges={s.judges} onChange={(v) => set('judges', v)} maxLength={LIMITS.judge} max={MAX.judges} /></div>
         )}
 
         {votingOn && (
@@ -434,12 +468,20 @@ export function JamEditor({ editJam, onPublish, publishing }: {
             {s.customCriteria && (
               <div className="space-y-2">
                 {s.criteria.map((label, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input value={label} onChange={(e) => set('criteria', s.criteria.map((x, j) => j === i ? e.target.value : x))} placeholder="Criterion (e.g. Graphics)" maxLength={LIMITS.criterion} className={`${inputCls} flex-1`} />
-                    {s.criteria.length > 2 && <button type="button" onClick={() => set('criteria', s.criteria.filter((_, j) => j !== i))} className="text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
+                  <div key={i} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Input value={label} onChange={(e) => set('criteria', s.criteria.map((x, j) => j === i ? e.target.value : x))} placeholder="Criterion (e.g. Graphics)" maxLength={LIMITS.criterion} className={`${inputCls} flex-1`} />
+                      {s.criteria.length > 2 && <button type="button" onClick={() => set('criteria', s.criteria.filter((_, j) => j !== i))} className="text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
+                    </div>
+                    <Counter value={label} max={LIMITS.criterion} />
                   </div>
                 ))}
-                {s.criteria.length < 6 && <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('criteria', [...s.criteria, ''])}><Plus className="mr-1 h-3 w-3" /> Add criterion</Button>}
+                <div className="flex items-center justify-between">
+                  {s.criteria.length < MAX.criteria
+                    ? <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('criteria', [...s.criteria, ''])}><Plus className="mr-1 h-3 w-3" /> Add criterion</Button>
+                    : <span />}
+                  <CountBadge n={s.criteria.length} max={MAX.criteria} />
+                </div>
               </div>
             )}
 
@@ -453,6 +495,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
                 <div className="flex items-center gap-3 pt-1">
                   <Slider min={2} max={100} step={1} value={[s.scoreMax]} onValueChange={([v]) => set('scoreMax', v)} className="flex-1" />
                   <span className="w-10 text-right text-sm font-semibold tabular-nums text-[#fc4462]">{s.scoreMax}</span>
+                  <button type="button" onClick={() => set('scoreMax', 10)} disabled={s.scoreMax === 10} className="text-neutral-500 hover:text-[#fc4462] disabled:opacity-40" title="Reset to default (10)"><RotateCcw className="h-3.5 w-3.5" /></button>
                 </div>
               )}
             </div>
@@ -463,23 +506,31 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       {/* Rewards */}
       <Section title="Rewards">
         {s.rewards.map((r, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div className="flex shrink-0 overflow-hidden rounded-md border border-[#262626] text-xs">
-              <button type="button" onClick={() => set('rewards', s.rewards.map((x, j) => j === i ? { type: 'monetary', currency: '', amount: '' } : x))} className={cn('px-2 py-1.5', r.type === 'monetary' ? 'bg-[#fc4462] text-white' : 'bg-[#212121] text-neutral-400')}>Financial</button>
-              <button type="button" onClick={() => set('rewards', s.rewards.map((x, j) => j === i ? { type: 'other', text: '' } : x))} className={cn('px-2 py-1.5', r.type === 'other' ? 'bg-[#fc4462] text-white' : 'bg-[#212121] text-neutral-400')}>Other</button>
+          <div key={i} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="flex shrink-0 overflow-hidden rounded-md border border-[#262626] text-xs">
+                <button type="button" onClick={() => set('rewards', s.rewards.map((x, j) => j === i ? { type: 'monetary', currency: '', amount: '' } : x))} className={cn('px-2 py-1.5', r.type === 'monetary' ? 'bg-[#fc4462] text-white' : 'bg-[#212121] text-neutral-400')}>Financial</button>
+                <button type="button" onClick={() => set('rewards', s.rewards.map((x, j) => j === i ? { type: 'other', text: '' } : x))} className={cn('px-2 py-1.5', r.type === 'other' ? 'bg-[#fc4462] text-white' : 'bg-[#212121] text-neutral-400')}>Other</button>
+              </div>
+              {r.type === 'monetary' ? (
+                <>
+                  <Input value={r.currency} onChange={(e) => set('rewards', s.rewards.map((x, j) => j === i ? { ...x, currency: e.target.value } : x))} placeholder="USD / sats / €" maxLength={LIMITS.rewardCurrency} className={`${inputCls} w-28`} />
+                  <Input value={r.amount} onChange={(e) => set('rewards', s.rewards.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))} placeholder="Amount" maxLength={LIMITS.rewardAmount} className={`${inputCls} flex-1`} />
+                </>
+              ) : (
+                <Input value={r.text} onChange={(e) => set('rewards', s.rewards.map((x, j) => j === i ? { ...x, text: e.target.value } : x))} placeholder="e.g. Featured spot for a month" maxLength={LIMITS.rewardText} className={`${inputCls} flex-1`} />
+              )}
+              <button type="button" onClick={() => set('rewards', s.rewards.filter((_, j) => j !== i))} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>
             </div>
-            {r.type === 'monetary' ? (
-              <>
-                <Input value={r.currency} onChange={(e) => set('rewards', s.rewards.map((x, j) => j === i ? { ...x, currency: e.target.value } : x))} placeholder="USD / sats / €" maxLength={LIMITS.rewardCurrency} className={`${inputCls} w-28`} />
-                <Input value={r.amount} onChange={(e) => set('rewards', s.rewards.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))} placeholder="Amount" maxLength={LIMITS.rewardAmount} className={`${inputCls} flex-1`} />
-              </>
-            ) : (
-              <Input value={r.text} onChange={(e) => set('rewards', s.rewards.map((x, j) => j === i ? { ...x, text: e.target.value } : x))} placeholder="e.g. Featured spot for a month" maxLength={LIMITS.rewardText} className={`${inputCls} flex-1`} />
-            )}
-            <button type="button" onClick={() => set('rewards', s.rewards.filter((_, j) => j !== i))} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>
+            {r.type === 'other' && <Counter value={r.text} max={LIMITS.rewardText} />}
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('rewards', [...s.rewards, { type: 'monetary', currency: '', amount: '' }])}><Plus className="mr-1 h-3 w-3" /> Add reward</Button>
+        <div className="flex items-center justify-between">
+          {s.rewards.length < MAX.rewards
+            ? <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('rewards', [...s.rewards, { type: 'monetary', currency: '', amount: '' }])}><Plus className="mr-1 h-3 w-3" /> Add reward</Button>
+            : <span />}
+          <CountBadge n={s.rewards.length} max={MAX.rewards} />
+        </div>
         <div className="space-y-1.5">
           <Label>How rewards are distributed</Label>
           <Textarea value={s.rewardNote} onChange={(e) => set('rewardNote', e.target.value)} rows={2} placeholder="e.g. 1st place takes the pool; runner-up gets…" maxLength={LIMITS.rewardNote} className={inputCls} />
@@ -501,10 +552,17 @@ export function JamEditor({ editJam, onPublish, publishing }: {
               <Input value={f.question} onChange={(e) => set('faq', s.faq.map((x, j) => j === i ? { ...x, question: e.target.value } : x))} placeholder="Question" maxLength={LIMITS.faqQuestion} className={`${inputCls} flex-1`} />
               <button type="button" onClick={() => set('faq', s.faq.filter((_, j) => j !== i))} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>
             </div>
+            <Counter value={f.question} max={LIMITS.faqQuestion} />
             <Textarea value={f.answer} onChange={(e) => set('faq', s.faq.map((x, j) => j === i ? { ...x, answer: e.target.value } : x))} rows={2} placeholder="Answer" maxLength={LIMITS.faqAnswer} className={inputCls} />
+            <Counter value={f.answer} max={LIMITS.faqAnswer} />
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('faq', [...s.faq, { question: '', answer: '' }])}><Plus className="mr-1 h-3 w-3" /> Add Q&amp;A</Button>
+        <div className="flex items-center justify-between">
+          {s.faq.length < MAX.faq
+            ? <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('faq', [...s.faq, { question: '', answer: '' }])}><Plus className="mr-1 h-3 w-3" /> Add Q&amp;A</Button>
+            : <span />}
+          <CountBadge n={s.faq.length} max={MAX.faq} />
+        </div>
       </Section>
 
       <Button onClick={submit} disabled={publishing} className="w-full gap-2 bg-[#fc4462] text-white hover:bg-[#e23a56]">

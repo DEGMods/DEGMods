@@ -4,8 +4,10 @@ import { Plus, X, User } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { CharCounter } from '@/components/shared/CharCounter'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
+import { cn } from '@/lib/utils'
 
 const inputCls = 'border-[#262626] bg-[#212121] text-white placeholder:text-neutral-500'
 
@@ -62,9 +64,11 @@ function JudgeRow({ value, onRemove }: { value: string; onRemove: () => void }) 
 }
 
 /** Judge entry: add by name or npub; each judge is a full-width row (npubs show a profile). */
-export function JudgeList({ judges, onChange, maxLength }: { judges: string[]; onChange: (v: string[]) => void; maxLength?: number }) {
+export function JudgeList({ judges, onChange, maxLength, max }: { judges: string[]; onChange: (v: string[]) => void; maxLength?: number; max?: number }) {
   const [val, setVal] = useState('')
+  const full = max !== undefined && judges.length >= max
   const add = () => {
+    if (full) return
     const v = val.trim()
     if (v && !judges.includes(v)) onChange([...judges, v])
     setVal('')
@@ -72,8 +76,12 @@ export function JudgeList({ judges, onChange, maxLength }: { judges: string[]; o
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
-        <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} placeholder="Add a judge (name or npub) and press Enter" maxLength={maxLength} className={inputCls} />
-        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add}><Plus className="h-4 w-4" /></Button>
+        <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} placeholder="Add a judge (name or npub) and press Enter" maxLength={maxLength} disabled={full} className={inputCls} />
+        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add} disabled={full}><Plus className="h-4 w-4" /></Button>
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        {maxLength && <CharCounter value={val} max={maxLength} />}
+        {max !== undefined && <span className={cn('text-[10px] tabular-nums', judges.length >= max ? 'text-amber-400' : 'text-neutral-600')}>{judges.length}/{max}</span>}
       </div>
       {judges.length > 0 && (
         <div className="space-y-1.5">

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
-import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw } from 'lucide-react'
+import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -280,9 +280,15 @@ export function JamPage() {
           {/* FAQ */}
           {jam.faq.length > 0 && (
             <Section title="FAQ">
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {jam.faq.map((f, i) => (
-                  <div key={i}><p className="text-sm font-medium text-neutral-200">{f.question}</p><p className="mt-0.5 text-sm text-neutral-400">{f.answer}</p></div>
+                  <details key={i} className="group rounded-lg border border-[#262626] bg-[#212121] px-3 py-2.5">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-neutral-200">
+                      {f.question}
+                      <ChevronDown className="h-4 w-4 shrink-0 text-neutral-500 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-400">{f.answer}</p>
+                  </details>
                 ))}
               </div>
             </Section>
