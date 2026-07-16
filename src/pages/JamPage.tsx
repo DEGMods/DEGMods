@@ -305,8 +305,6 @@ export function JamPage() {
               </div>
             </Section>
           )}
-
-          <CommentSection root={target} />
         </div>
 
         {/* Sidebar */}
@@ -361,6 +359,11 @@ export function JamPage() {
           {naddr && <ShareBox url={`${window.location.origin}/mod-jam/${naddr}`} title={jam.title} />}
           <SidebarAd />
         </div>
+      </div>
+
+      {/* Comments — full width below both columns (so on mobile they sit at the bottom) */}
+      <div className="mt-8">
+        <CommentSection root={target} />
       </div>
 
       {tallyOpen && <JamTallyModal open={tallyOpen} onOpenChange={setTallyOpen} jam={jam} />}
