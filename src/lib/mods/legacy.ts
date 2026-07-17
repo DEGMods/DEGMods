@@ -132,6 +132,7 @@ export function extractLegacyModData(event: NostrEvent): ModDetails {
     emulation: false,
     emulatedPlatform: undefined,
     forMod: undefined,
+    elsewhere: [], // LEGACY: predates the elsewhere tag
     dependencies: [],
     screenshots: allValues('screenshotsUrls'),
     tags: allValues('tags'),
@@ -172,6 +173,7 @@ export function legacyToForm(mod: ModDetails): ModFormState {
     forMod: '',
     jamEnabled: false,
     jamNaddr: '',
+    elsewhere: [],
     dependenciesEnabled: false,
     dependencies: [],
     screenshots: mod.screenshots.length ? mod.screenshots : [''],

@@ -101,6 +101,9 @@ export function extractCategories(event: NostrEvent): string[] {
 
 // ─── Mod Events (kind 31142) ─────────────────────────────────────────
 
+/** Max `elsewhere` links (other places this mod is available) per mod. */
+export const MAX_ELSEWHERE = 3
+
 export function buildModEvent(form: ModFormState): UnsignedEvent {
   const now = Math.floor(Date.now() / 1000)
   const createdAt = form.isEdit && form.previousCreatedAt
@@ -128,6 +131,11 @@ export function buildModEvent(form: ModFormState): UnsignedEvent {
   if (form.jamEnabled && form.jamNaddr.trim()) {
     const coord = jamCoordinateFromNaddr(form.jamNaddr)
     if (coord) tags.push(...submissionTags(coord))
+  }
+
+  // Elsewhere (optional): other places this mod is available — one tag per link.
+  for (const u of form.elsewhere.map(s => s.trim()).filter(Boolean).slice(0, MAX_ELSEWHERE)) {
+    tags.push(['elsewhere', u])
   }
 
   // Dependencies (optional): one tag per item — ['dependencies', title, value].
@@ -345,6 +353,7 @@ export function extractModData(event: NostrEvent): ModDetails {
     emulatedPlatform,
     forMod: getTag('m') || undefined,
     jamCoordinate,
+    elsewhere: getTags('elsewhere').filter(Boolean).slice(0, MAX_ELSEWHERE),
     dependencies: event.tags
       .filter(t => t[0] === 'dependencies')
       .map(t => ({ title: t[1] || '', value: t[2] || '' }))

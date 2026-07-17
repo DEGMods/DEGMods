@@ -28,6 +28,7 @@ import {
   Layers,
   Boxes,
   RotateCcw,
+  ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,7 +40,7 @@ import { BlossomUploadField } from '@/components/upload/BlossomUploadField'
 import { EmulatedPlatformField } from '@/components/mod/EmulatedPlatformField'
 import { DownloadScanReports } from '@/components/mod/DownloadScanReports'
 import { IMAGE_UPLOAD_ACCEPT, MOD_FILE_UPLOAD_ACCEPT, MOD_FILE_UPLOAD_LIMIT_MB, CATEGORY_MAX_DEPTH, CATEGORY_MAX_CHAINS, CATEGORY_SEGMENT_MAXLEN } from '@/lib/constants'
-import { categoryCovers } from '@/lib/nostr/events'
+import { categoryCovers, MAX_ELSEWHERE } from '@/lib/nostr/events'
 import { useSubmitSuggestions } from '@/hooks/useSubmitSuggestions'
 import { CharCounter } from '@/components/shared/CharCounter'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -88,6 +89,7 @@ const LIMITS = {
   emulatedPlatform: 50,
   dependencyTitle: 50,
   dependencyValue: 200,
+  elsewhere: 100,
 } as const
 const MAX_SCREENSHOTS = 15
 const MAX_DOWNLOADS = 10
@@ -402,6 +404,16 @@ export function ModEditor({
     const next = form.dependencies.filter((_, i) => i !== index)
     updateField('dependencies', next.length ? next : [{ title: '', value: '' }])
   }
+
+  // ─── "Available elsewhere" helpers ─────────────────────────────
+  const updateElsewhere = (index: number, val: string) =>
+    updateField('elsewhere', form.elsewhere.map((u, i) => (i === index ? val : u)))
+  const addElsewhere = () => {
+    if (form.elsewhere.length >= MAX_ELSEWHERE) return
+    updateField('elsewhere', [...form.elsewhere, ''])
+  }
+  const removeElsewhere = (index: number) =>
+    updateField('elsewhere', form.elsewhere.filter((_, i) => i !== index))
 
   // ─── Download helpers ──────────────────────────────────────────
   const updateDownload = (index: number, patch: Partial<DownloadEntry>) => {
@@ -1003,6 +1015,54 @@ export function ModEditor({
               </div>
             </div>
           )}
+        </div>
+      </Section>
+
+      {/* ── 13. Available elsewhere ─────────────────────────────── */}
+      <Section icon={ExternalLink} label="Available elsewhere" step={5} order={19}>
+        <div className="space-y-3">
+          <p className="text-xs leading-relaxed text-neutral-500">
+            Other places this same mod is available (its Nexus/ModDB/GameBanana page, your own site…).
+            Shown on the mod post under the ⋯ menu, not in the main body.
+          </p>
+          <div className="space-y-2">
+            {form.elsewhere.map((url, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <div className="flex-1">
+                  <Input
+                    value={url}
+                    onChange={(e) => updateElsewhere(i, e.target.value)}
+                    placeholder="https://…"
+                    maxLength={LIMITS.elsewhere}
+                    className={inputClass}
+                  />
+                  <Counter value={url} max={LIMITS.elsewhere} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeElsewhere(i)}
+                  className="shrink-0 rounded p-2 text-neutral-500 transition-colors hover:bg-[#2a2a2a] hover:text-red-400"
+                  aria-label="Remove link"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center">
+              {form.elsewhere.length < MAX_ELSEWHERE && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addElsewhere}
+                  className="text-xs border-[#262626] bg-transparent hover:bg-[#2a2a2a] text-neutral-400"
+                >
+                  <Plus size={14} className="mr-1" /> Add link
+                </Button>
+              )}
+              <span className="ml-2 text-[10px] text-neutral-600">{form.elsewhere.length}/{MAX_ELSEWHERE}</span>
+            </div>
+          </div>
         </div>
       </Section>
 

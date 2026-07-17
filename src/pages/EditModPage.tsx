@@ -66,6 +66,7 @@ export function EditModPage() {
           forMod: modData.forMod || '',
           jamEnabled: !!modData.jamCoordinate,
           jamNaddr: modData.jamCoordinate ? (jamNaddrFromCoordinate(modData.jamCoordinate) || '') : '',
+          elsewhere: modData.elsewhere,
           dependenciesEnabled: modData.dependencies.length > 0,
           dependencies: modData.dependencies.length > 0 ? modData.dependencies : [{ title: '', value: '' }],
           screenshots: modData.screenshots.length > 0 ? modData.screenshots : [''],

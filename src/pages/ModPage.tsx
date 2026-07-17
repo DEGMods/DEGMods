@@ -109,6 +109,7 @@ export default function ModPage() {
   const [depsOpen, setDepsOpen] = useState(true)
 
   const [showRawDialog, setShowRawDialog] = useState(false)
+  const [showElsewhereDialog, setShowElsewhereDialog] = useState(false)
   const [showReportDialog, setShowReportDialog] = useState(false)
   const [readableRaw, setReadableRaw] = useState(false)
   const rawJson = useMemo(
@@ -427,6 +428,12 @@ export default function ModPage() {
               <FileJson className="h-4 w-4 mr-2" />
               View Raw Event
             </DropdownMenuItem>
+            {mod.elsewhere.length > 0 && (
+              <DropdownMenuItem onClick={() => setShowElsewhereDialog(true)} className="cursor-pointer">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Available elsewhere
+              </DropdownMenuItem>
+            )}
 
             <DropdownMenuSeparator className="bg-[#262626]" />
 
@@ -756,6 +763,38 @@ export default function ModPage() {
         noun="mod"
         onDeleted={() => { setDeleted(true); setShowDeleteDialog(false) }}
       />
+
+      {/* Available elsewhere dialog */}
+      <Dialog open={showElsewhereDialog} onOpenChange={setShowElsewhereDialog}>
+        <DialogContent className="bg-[#1c1c1c] border-[#262626]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-neutral-100">
+              <ExternalLink className="h-5 w-5 text-purple-400" />
+              Available elsewhere
+            </DialogTitle>
+            <DialogDescription className="text-neutral-400">
+              Other places the publisher says this mod is available. These are external sites — DEG Mods
+              doesn&apos;t vet them.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {mod.elsewhere.map((url, i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="flex items-center justify-between gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2.5 transition-colors hover:border-[#404040]"
+              >
+                <span className="min-w-0 truncate font-mono text-xs text-neutral-300">{url}</span>
+                <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-purple-400">
+                  Open <ExternalLink className="h-3.5 w-3.5" />
+                </span>
+              </a>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Raw Event dialog */}
       <Dialog open={showRawDialog} onOpenChange={setShowRawDialog}>

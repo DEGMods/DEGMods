@@ -50,7 +50,10 @@ A game mod is published as a **Nostr addressable replaceable event** with kind `
     ["notes", "Big thanks to the ReShade community for testing. Lower EMERALD_STRENGTH to 0.7 for Dogtown."],
     ["credits", "LUT tables based on work by @CinematicDave. Rain reflection shader from MariasGFX."],
     ["c", "graphics:reshade"],
-    ["c", "visuals:lighting"]
+    ["c", "visuals:lighting"],
+    ["elsewhere", "https://www.nexusmods.com/cyberpunk2077/mods/1234"],
+    ["l", "jam-entry"],
+    ["a", "31143:3bf0c63f...:winter-survival-2026"]
   ]
 }
 ```
@@ -455,6 +458,35 @@ For each chain the author enters, the event carries three kinds of tags, **all d
 
 ---
 
+### `a` — Linked Addressable Event
+
+```json
+["a", "31143:<jam-pubkey>:<jam-d>"]
+```
+
+- **Required:** No
+- **Repeatable:** Yes
+- **Format:** A standard addressable coordinate, `<kind>:<pubkey>:<d>`.
+- **Purpose:** Points at another addressable event this mod belongs to. `a` says **which**; the paired `l` says **what the link means** — neither is meaningful alone. The first (and currently only) use is jam entries: a mod carrying `["l","jam-entry"]` + `["a","31143:…"]` is an entry in that jam. See [jam-event.md](./jam-event.md#submissions--linking-an-entry-to-a-jam).
+- **Single-letter, so relay-indexed** — `#a` is directly filterable, which is what makes "fetch one jam's entries" a single query.
+
+---
+
+### `elsewhere` — Other Places This Mod Is Available
+
+```json
+["elsewhere", "https://www.nexusmods.com/…"],
+["elsewhere", "https://gamebanana.com/mods/…"]
+```
+
+- **Required:** No
+- **Repeatable:** Yes — one tag per link, **up to 3** (client-enforced on publish; extra tags are ignored on read).
+- **Format:** `["elsewhere", <url>]`. A link, max 100 chars.
+- **Purpose:** Where the publisher says this same mod is *also* available — its page on another mod site, their own site, etc. It is **not** a download link (that's `download`) and not a dependency or a related mod (`m` / `dependencies`).
+- **UI:** deliberately kept out of the mod body — surfaced under the mod post's `⋯` menu ("Available elsewhere"), which opens a dialog of links that open in a new tab. Clients should treat these as unvetted external links (`rel="noopener noreferrer nofollow"`).
+
+---
+
 ## Tag Summary Table
 
 | Tag | Required | Repeatable | Format | Example |
@@ -480,3 +512,5 @@ For each chain the author enters, the event carries three kinds of tags, **all d
 | `m` | No | No | Mod name, naddr, or link | `naddr1...` |
 | `dependencies` | No | Yes | `title` + value (name/naddr/link) | `["dependencies","ReShade","https://reshade.me/"]` |
 | `l` | No | Yes | Bare NIP-32 label | `jam-entry` (a jam submission; pairs with an `a` tag to the jam) |
+| `a` | No | Yes | `<kind>:<pubkey>:<d>` coordinate | `31143:<pk>:<d>` (which jam; pairs with `l`) |
+| `elsewhere` | No | Yes (max 3) | Link (≤100 chars) | `https://www.nexusmods.com/…` |
