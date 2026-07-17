@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Trophy, Gavel, Eye, Medal } from 'lucide-react'
+import { Vote, Eye, Medal, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useNow } from '@/hooks/useNow'
@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchLatestEvent, fetchEvents } from '@/lib/nostr/relay-pool'
+import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractJam, jamStatus, type JamDetails } from '@/lib/nostr/jam'
 import {
   extractBallot, ballotDTag, judgeHexSet, mergeResultPages,
@@ -36,6 +37,7 @@ export function ModJamBanner({
   const myPubkey = useAuthStore((s) => s.pubkey)
 
   const [jam, setJam] = useState<JamDetails | null>(null)
+  const [loading, setLoading] = useState(true)
   const [ballot, setBallot] = useState<JamBallot | null>(null)
   const [rank, setRank] = useState<JamResultRow | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -44,13 +46,32 @@ export function ModJamBanner({
   useEffect(() => {
     let cancelled = false
     const parts = jamCoordinate.split(':')
-    if (parts.length < 3) return
+    if (parts.length < 3) { setLoading(false); return }
     const pubkey = parts[1]
     const identifier = parts.slice(2).join(':')
-    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-    fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] })
-      .then((ev) => { if (!cancelled && ev) setJam(extractJam(ev)) })
-      .catch(() => { /* jam unavailable — banner just won't render */ })
+
+    ;(async () => {
+      setLoading(true)
+      // Instant when the jam is already cached (e.g. seen in a listing).
+      await whenEventCacheReady
+      if (cancelled) return
+      const cached = getCachedEvent(jamCoordinate)
+      const cachedJam = cached ? extractJam(cached) : null
+      if (cachedJam) { setJam(cachedJam); setLoading(false) }
+
+      try {
+        const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+        const ev = await fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] })
+        if (cancelled) return
+        const fresh = ev ? extractJam(ev) : null
+        if (fresh) setJam(fresh)
+      } catch {
+        /* keep the cached copy if we have one; otherwise the not-found state shows */
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
     return () => { cancelled = true }
   }, [jamCoordinate])
 
@@ -84,7 +105,26 @@ export function ModJamBanner({
     return () => { cancelled = true }
   }, [jam, myPubkey, submissionDTag])
 
-  if (!jam) return null
+  // The section holds its place while the jam resolves, so the mod page doesn't
+  // reflow once it lands.
+  const shell = 'space-y-2 rounded-lg border border-[#fc4462]/30 bg-[#fc4462]/10 px-3 py-2.5'
+  if (!jam) {
+    return loading ? (
+      <div className={shell}>
+        <span className="flex items-center gap-2 text-sm text-[#fc9db0]">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#fc4462]" />
+          Loading the mod jam this entry belongs to…
+        </span>
+      </div>
+    ) : (
+      <div className="space-y-2 rounded-lg border border-[#262626] bg-[#1c1c1c] px-3 py-2.5">
+        <span className="flex items-center gap-2 text-sm text-neutral-400">
+          <AlertCircle className="h-4 w-4 shrink-0 text-neutral-500" />
+          This mod is an entry in a mod jam that couldn’t be found on your relays.
+        </span>
+      </div>
+    )
+  }
 
   const hasVoting = jam.votingEnabled || jam.userVotingEnabled
   const status = jamStatus(jam, now)
@@ -93,20 +133,20 @@ export function ModJamBanner({
   const eligible = jam.userVotingEnabled || (jam.votingEnabled && isJudge)
 
   // Vote button state → { label, disabled, reason }.
-  let voteBtn: { label: string; disabled: boolean; reason?: string; icon: typeof Gavel } | null = null
+  let voteBtn: { label: string; disabled: boolean; reason?: string; icon: typeof Vote } | null = null
   if (hasVoting) {
     if (ballot) {
       voteBtn = { label: 'View your vote', disabled: false, icon: Eye }
     } else if (!myPubkey) {
-      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Gavel }
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Vote }
     } else if (!eligible) {
-      voteBtn = { label: 'Judges only', disabled: true, reason: 'Only the jam’s judges can score entries.', icon: Gavel }
+      voteBtn = { label: 'Judges only', disabled: true, reason: 'Only the jam’s judges can score entries.', icon: Vote }
     } else if (status === 'upcoming' || status === 'active') {
-      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting opens when submissions close.', icon: Gavel }
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting opens when submissions close.', icon: Vote }
     } else if (!inWindow) {
-      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting has ended.', icon: Gavel }
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting has ended.', icon: Vote }
     } else {
-      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Gavel }
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Vote }
     }
   }
 
@@ -116,32 +156,14 @@ export function ModJamBanner({
   }
 
   const naddr = jam.naddr
-  const VoteIcon = voteBtn?.icon ?? Gavel
+  const VoteIcon = voteBtn?.icon ?? Vote
 
   return (
     <TooltipProvider>
-      <div className="space-y-2 rounded-lg border border-[#fc4462]/30 bg-[#fc4462]/10 px-3 py-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Link to={`/mod-jam/${naddr}`} className="flex min-w-0 items-center gap-2 text-sm text-[#fc9db0] hover:text-[#fc4462]">
-            <Trophy className="h-4 w-4 shrink-0 text-[#fc4462]" />
-            <span className="truncate">Entry in the <span className="font-medium text-white">{jam.title}</span> mod jam</span>
-          </Link>
-
-          {voteBtn && (
-            voteBtn.disabled ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button size="sm" disabled className="gap-1.5 bg-[#fc4462]/40 text-xs text-white"><VoteIcon className="h-3.5 w-3.5" /> {voteBtn.label}</Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{voteBtn.reason}</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Button size="sm" onClick={onVoteClick} className="gap-1.5 bg-[#fc4462] text-xs text-white hover:bg-[#e23a56]"><VoteIcon className="h-3.5 w-3.5" /> {voteBtn.label}</Button>
-            )
-          )}
-        </div>
+      <div className={shell}>
+        <Link to={`/mod-jam/${naddr}`} className="block min-w-0 text-sm text-[#fc9db0] hover:text-[#fc4462]">
+          <span className="truncate">Entry in the <span className="font-medium text-white">{jam.title}</span> mod jam</span>
+        </Link>
 
         {/* Rank pills once results are published */}
         {rank && (rank.jRank > 0 || rank.uRank > 0) && (
@@ -153,6 +175,21 @@ export function ModJamBanner({
               <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-sky-300"><Medal className="h-3 w-3" /> Community #{rank.uRank} · {rank.user.avg.toFixed(1)} avg</span>
             )}
           </div>
+        )}
+
+        {voteBtn && (
+          voteBtn.disabled ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="block">
+                  <Button size="sm" disabled className="w-full gap-1.5 bg-[#fc4462]/40 text-xs text-white"><VoteIcon className="h-3.5 w-3.5" /> {voteBtn.label}</Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{voteBtn.reason}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button size="sm" onClick={onVoteClick} className="w-full gap-1.5 bg-[#fc4462] text-xs text-white hover:bg-[#e23a56]"><VoteIcon className="h-3.5 w-3.5" /> {voteBtn.label}</Button>
+          )
         )}
       </div>
 
