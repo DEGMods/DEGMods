@@ -11,6 +11,21 @@ export const MAX_JAM_DURATION_SECONDS = 366 * 24 * 60 * 60 // ~12 months
 
 export type JamType = 'mod' | 'game'
 
+/**
+ * The entry event kind a jam of each type accepts: a mod jam takes mods (31142);
+ * a game jam takes the future game kind. `game` is intentionally absent until
+ * that kind exists — so an entry claiming to be in a game jam matches no kind and
+ * is rejected (nothing can legitimately be a game-jam entry yet).
+ *
+ * TODO(game-kind): when the game event kind ships, add `game: KINDS.GAME` here.
+ * isValidSubmission already enforces this map, so that one line closes the loop —
+ * a mod (31142) can then never count as a game-jam entry, nor a game as a mod-jam
+ * entry. See docs/jam-event.md "Game Jams — Future Notes".
+ */
+export const JAM_ENTRY_KIND: Partial<Record<JamType, number>> = {
+  mod: KINDS.MOD,
+}
+
 export interface JamCriterion { label: string; max: number }
 export type JamReward =
   | { type: 'monetary'; currency: string; amount: string }
@@ -357,17 +372,21 @@ export function submissionWindow(jam: Pick<JamDetails, 'start' | 'end'>): { sinc
 }
 
 /**
- * A submission is valid (shown/counted) only if it was originally published during
- * the jam and isn't a repost. See docs/jam-event.md "Valid submission".
+ * A submission is valid (shown/counted) only if its kind matches the jam's type,
+ * it was originally published during the jam, and it isn't a repost. See
+ * docs/jam-event.md "Valid submission".
  */
-export function isValidSubmission(mod: NostrEvent, jam: Pick<JamDetails, 'start' | 'end'>): boolean {
-  const publishedAt = Number(mod.tags.find((t) => t[0] === 'published_at')?.[1]) || mod.created_at
-  const isRepost = mod.tags.some((t) => t[0] === 'repost' && t[1] === 'true')
+export function isValidSubmission(entry: NostrEvent, jam: Pick<JamDetails, 'start' | 'end' | 'jamType'>): boolean {
+  // Kind must match the jam's type — a mod (31142) only counts in a mod jam, a
+  // game only in a game jam. Until the game kind exists, game jams accept nothing.
+  if (entry.kind !== JAM_ENTRY_KIND[jam.jamType]) return false
+  const publishedAt = Number(entry.tags.find((t) => t[0] === 'published_at')?.[1]) || entry.created_at
+  const isRepost = entry.tags.some((t) => t[0] === 'repost' && t[1] === 'true')
   if (isRepost) return false
   // published_at is the authoritative gate; created_at only as a lower-bound sanity
   // check (+ a generous upper grace, since edits drift created_at up via +1).
   if (publishedAt < jam.start || publishedAt > jam.end) return false
   const { since, until } = submissionWindow(jam)
-  if (mod.created_at < since || mod.created_at > until) return false
+  if (entry.created_at < since || entry.created_at > until) return false
   return true
 }
