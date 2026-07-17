@@ -112,7 +112,9 @@ export function JamPage() {
   // Render a fetched event into page state (initial or refresh).
   const applyEvent = useCallback((ev: NostrEvent) => {
     const j = extractJam(ev)
-    if (!j) { setNotFound(true); setLoading(false); return }
+    // Mod client: only mod jams render here. A game jam (same kind) is treated as
+    // not found, matching its absence from the listing.
+    if (!j || j.jamType !== 'mod') { setNotFound(true); setLoading(false); return }
     setJam(j); setRawEvent(ev); setLoading(false)
   }, [])
 

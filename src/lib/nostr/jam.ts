@@ -9,22 +9,10 @@ export const JAM_ENTRY_LABEL = 'jam-entry'
 /** Clients must not publish a jam whose start→(voting_end||end) span exceeds this. */
 export const MAX_JAM_DURATION_SECONDS = 366 * 24 * 60 * 60 // ~12 months
 
+// The protocol's `j` tag can be `mod` or `game`, but DEG Mods is a mod client:
+// it only ever creates, lists, and processes mod jams. A game jam (`j=game`,
+// published by the future game client) is recognized only so it can be excluded.
 export type JamType = 'mod' | 'game'
-
-/**
- * The entry event kind a jam of each type accepts: a mod jam takes mods (31142);
- * a game jam takes the future game kind. `game` is intentionally absent until
- * that kind exists — so an entry claiming to be in a game jam matches no kind and
- * is rejected (nothing can legitimately be a game-jam entry yet).
- *
- * TODO(game-kind): when the game event kind ships, add `game: KINDS.GAME` here.
- * isValidSubmission already enforces this map, so that one line closes the loop —
- * a mod (31142) can then never count as a game-jam entry, nor a game as a mod-jam
- * entry. See docs/jam-event.md "Game Jams — Future Notes".
- */
-export const JAM_ENTRY_KIND: Partial<Record<JamType, number>> = {
-  mod: KINDS.MOD,
-}
 
 export interface JamCriterion { label: string; max: number }
 export type JamReward =
@@ -262,7 +250,8 @@ export function constructJamListFromEvents(events: NostrEvent[]): JamDetails[] {
     const prev = byCoord.get(key)
     if (!prev || ev.created_at > prev.created_at) byCoord.set(key, ev)
   }
-  return [...byCoord.values()].map(extractJam).filter((j): j is JamDetails => !!j && !!j.title)
+  // Mod client: only mod jams are listed. A game jam on the same kind is ignored.
+  return [...byCoord.values()].map(extractJam).filter((j): j is JamDetails => !!j && !!j.title && j.jamType === 'mod')
 }
 
 // ─── Lifecycle ───────────────────────────────────────────────────────
@@ -377,9 +366,9 @@ export function submissionWindow(jam: Pick<JamDetails, 'start' | 'end'>): { sinc
  * docs/jam-event.md "Valid submission".
  */
 export function isValidSubmission(entry: NostrEvent, jam: Pick<JamDetails, 'start' | 'end' | 'jamType'>): boolean {
-  // Kind must match the jam's type — a mod (31142) only counts in a mod jam, a
-  // game only in a game jam. Until the game kind exists, game jams accept nothing.
-  if (entry.kind !== JAM_ENTRY_KIND[jam.jamType]) return false
+  // DEG Mods only runs mod jams, so a valid entry is a mod (31142) in a mod jam.
+  // This also rejects a mod tagged into a game jam (wrong type).
+  if (jam.jamType !== 'mod' || entry.kind !== KINDS.MOD) return false
   const publishedAt = Number(entry.tags.find((t) => t[0] === 'published_at')?.[1]) || entry.created_at
   const isRepost = entry.tags.some((t) => t[0] === 'repost' && t[1] === 'true')
   if (isRepost) return false
