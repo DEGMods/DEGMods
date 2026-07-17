@@ -18,7 +18,7 @@ import { DatePicker } from './DatePicker'
 import { TimePicker, browserUses12h } from './TimePicker'
 import { IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { localToUnix, unixToLocal, type JamFormState, type JamReward, type JamCriterion, type JamFaq, type JamDetails } from '@/lib/nostr/jam'
+import { localToUnix, unixToLocal, MOD_JAM_TYPE, type JamFormState, type JamReward, type JamCriterion, type JamFaq, type JamDetails } from '@/lib/nostr/jam'
 import { cn } from '@/lib/utils'
 
 // ─── Character limits ───────────────────────────────────────────────
@@ -333,7 +333,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       screenshots: s.screenshots,
       games: s.games,
       tags: s.tags,
-      jamType: 'mod',
+      jamType: MOD_JAM_TYPE,
       start, end,
       votingEnabled: s.votingEnabled,
       userVotingEnabled: s.userVotingEnabled,

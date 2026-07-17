@@ -24,7 +24,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent, fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
-import { extractJam, jamStatus, jamCountdownLabel, type JamDetails } from '@/lib/nostr/jam'
+import { extractJam, isModJam, jamStatus, jamCountdownLabel, type JamDetails } from '@/lib/nostr/jam'
 import { KINDS } from '@/lib/constants'
 import type { NostrTarget } from '@/lib/nostr/social'
 import { cn } from '@/lib/utils'
@@ -112,9 +112,9 @@ export function JamPage() {
   // Render a fetched event into page state (initial or refresh).
   const applyEvent = useCallback((ev: NostrEvent) => {
     const j = extractJam(ev)
-    // Mod client: only mod jams render here. A game jam (same kind) is treated as
-    // not found, matching its absence from the listing.
-    if (!j || j.jamType !== 'mod') { setNotFound(true); setLoading(false); return }
+    // Mod client: only mod jams render here. Any non-mod jam (same kind) is
+    // treated as not found, matching its absence from the listing.
+    if (!j || !isModJam(j)) { setNotFound(true); setLoading(false); return }
     setJam(j); setRawEvent(ev); setLoading(false)
   }, [])
 
