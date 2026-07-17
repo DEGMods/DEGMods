@@ -9,6 +9,7 @@ import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BlossomUploadField } from '@/components/upload/BlossomUploadField'
 import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
+import { ScreenshotsEditor } from '@/components/shared/ScreenshotsEditor'
 import { JudgeList } from './JudgeList'
 import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
 import { Markdown } from '@/components/shared/Markdown'
@@ -28,6 +29,7 @@ const LIMITS = {
   content: 30000,
   imageUrl: 200,
   videoUrl: 200,
+  screenshotUrl: 200,
   game: 100,
   tag: 100,
   judge: 150,
@@ -407,24 +409,15 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       <Section title="Games & tags">
         <div className="space-y-1.5"><Label>Games <span className="text-neutral-600">(leave empty for a general "any game" jam)</span></Label><GameChipInput games={s.games} onChange={(v) => set('games', v)} maxLength={LIMITS.game} max={MAX.games} /></div>
         <div className="space-y-1.5"><Label>Tags <span className="text-[#fc4462]">*</span></Label><ChipInput items={s.tags} onChange={(v) => set('tags', v)} placeholder="Add a tag and press Enter" transform={(x) => x.toLowerCase()} maxLength={LIMITS.tag} max={MAX.tags} /></div>
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label>Promo screenshots</Label>
-            <CountBadge n={s.screenshots.length} max={MAX.screenshots} />
-          </div>
-          {s.screenshots.length < MAX.screenshots
-            ? <BlossomUploadField accept={IMAGE_UPLOAD_ACCEPT} label="Upload a screenshot" onUploaded={(r) => set('screenshots', [...s.screenshots, r.url])} resetAfter />
-            : <p className="rounded-lg border border-[#262626] bg-[#212121] px-3 py-2 text-xs text-neutral-500">Maximum of {MAX.screenshots} screenshots reached.</p>}
-          {s.screenshots.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {s.screenshots.map((url, i) => (
-                <div key={i} className="relative">
-                  <img src={url} alt="" className="h-16 w-24 rounded-md border border-[#262626] object-cover" />
-                  <button type="button" onClick={() => set('screenshots', s.screenshots.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 rounded-full bg-black/80 p-0.5 text-neutral-300 hover:text-red-400"><X className="h-3 w-3" /></button>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="space-y-3">
+          <Label>Promo screenshots</Label>
+          <ScreenshotsEditor
+            urls={s.screenshots}
+            onChange={(urls) => set('screenshots', urls)}
+            max={MAX.screenshots}
+            maxUrlLength={LIMITS.screenshotUrl}
+            inputClass={inputCls}
+          />
         </div>
       </Section>
 

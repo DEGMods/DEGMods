@@ -28,9 +28,7 @@ import {
   Layers,
   Boxes,
   RotateCcw,
-  GripVertical,
 } from 'lucide-react'
-import { Reorder, useDragControls } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -38,7 +36,6 @@ import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BlossomUploadField } from '@/components/upload/BlossomUploadField'
-import { MultiImageUploadField } from '@/components/upload/MultiImageUploadField'
 import { EmulatedPlatformField } from '@/components/mod/EmulatedPlatformField'
 import { DownloadScanReports } from '@/components/mod/DownloadScanReports'
 import { IMAGE_UPLOAD_ACCEPT, MOD_FILE_UPLOAD_ACCEPT, MOD_FILE_UPLOAD_LIMIT_MB, CATEGORY_MAX_DEPTH, CATEGORY_MAX_CHAINS, CATEGORY_SEGMENT_MAXLEN } from '@/lib/constants'
@@ -51,6 +48,7 @@ import {
 } from '@/components/ui/dialog'
 import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
 import { JamIcon } from '@/components/shared/JamIcon'
+import { ScreenshotsEditor } from '@/components/shared/ScreenshotsEditor'
 import { JamSubmissionField } from '@/components/mod/JamSubmissionField'
 import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
 import { Markdown } from '@/components/shared/Markdown'
@@ -215,71 +213,6 @@ function PermissionRow({
   )
 }
 
-// ─── Draggable screenshot row ───────────────────────────────────────
-
-function ScreenshotRow({
-  row, index, onChange, onRemove, onCommit, inputClass,
-}: {
-  row: { id: string; url: string }
-  index: number
-  onChange: (value: string) => void
-  onRemove: () => void
-  onCommit: () => void
-  inputClass: string
-}) {
-  const controls = useDragControls()
-  return (
-    <Reorder.Item
-      as="div"
-      value={row}
-      dragListener={false}
-      dragControls={controls}
-      onDragEnd={onCommit}
-      whileDrag={{ scale: 1.01, boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}
-      className="flex items-center gap-2 rounded-lg bg-[#1c1c1c] py-2"
-    >
-      <button
-        type="button"
-        onPointerDown={(e) => controls.start(e)}
-        aria-label="Drag to reorder"
-        className="shrink-0 cursor-grab touch-none rounded p-1 text-neutral-600 hover:text-neutral-400 active:cursor-grabbing"
-      >
-        <GripVertical size={16} />
-      </button>
-      <div className="h-12 w-16 shrink-0 overflow-hidden rounded border border-[#262626] bg-[#171717]">
-        {row.url.trim() && (
-          <img
-            key={row.url}
-            src={row.url}
-            alt=""
-            className="h-full w-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }}
-          />
-        )}
-      </div>
-      <div className="flex-1">
-        <Input
-          value={row.url}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={`Screenshot URL #${index + 1}`}
-          maxLength={LIMITS.screenshot}
-          className={cn(inputClass, 'w-full')}
-        />
-        <Counter value={row.url} max={LIMITS.screenshot} />
-      </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="shrink-0 rounded p-1.5 text-neutral-500 transition-colors hover:bg-[#2a2a2a] hover:text-neutral-300 cursor-pointer"
-      >
-        <X size={14} />
-      </button>
-    </Reorder.Item>
-  )
-}
-
-// ─── Component ──────────────────────────────────────────────────────
-
 export function ModEditor({
   initialState,
   isEdit = false,
@@ -382,46 +315,6 @@ export function ModEditor({
     [],
   )
 
-  // ─── Screenshot helpers (id-keyed rows so they can be drag-reordered) ──
-  // form.screenshots stays a string[] (single source for validation/publish);
-  // these rows just carry a stable id per entry for animated reordering.
-  const [ssRows, setSsRows] = useState<{ id: string; url: string }[]>(
-    () => (form.screenshots.length ? form.screenshots : ['']).map((url) => ({ id: crypto.randomUUID(), url })),
-  )
-  const syncScreenshots = useCallback((rows: { id: string; url: string }[]) => {
-    setSsRows(rows)
-    updateField('screenshots', rows.map((r) => r.url))
-  }, [updateField])
-  // Drag reorder only touches local row order (setSsRows) so the whole editor
-  // doesn't re-render mid-drag (which glitched framer's drop animation). The new
-  // order is pushed to the form once, on drop, via commitScreenshots.
-  const ssRowsRef = useRef(ssRows)
-  ssRowsRef.current = ssRows
-  const commitScreenshots = useCallback(() => {
-    updateField('screenshots', ssRowsRef.current.map((r) => r.url))
-  }, [updateField])
-  // Pull external form.screenshots changes (uploads, draft restore) back into
-  // rows, keeping ids where the url at a position is unchanged. No-ops when the
-  // change originated from syncScreenshots (urls already match).
-  useEffect(() => {
-    setSsRows((prev) => {
-      const urls = form.screenshots
-      if (urls.length === prev.length && urls.every((u, i) => u === prev[i].url)) return prev
-      return urls.map((url, i) => (prev[i]?.url === url ? prev[i] : { id: crypto.randomUUID(), url }))
-    })
-  }, [form.screenshots])
-
-  const updateScreenshot = (id: string, value: string) =>
-    syncScreenshots(ssRows.map((r) => (r.id === id ? { ...r, url: value } : r)))
-  const addScreenshot = () => {
-    if (ssRows.length >= MAX_SCREENSHOTS) { toast.error(`Up to ${MAX_SCREENSHOTS} screenshots`); return }
-    syncScreenshots([...ssRows, { id: crypto.randomUUID(), url: '' }])
-  }
-  const removeScreenshot = (id: string) => {
-    const next = ssRows.filter((r) => r.id !== id)
-    syncScreenshots(next.length === 0 ? [{ id: crypto.randomUUID(), url: '' }] : next)
-  }
-
   // ─── Tag helpers ────────────────────────────────────────────────
   const updateTag = (index: number, value: string) => {
     const next = [...form.tags]
@@ -523,15 +416,6 @@ export function ModEditor({
   const removeDownload = (index: number) => {
     const next = form.downloads.filter((_, i) => i !== index)
     updateField('downloads', next.length === 0 ? [{ file: '' }] : next)
-  }
-
-  // ─── Add an uploaded screenshot URL to the list ────────────────
-  const addScreenshotUrl = (url: string) => {
-    setForm((prev) => {
-      const kept = prev.screenshots.filter((s) => s.trim())
-      if (kept.length >= MAX_SCREENSHOTS) { toast.error(`Up to ${MAX_SCREENSHOTS} screenshots`); return prev }
-      return { ...prev, screenshots: [...kept, url] }
-    })
   }
 
   // ─── Submit ─────────────────────────────────────────────────────
@@ -851,45 +735,13 @@ export function ModEditor({
 
       {/* ── 9. Screenshots ──────────────────────────────────────── */}
       <Section icon={ImageIcon} label="Screenshots" error={errors.screenshots} required incomplete={!!liveErrors.screenshots} step={3} order={13}>
-        <div className="space-y-2">
-          {ssRows.length > 1 && (
-            <p className="text-[11px] text-neutral-600">Drag the handle to reorder — the first screenshot shows first on the mod page.</p>
-          )}
-          <Reorder.Group as="div" axis="y" values={ssRows} onReorder={setSsRows} className="space-y-2">
-            {ssRows.map((row, i) => (
-              <ScreenshotRow
-                key={row.id}
-                row={row}
-                index={i}
-                onChange={(v) => updateScreenshot(row.id, v)}
-                onRemove={() => removeScreenshot(row.id)}
-                onCommit={commitScreenshots}
-                inputClass={inputClass}
-              />
-            ))}
-          </Reorder.Group>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addScreenshot}
-            disabled={ssRows.length >= MAX_SCREENSHOTS}
-            className="text-xs border-[#262626] bg-transparent hover:bg-[#2a2a2a] text-neutral-400"
-          >
-            <Plus size={14} className="mr-1" /> Add URL
-          </Button>
-          <span className="ml-2 text-[10px] text-neutral-600">{ssRows.filter((r) => r.url.trim()).length}/{MAX_SCREENSHOTS}</span>
-        </div>
-        <Separator className="bg-[#262626]" />
-        <div>
-          <p className="text-xs text-neutral-500 mb-2">Or upload screenshots (mirrored to up to 3 servers)</p>
-          <MultiImageUploadField
-            accept={IMAGE_UPLOAD_ACCEPT}
-            label="Drop screenshots here or click to browse"
-            sublabel="Add several at once — they upload automatically"
-            onUploaded={addScreenshotUrl}
-          />
-        </div>
+        <ScreenshotsEditor
+          urls={form.screenshots}
+          onChange={(urls) => updateField('screenshots', urls)}
+          max={MAX_SCREENSHOTS}
+          maxUrlLength={LIMITS.screenshot}
+          inputClass={inputClass}
+        />
       </Section>
 
       {/* ── 10. Tags ────────────────────────────────────────────── */}
