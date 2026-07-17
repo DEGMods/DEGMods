@@ -9,6 +9,21 @@ export function isTauri(): boolean {
   return false // web-only: no Tauri desktop support
 }
 
+/**
+ * True for a well-formed http(s) URL — the bar for rendering user-supplied text
+ * as a clickable link. Stricter than a prefix test: it must also parse and have
+ * a host, so "https://" or "http://  " don't slip through.
+ */
+export function isHttpUrl(value: string): boolean {
+  const v = value.trim()
+  if (!/^https?:\/\//i.test(v)) return false
+  try {
+    return !!new URL(v).host
+  } catch {
+    return false
+  }
+}
+
 export function truncateNpub(npub: string, chars = 8): string {
   if (npub.length <= chars * 2 + 3) return npub
   return `${npub.slice(0, chars)}...${npub.slice(-chars)}`

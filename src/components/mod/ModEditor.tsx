@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, isHttpUrl } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
   Plus,
@@ -134,7 +134,7 @@ const ERROR_STEP: Partial<Record<keyof FormErrors, number>> = {
   game: 1,
   title: 2, summary: 2, content: 2, tags: 2, originalAuthor: 2,
   featuredImageUrl: 3, screenshots: 3,
-  downloads: 5,
+  downloads: 5, elsewhere: 5,
 }
 
 function Section({
@@ -1019,14 +1019,16 @@ export function ModEditor({
       </Section>
 
       {/* ── 13. Available elsewhere ─────────────────────────────── */}
-      <Section icon={ExternalLink} label="Available elsewhere" step={5} order={19}>
+      <Section icon={ExternalLink} label="Available elsewhere" error={errors.elsewhere} incomplete={!!liveErrors.elsewhere} step={5} order={19}>
         <div className="space-y-3">
           <p className="text-xs leading-relaxed text-neutral-500">
             Other places this same mod is available (its Nexus/ModDB/GameBanana page, your own site…).
             Shown on the mod post under the ⋯ menu, not in the main body.
           </p>
           <div className="space-y-2">
-            {form.elsewhere.map((url, i) => (
+            {form.elsewhere.map((url, i) => {
+              const badLink = !!url.trim() && !isHttpUrl(url)
+              return (
               <div key={i} className="flex items-start gap-2">
                 <div className="flex-1">
                   <Input
@@ -1034,8 +1036,9 @@ export function ModEditor({
                     onChange={(e) => updateElsewhere(i, e.target.value)}
                     placeholder="https://…"
                     maxLength={LIMITS.elsewhere}
-                    className={inputClass}
+                    className={cn(inputClass, badLink && errorInputClass)}
                   />
+                  {badLink && <p className="mt-1 text-xs text-red-400">Must be a full link starting with http:// or https://</p>}
                   <Counter value={url} max={LIMITS.elsewhere} />
                 </div>
                 <button
@@ -1047,7 +1050,8 @@ export function ModEditor({
                   <X size={14} />
                 </button>
               </div>
-            ))}
+              )
+            })}
             <div className="flex items-center">
               {form.elsewhere.length < MAX_ELSEWHERE && (
                 <Button

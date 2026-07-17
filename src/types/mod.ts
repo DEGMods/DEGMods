@@ -3,6 +3,8 @@
  * See docs/game-mod-event.md for full spec
  */
 
+import { isHttpUrl } from '@/lib/utils'
+
 // ─── Download entry (key:value format) ──────────────────────────────
 
 /** A malware-scan report link: a provider label + an explicit report URL. */
@@ -134,6 +136,7 @@ export interface FormErrors {
   tags?: string
   downloads?: string
   originalAuthor?: string
+  elsewhere?: string
   general?: string
 }
 
@@ -150,6 +153,11 @@ export function validateModForm(form: ModFormState): FormErrors {
   if (form.tags.filter(t => t.trim()).length === 0) errors.tags = 'At least one tag is required'
   if (form.downloads.filter(d => d.file.trim()).length === 0) errors.downloads = 'At least one download is required'
   if (form.isRepost && !form.originalAuthor.trim()) errors.originalAuthor = 'Original author is required for reposts'
+  // "Available elsewhere" entries must be real links — they're rendered as
+  // clickable, open-in-a-new-tab links on the mod page.
+  if (form.elsewhere.some(u => u.trim() && !isHttpUrl(u))) {
+    errors.elsewhere = 'Each link must be a full URL starting with http:// or https://'
+  }
   return errors
 }
 

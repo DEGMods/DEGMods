@@ -10,7 +10,7 @@ import { LegacyMigrateBanner, LegacyMigratedNotice } from '@/components/mod/Lega
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
 import { KINDS } from '@/lib/constants'
-import { cn } from '@/lib/utils'
+import { cn, isHttpUrl } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { ModDetails } from '@/types/mod'
 
@@ -778,20 +778,37 @@ export default function ModPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            {mod.elsewhere.map((url, i) => (
-              <a
-                key={i}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer nofollow"
-                className="flex items-center justify-between gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2.5 transition-colors hover:border-[#404040]"
-              >
-                <span className="min-w-0 truncate font-mono text-xs text-neutral-300">{url}</span>
-                <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-purple-400">
-                  Open <ExternalLink className="h-3.5 w-3.5" />
-                </span>
-              </a>
-            ))}
+            {mod.elsewhere.map((entry, i) =>
+              isHttpUrl(entry) ? (
+                <a
+                  key={i}
+                  href={entry}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2.5 transition-colors hover:border-[#404040]"
+                >
+                  <span className="min-w-0 truncate font-mono text-xs text-neutral-300">{entry}</span>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-purple-400">
+                    Open <ExternalLink className="h-3.5 w-3.5" />
+                  </span>
+                </a>
+              ) : (
+                // Not a link (another client may put anything here) — never make it
+                // clickable; offer it as copyable text instead.
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2.5"
+                >
+                  <span className="min-w-0 truncate font-mono text-xs text-neutral-400">{entry}</span>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(entry); toast.success('Copied to clipboard') }}
+                    className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-200"
+                  >
+                    Copy <Copy className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ),
+            )}
           </div>
         </DialogContent>
       </Dialog>
