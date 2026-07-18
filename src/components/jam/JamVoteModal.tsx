@@ -6,7 +6,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { Textarea } from '@/components/ui/textarea'
 import { signAndPublish } from '@/lib/nostr/publish'
 import {
   buildBallotEvent, ballotCriteria, OVERALL_CRITERION,
@@ -53,7 +52,6 @@ export function JamVoteModal({
   }, [criteria, existingBallot])
 
   const [scores, setScores] = useState<Record<string, number>>(initialScores)
-  const [comment, setComment] = useState(existingBallot?.comment ?? '')
   const [publishing, setPublishing] = useState(false)
 
   const setScore = (label: string, v: number) => setScores((p) => ({ ...p, [label]: v }))
@@ -67,7 +65,6 @@ export function JamVoteModal({
         submissionCoordinate,
         submissionDTag,
         scores: criteria.map((c) => ({ criterion: c.label, value: scores[c.label] ?? 0 })),
-        comment,
       }
       const result = await signAndPublish(
         buildBallotEvent(form),
@@ -89,7 +86,7 @@ export function JamVoteModal({
         jamCoordinate: jam.aTag,
         submissionCoordinate,
         scores: form.scores,
-        comment: comment.trim(),
+        comment: '',
       }
       onVoted?.(cast)
       onOpenChange(false)
@@ -129,18 +126,6 @@ export function JamVoteModal({
               />
             </div>
           ))}
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-400">Comment <span className="text-neutral-600">(optional)</span></label>
-            <Textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              rows={2}
-              placeholder="A quick note on your scoring…"
-              className="border-[#262626] bg-[#212121] text-white placeholder:text-neutral-500"
-              disabled={readOnly}
-            />
-          </div>
         </div>
 
         <DialogFooter>

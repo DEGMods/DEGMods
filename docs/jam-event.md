@@ -424,7 +424,7 @@ One ballot = one voter's scores for one entry.
 {
   "kind": 31243,
   "pubkey": "<voter-hex>",
-  "content": "Blizzard shader was gorgeous.",       // optional comment
+  "content": "",                                     // optional note; DEG Mods leaves it empty
   "created_at": 1771200000,                          // see "edits" below
   "tags": [
     ["d", "<jam-d>:<submission-d>"],                 // one ballot per voter per entry per jam
@@ -448,7 +448,9 @@ One ballot = one voter's scores for one entry.
 
 So no client-side de-duplication of "multiple ballots from one person" is ever needed.
 
-**`score` tags.** One per active criterion: `["score", "<criterion label>", "<0…max>"]`. If the jam has no `criterion` tags, a single `["score", "overall", "<0…10>"]`.
+**`score` tags.** One per active criterion: `["score", "<criterion label>", "<0…max>"]`. If the jam has no `criterion` tags, a single `["score", "overall", "<0…score_max>"]`. The set must match the jam's criteria exactly — see [Dedup, validate, aggregate](#2-dedup-validate-aggregate), which drops any ballot that doesn't.
+
+**`content`.** Free for a note, but DEG Mods neither collects nor shows one, so it publishes an empty string: a ballot there is just its scores. A comment nobody surfaces would invite voters to write feedback that's never read. Clients that do want judge feedback can use this field and render it.
 
 **PoW.** Every ballot carries a NIP-13 `nonce` mined to the jam's expected difficulty (matching the client's standard PoW). It's a spam/cost floor — not a full sybil defense (see below).
 
@@ -497,7 +499,8 @@ Paginate the ballot sweep by walking the `until` cursor down from `voting_end` (
 ### 2. Dedup, validate, aggregate
 
 - **Dedup** by ballot coordinate `31243:<voter>:<jam-d>:<sub-d>`; across relays keep the version with the **highest `created_at` that is still ≤ `voting_end`**.
-- **Validate:** `created_at ∈ [end, voting_end]`, well-formed `score`s within range, PoW meets difficulty. For the **judge tally**, additionally require the author ∈ the jam's `judge` list.
+- **Validate:** `created_at ∈ [end, voting_end]`, PoW meets difficulty, and the `score` tags match the jam's criteria **exactly** — one score per declared criterion, no extras, no duplicates, each value within that criterion's `0…max`. For the **judge tally**, additionally require the author ∈ the jam's `judge` list.
+  - **A ballot that doesn't match exactly is dropped whole**, not partially counted, and the tally continues without it. Partial acceptance is gameable: an undeclared label has no `max`, so it would contribute an unbounded value to the average, and a ballot that skips criteria would be averaged over a smaller denominator than its rivals'.
 - **Aggregate** per entry, per criterion → **average**. Keep **two independent tracks**: judges (judge-authored ballots) and users (all valid ballots), each with its vote count.
 
 ### 3. Rank

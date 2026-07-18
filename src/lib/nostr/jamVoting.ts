@@ -17,7 +17,6 @@ export interface JamBallotFormState {
   submissionCoordinate: string // 31142:<mod-pk>:<mod-d>
   submissionDTag: string
   scores: JamScore[]
-  comment: string
 }
 
 export interface JamBallot {
@@ -28,6 +27,8 @@ export interface JamBallot {
   jamCoordinate: string
   submissionCoordinate: string
   scores: JamScore[]
+  /** The event's content. The protocol allows a note here, but DEG Mods neither
+   *  collects nor displays one — parsed only so a foreign client's isn't lost. */
   comment: string
 }
 
@@ -53,7 +54,7 @@ export function buildBallotEvent(form: JamBallotFormState): UnsignedEvent {
   ]
   return {
     kind: KINDS.JAM_BALLOT,
-    content: form.comment.trim(),
+    content: '', // no comment collected — a ballot is just its scores here
     tags,
     created_at: Math.floor(Date.now() / 1000),
     pubkey: '',
@@ -82,7 +83,18 @@ export function extractBallot(event: NostrEvent): JamBallot | null {
   }
 }
 
-/** True if the ballot's created_at falls inside the voting window and scores are well-formed. */
+/**
+ * True if a ballot counts: cast inside the voting window, and scoring the jam's
+ * criteria *exactly*.
+ *
+ * "Exactly" is deliberate — a ballot must carry one score per declared criterion,
+ * with no extras, no duplicates, and every value within that criterion's range.
+ * Anything else is dropped whole rather than partially counted, because partial
+ * acceptance is gameable: an unknown label would otherwise open a bucket of its
+ * own in the tally (unbounded, since it has no declared max), and a ballot that
+ * skips criteria would be averaged over a smaller denominator than its rivals.
+ * Dropping a ballot never aborts the tally — it just doesn't count.
+ */
 export function isBallotCounted(
   event: NostrEvent,
   jam: Pick<JamDetails, 'end' | 'votingEnd' | 'criteria' | 'scoreMax'>,
@@ -90,12 +102,16 @@ export function isBallotCounted(
   if (!jam.votingEnd) return false
   if (event.created_at < jam.end || event.created_at > jam.votingEnd) return false
   const ballot = extractBallot(event)
-  if (!ballot || ballot.scores.length === 0) return false
-  const maxByLabel = new Map(ballotCriteria(jam).map((c) => [c.label, c.max]))
-  for (const s of ballot.scores) {
-    const max = maxByLabel.get(s.criterion)
-    if (max === undefined) continue // unknown criterion — ignore, don't reject
-    if (s.value < 0 || s.value > max) return false
+  if (!ballot) return false
+
+  const criteria = ballotCriteria(jam)
+  // Count first: catches extra labels, and (with the per-criterion lookup below)
+  // duplicates — two scores for one criterion leave another unmatched.
+  if (ballot.scores.length !== criteria.length) return false
+  for (const c of criteria) {
+    const score = ballot.scores.find((s) => s.criterion === c.label)
+    if (!score) return false
+    if (score.value < 0 || score.value > c.max) return false
   }
   return true
 }
@@ -134,7 +150,13 @@ export interface EntryAggregate {
 
 function emptyTrack(): TrackAggregate { return { avg: 0, votes: 0, perCriterion: {} } }
 
-/** Average one track's ballots for one entry, per criterion + overall. */
+/**
+ * Average one track's ballots for one entry, per criterion + overall.
+ *
+ * Buckets by the labels present on the ballots, which is only sound because every
+ * ballot reaching here passed isBallotCounted — i.e. carries exactly the jam's
+ * declared criteria. Never feed this unvalidated ballots.
+ */
 function aggregateTrack(ballots: JamBallot[]): TrackAggregate {
   if (ballots.length === 0) return emptyTrack()
   const sums = new Map<string, { total: number; n: number }>()
