@@ -12,6 +12,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchLatestEvent, fetchEvents } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractJam, jamStatus, type JamDetails } from '@/lib/nostr/jam'
+import { isDeleted } from '@/lib/nostr/events'
 import {
   extractBallot, ballotDTag, judgeHexSet, mergeResultPages,
   type JamBallot, type JamResultRow,
@@ -49,6 +50,7 @@ export function ModJamBanner({
   const [rank, setRank] = useState<JamResultRow | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [revealed, setRevealed] = useState(false)
+  const [jamDeleted, setJamDeleted] = useState(false)
 
   // Load the jam (window, criteria, judges, relays).
   useEffect(() => {
@@ -64,15 +66,19 @@ export function ModJamBanner({
       await whenEventCacheReady
       if (cancelled) return
       const cached = getCachedEvent(jamCoordinate)
-      const cachedJam = cached ? extractJam(cached) : null
+      if (cached && isDeleted(cached)) { setJamDeleted(true); setLoading(false) }
+      const cachedJam = cached && !isDeleted(cached) ? extractJam(cached) : null
       if (cachedJam) { setJam(cachedJam); setLoading(false) }
 
       try {
         const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
         const ev = await fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] })
         if (cancelled) return
+        // A tombstoned jam keeps only its d/published_at tags, so extractJam sees
+        // it as malformed — check the marker so we can say it was deleted.
+        if (ev && isDeleted(ev)) { setJamDeleted(true); setJam(null); return }
         const fresh = ev ? extractJam(ev) : null
-        if (fresh) setJam(fresh)
+        if (fresh) { setJam(fresh); setJamDeleted(false) }
       } catch {
         /* keep the cached copy if we have one; otherwise the not-found state shows */
       } finally {
@@ -121,18 +127,25 @@ export function ModJamBanner({
   const shell = 'space-y-3 rounded-xl border border-[#fc4462]/30 bg-[#fc4462]/10 p-3'
   const heading = <p className="text-xs font-medium text-[#fc9db0]">This is an entry for a mod jam event</p>
   if (!jam) {
-    return loading ? (
-      <div className={shell}>
-        {heading}
-        <Skeleton className="aspect-video w-full rounded-lg" />
-        <Skeleton className="h-4 w-2/3" />
-      </div>
-    ) : (
+    if (loading) {
+      return (
+        <div className={shell}>
+          {heading}
+          <Skeleton className="aspect-video w-full rounded-lg" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      )
+    }
+    // Deleted or simply unreachable — either way there's no jam to show, so say
+    // what we know and stop there (no image, title, rank or vote button).
+    return (
       <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
-        {heading}
-        <span className="flex items-center gap-2 text-sm text-neutral-400">
-          <AlertCircle className="h-4 w-4 shrink-0 text-neutral-500" />
-          The jam couldn’t be found on your relays.
+        <p className="text-xs font-medium text-neutral-500">Mod jam entry</p>
+        <span className="flex items-start gap-2 text-sm text-neutral-400">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" />
+          {jamDeleted
+            ? 'This mod was entered into a mod jam that has since been deleted.'
+            : 'This mod may have been an entry in a mod jam, but the jam couldn’t be found on your relays.'}
         </span>
       </div>
     )

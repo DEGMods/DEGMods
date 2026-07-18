@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
-import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown } from 'lucide-react'
+import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown, Trash2, ChevronLeft } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -25,6 +25,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent, fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractJam, isModJam, jamStatus, jamCountdownLabel, type JamDetails } from '@/lib/nostr/jam'
+import { isDeleted } from '@/lib/nostr/events'
+import { RequestDeleteDialog } from '@/components/shared/RequestDeleteDialog'
 import { KINDS } from '@/lib/constants'
 import type { NostrTarget } from '@/lib/nostr/social'
 import { cn } from '@/lib/utils'
@@ -98,6 +100,8 @@ export function JamPage() {
   const [rawEvent, setRawEvent] = useState<NostrEvent | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [deleted, setDeleted] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [revealed, setRevealed] = useState(false)
   const [tallyOpen, setTallyOpen] = useState(false)
   const [showRawDialog, setShowRawDialog] = useState(false)
@@ -111,6 +115,9 @@ export function JamPage() {
 
   // Render a fetched event into page state (initial or refresh).
   const applyEvent = useCallback((ev: NostrEvent) => {
+    // A tombstoned jam keeps only its d/published_at tags, so extractJam would
+    // just see it as malformed — check the marker first to report it properly.
+    if (isDeleted(ev)) { setDeleted(true); setLoading(false); return }
     const j = extractJam(ev)
     // Mod client: only mod jams render here. Any non-mod jam (same kind) is
     // treated as not found, matching its absence from the listing.
@@ -165,6 +172,19 @@ export function JamPage() {
     return () => clearTimeout(t)
   }, [rawEvent])
 
+  if (deleted) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
+        <Trash2 className="h-12 w-12 text-red-400" />
+        <h2 className="text-xl font-semibold text-neutral-200">Mod jam deleted</h2>
+        <p className="text-sm text-neutral-400">This mod jam has been permanently deleted.</p>
+        <Button variant="outline" onClick={() => navigate('/mod-jams')}>
+          <ChevronLeft className="mr-1 h-4 w-4" />
+          Back to Mod Jams
+        </Button>
+      </div>
+    )
+  }
   if (loading) return <div className="flex items-center justify-center py-24 text-neutral-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading jam…</div>
   if (notFound || !jam) return <div className="py-24 text-center text-neutral-400">Mod jam not found.</div>
 
@@ -228,6 +248,7 @@ export function JamPage() {
                     <>
                       <DropdownMenuSeparator className="bg-[#262626]" />
                       <DropdownMenuItem onClick={() => navigate(`/mod-jam/${naddr}/edit`)} className="cursor-pointer"><Pencil className="mr-2 h-4 w-4" /> Edit jam</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowDeleteDialog(true)} className="cursor-pointer text-red-400 focus:text-red-400"><Trash2 className="mr-2 h-4 w-4" /> Request Delete</DropdownMenuItem>
                     </>
                   )}
                 </DropdownMenuContent>
@@ -362,6 +383,18 @@ export function JamPage() {
       </div>
 
       {tallyOpen && <JamTallyModal open={tallyOpen} onOpenChange={setTallyOpen} jam={jam} />}
+
+      {/* Request-delete dialog (confirm + progress), same flow as a mod post */}
+      {rawEvent && (
+        <RequestDeleteDialog
+          open={showDeleteDialog}
+          onOpenChange={setShowDeleteDialog}
+          event={rawEvent as unknown as Parameters<typeof RequestDeleteDialog>[0]['event']}
+          title={jam.title}
+          noun="mod jam"
+          onDeleted={() => { setDeleted(true); setShowDeleteDialog(false) }}
+        />
+      )}
 
       {/* Raw Event dialog */}
       <Dialog open={showRawDialog} onOpenChange={setShowRawDialog}>
