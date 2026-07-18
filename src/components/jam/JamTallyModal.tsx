@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, CheckCircle2, AlertCircle, Scale, Trophy } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -40,8 +40,11 @@ export function JamTallyModal({
   const [phase, setPhase] = useState<Phase>('confirm')
   const [error, setError] = useState<string | null>(null)
 
-  // Progress readouts.
-  const [ballotCount, setBallotCount] = useState(0)
+  // Progress readouts. Fetched and counted are tracked separately: a ballot can
+  // be found and still not count (cast outside the window, or its scores don't
+  // match the jam's criteria), and conflating them makes that invisible.
+  const [fetchedCount, setFetchedCount] = useState(0)
+  const [countedCount, setCountedCount] = useState(0)
   const [sweepProgress, setSweepProgress] = useState(0) // 0..1
   const [rows, setRows] = useState<JamResultRow[]>([])
   const [titles, setTitles] = useState<Map<string, string>>(new Map())
@@ -53,7 +56,7 @@ export function JamTallyModal({
 
   const run = async () => {
     setPhase('fetching'); setError(null)
-    setBallotCount(0); setSweepProgress(0)
+    setFetchedCount(0); setCountedCount(0); setSweepProgress(0)
     try {
       const rd = relays()
 
@@ -99,7 +102,7 @@ export function JamTallyModal({
           if (!cur || ev.created_at > cur.created_at) seen.set(key, ev)
           if (ev.created_at < min) min = ev.created_at
         }
-        setBallotCount(seen.size)
+        setFetchedCount(seen.size)
         setSweepProgress(Math.min(1, (votingEnd - min) / span))
         if (min === Infinity || min <= jam.end) break
         const nextUntil = min - 1
@@ -114,6 +117,7 @@ export function JamTallyModal({
         .filter((ev) => isBallotCounted(ev, jam))
         .map(extractBallot)
         .filter((b): b is NonNullable<typeof b> => !!b)
+      setCountedCount(counted.length)
 
       // 4. Aggregate + rank.
       const aggregates = aggregateResults(entryCoordinates, counted, judges)
@@ -168,6 +172,11 @@ export function JamTallyModal({
 
   const close = () => { if (phase !== 'fetching' && phase !== 'publishing') onOpenChange(false) }
 
+  // Found but not counted — surfaced so a creator can tell "nobody voted" apart
+  // from "votes arrived but were rejected".
+  const dropped = Math.max(0, fetchedCount - countedCount)
+  const scoreMax = jam.scoreMax || 10
+
   // Top entries for the review preview (by judge rank, then user rank).
   const topRows = [...rows]
     .filter((r) => r.jRank > 0 || r.uRank > 0)
@@ -178,7 +187,7 @@ export function JamTallyModal({
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="border-[#262626] bg-[#1a1a1a] sm:max-w-lg" onInteractOutside={(e) => { if (phase === 'fetching' || phase === 'publishing') e.preventDefault() }}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-white"><Scale className="h-4 w-4 text-[#fc4462]" /> Tally votes</DialogTitle>
+          <DialogTitle className="text-white">Tally votes</DialogTitle>
           <DialogDescription className="text-neutral-400">{jam.title}</DialogDescription>
         </DialogHeader>
 
@@ -192,7 +201,7 @@ export function JamTallyModal({
 
           {phase === 'fetching' && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-neutral-300"><Loader2 className="h-4 w-4 animate-spin text-[#fc4462]" /> Counting ballots… <span className="tabular-nums text-neutral-400">{ballotCount.toLocaleString()}</span></div>
+              <div className="flex items-center gap-2 text-sm text-neutral-300"><Loader2 className="h-4 w-4 animate-spin text-[#fc4462]" /> Finding ballots… <span className="tabular-nums text-neutral-400">{fetchedCount.toLocaleString()}</span></div>
               <div className="h-2 overflow-hidden rounded-full bg-[#262626]"><div className="h-full bg-[#fc4462] transition-[width]" style={{ width: `${Math.round(sweepProgress * 100)}%` }} /></div>
               <p className="flex items-start gap-1.5 text-[11px] text-amber-400/90"><AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> Keep this window open until the tally finishes.</p>
             </div>
@@ -201,19 +210,40 @@ export function JamTallyModal({
           {phase === 'review' && (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-3 text-sm">
-                <span className="rounded-md bg-[#262626] px-2.5 py-1 text-neutral-200">{entryCount} entries</span>
-                <span className="rounded-md bg-[#262626] px-2.5 py-1 text-neutral-200">{ballotCount.toLocaleString()} ballots counted</span>
+                <span className="rounded-md bg-[#262626] px-2.5 py-1 text-neutral-200">{entryCount} {entryCount === 1 ? 'entry' : 'entries'}</span>
+                <span className="rounded-md bg-[#262626] px-2.5 py-1 text-neutral-200">{countedCount.toLocaleString()} {countedCount === 1 ? 'ballot counts' : 'ballots count'}</span>
+                {dropped > 0 && (
+                  <span className="rounded-md bg-amber-500/10 px-2.5 py-1 text-amber-300">{dropped.toLocaleString()} dropped</span>
+                )}
               </div>
+              {dropped > 0 && (
+                <p className="text-[11px] leading-relaxed text-neutral-500">
+                  {dropped === 1 ? 'One ballot was' : `${dropped} ballots were`} found but {dropped === 1 ? "doesn't" : "don't"} count:
+                  cast outside the voting window, or the scores didn&apos;t match this jam&apos;s criteria exactly.
+                </p>
+              )}
               {topRows.length > 0 ? (
                 <div className="space-y-1.5">
                   <p className="text-xs font-medium text-neutral-400">Preview (top {topRows.length})</p>
                   {topRows.map((r) => (
-                    <div key={r.a} className="flex items-center justify-between gap-2 rounded-md border border-[#262626] px-2.5 py-1.5 text-sm">
-                      <span className="flex min-w-0 items-center gap-1.5 text-neutral-200"><Trophy className="h-3.5 w-3.5 shrink-0 text-[#fc4462]" /> <span className="truncate">{titles.get(r.a) ?? r.a}</span></span>
-                      <span className="flex shrink-0 gap-2 text-xs">
-                        {jam.votingEnabled && r.jRank > 0 && <span className="text-amber-300">J#{r.jRank} · {r.judge.avg.toFixed(1)}</span>}
-                        {jam.userVotingEnabled && r.uRank > 0 && <span className="text-sky-300">C#{r.uRank} · {r.user.avg.toFixed(1)}</span>}
-                      </span>
+                    <div key={r.a} className="space-y-1 rounded-md border border-[#262626] px-2.5 py-2">
+                      <p className="truncate text-sm text-neutral-200">{titles.get(r.a) ?? r.a}</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+                        {jam.votingEnabled && (
+                          <span className="text-amber-300">
+                            {r.judge.votes > 0
+                              ? `Judges’ rank #${r.jRank} — ${r.judge.avg.toFixed(1)}/${scoreMax} average across ${r.judge.votes} ${r.judge.votes === 1 ? 'ballot' : 'ballots'}`
+                              : 'Judges — no ballots'}
+                          </span>
+                        )}
+                        {jam.userVotingEnabled && (
+                          <span className="text-sky-300">
+                            {r.user.votes > 0
+                              ? `Community rank #${r.uRank} — ${r.user.avg.toFixed(1)}/${scoreMax} average across ${r.user.votes} ${r.user.votes === 1 ? 'ballot' : 'ballots'}`
+                              : 'Community — no ballots'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
