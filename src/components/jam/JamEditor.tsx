@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Clock, Plus, X, Info, Loader2, Pencil, Eye, RotateCcw, Lock, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import { DatePicker } from './DatePicker'
 import { TimePicker, browserUses12h } from './TimePicker'
 import { IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { probeCountSupport, cachedCountSupport, type CountSupport } from '@/lib/nostr/relayCapabilities'
 import { localToUnix, unixToLocal, MOD_JAM_TYPE, type JamFormState, type JamReward, type JamCriterion, type JamFaq, type JamRule, type JamDetails } from '@/lib/nostr/jam'
 import { cn } from '@/lib/utils'
 
@@ -241,6 +242,39 @@ function GameChipInput({ games, onChange, maxLength, max }: { games: string[]; o
   )
 }
 
+/**
+ * A relay's NIP-45 badge. Counting is how community votes get tallied at scale,
+ * so whether a relay supports it is worth knowing while you're picking relays
+ * rather than after the jam has run.
+ */
+function CountBadgeForRelay({ url }: { url: string }) {
+  const [state, setState] = useState<CountSupport>(() => cachedCountSupport(url))
+
+  useEffect(() => {
+    if (state === 'yes' || state === 'no' || state === 'unreachable') return
+    let cancelled = false
+    setState('checking')
+    probeCountSupport(url).then((r) => { if (!cancelled) setState(r) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url])
+
+  const style: Record<string, { text: string; cls: string; tip: string }> = {
+    checking: { text: 'checking…', cls: 'border-[#333] text-neutral-500', tip: 'Asking this relay whether it supports counting.' },
+    yes: { text: 'counts', cls: 'border-emerald-500/40 text-emerald-400', tip: 'Supports NIP-45 — community votes here can be tallied by counting.' },
+    no: { text: 'no count', cls: 'border-amber-500/40 text-amber-400', tip: "Reachable, but doesn't support NIP-45 counting. Ballots still publish here." },
+    unreachable: { text: 'unreachable', cls: 'border-red-500/40 text-red-400', tip: "Couldn't connect to this relay." },
+    unknown: { text: 'checking…', cls: 'border-[#333] text-neutral-500', tip: '' },
+  }
+  const s = style[state] ?? style.unknown
+
+  return (
+    <span title={s.tip} className={cn('shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium', s.cls)}>
+      {s.text}
+    </span>
+  )
+}
+
 /** Vote-relay list: each relay is a full-width row with an enable toggle + remove. */
 function VoteRelayList({ relays, onChange, appendOnly }: { relays: VoteRelay[]; onChange: (v: VoteRelay[]) => void; appendOnly?: boolean }) {
   const [val, setVal] = useState('')
@@ -260,6 +294,7 @@ function VoteRelayList({ relays, onChange, appendOnly }: { relays: VoteRelay[]; 
             <div key={r.url} className="flex items-center gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2">
               <Switch checked={r.enabled} onCheckedChange={() => toggle(r.url)} disabled={appendOnly} />
               <span className={cn('min-w-0 flex-1 truncate font-mono text-xs', r.enabled ? 'text-neutral-200' : 'text-neutral-500 line-through')}>{r.url}</span>
+              <CountBadgeForRelay url={r.url} />
               {!appendOnly && <button type="button" onClick={() => remove(r.url)} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
             </div>
           ))}
