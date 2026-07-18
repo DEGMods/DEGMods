@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import {
@@ -12,12 +12,12 @@ import { signAndPublish } from '@/lib/nostr/publish'
 import { isValidSubmission, submissionWindow, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
 import {
   extractBallot, isBallotCounted, judgeHexSet, aggregateResults, aggregateToRow, resultPages,
-  buildResultPageEvent, type JamResultRow,
+  buildResultPageEvent, mergeResultPages, type JamResultRow,
 } from '@/lib/nostr/jamVoting'
 import { KINDS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
-type Phase = 'confirm' | 'fetching' | 'review' | 'publishing' | 'done' | 'error'
+type Phase = 'published' | 'confirm' | 'fetching' | 'review' | 'publishing' | 'done' | 'error'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -40,8 +40,12 @@ export function JamTallyModal({
   jam: JamDetails
   onPublished?: () => void
 }) {
-  const [phase, setPhase] = useState<Phase>('confirm')
+  // Results already exist → show them first. Re-tallying is a deliberate choice,
+  // not what happens by default when the creator opens this.
+  const [phase, setPhase] = useState<Phase>(jam.resultsAt ? 'published' : 'confirm')
   const [error, setError] = useState<string | null>(null)
+  const [publishedRows, setPublishedRows] = useState<JamResultRow[]>([])
+  const [loadingPublished, setLoadingPublished] = useState(false)
 
   // Progress readouts. Fetched and counted are tracked separately: a ballot can
   // be found and still not count (cast outside the window, or its scores don't
@@ -61,6 +65,49 @@ export function JamTallyModal({
 
   const relays = () => [...new Set([...useSettingsStore.getState().getAllEnabledRelayUrls('read'), ...jam.relays])]
 
+  /** The jam's valid entries — newest per coordinate, bounded to the submission window. */
+  const loadEntries = async (rd: string[]) => {
+    const w = submissionWindow(jam)
+    const events = await fetchEvents(rd, { kinds: [KINDS.MOD], '#l': [JAM_ENTRY_LABEL], '#a': [jam.aTag], since: w.since, until: w.until })
+    const byCoord = new Map<string, typeof events[number]>()
+    for (const ev of events) {
+      const d = ev.tags.find((t) => t[0] === 'd')?.[1] ?? ''
+      const key = `${ev.pubkey}:${d}`
+      const cur = byCoord.get(key)
+      if (!cur || ev.created_at > cur.created_at) byCoord.set(key, ev)
+    }
+    return [...byCoord.values()]
+      .filter((ev) => !ev.tags.some((t) => t[0] === 'deleted' && t[1] === 'true'))
+      .filter((ev) => isValidSubmission(ev, jam))
+      .map(extractModData)
+  }
+
+  // Load what was already published, so opening this shows the standing results
+  // instead of silently re-running a tally that could change them.
+  useEffect(() => {
+    if (!open || phase !== 'published') return
+    let cancelled = false
+    ;(async () => {
+      setLoadingPublished(true)
+      try {
+        const rd = relays()
+        const [resultEvents, entries] = await Promise.all([
+          fetchEvents(rd, { kinds: [KINDS.JAM_RESULT], authors: [jam.pubkey], '#a': [jam.aTag] }),
+          loadEntries(rd),
+        ])
+        if (cancelled) return
+        setPublishedRows([...mergeResultPages(resultEvents).values()])
+        setTitles(new Map(entries.map((m) => [m.aTag, m.title])))
+      } catch {
+        /* leave empty — the view shows "couldn't load" below */
+      } finally {
+        if (!cancelled) setLoadingPublished(false)
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, phase])
+
   const run = async () => {
     setPhase('fetching'); setError(null)
     setFetchedCount(0); setCountedCount(0); setSweepProgress(0)
@@ -69,21 +116,8 @@ export function JamTallyModal({
       const rd = relays()
       setSearched(rd)
 
-      // 1. Entries — newest per coordinate, valid submissions only. Bounded at the
-      // relay to the window a valid submission's created_at must fall in.
-      const entryWindow = submissionWindow(jam)
-      const entryEvents = await fetchEvents(rd, { kinds: [KINDS.MOD], '#l': [JAM_ENTRY_LABEL], '#a': [jam.aTag], since: entryWindow.since, until: entryWindow.until })
-      const byCoord = new Map<string, typeof entryEvents[number]>()
-      for (const ev of entryEvents) {
-        const d = ev.tags.find((t) => t[0] === 'd')?.[1] ?? ''
-        const key = `${ev.pubkey}:${d}`
-        const cur = byCoord.get(key)
-        if (!cur || ev.created_at > cur.created_at) byCoord.set(key, ev)
-      }
-      const validEntries = [...byCoord.values()]
-        .filter((ev) => !ev.tags.some((t) => t[0] === 'deleted' && t[1] === 'true'))
-        .filter((ev) => isValidSubmission(ev, jam))
-        .map(extractModData)
+      // 1. Entries — newest per coordinate, valid submissions only.
+      const validEntries = await loadEntries(rd)
       const entryCoordinates = validEntries.map((m) => m.aTag)
       const titleMap = new Map(validEntries.map((m) => [m.aTag, m.title]))
       setTitles(titleMap)
@@ -96,7 +130,7 @@ export function JamTallyModal({
       // ballot, and a voter is warned when theirs falls outside.
       const votingEnd = jam.votingEnd ?? jam.end
       const span = Math.max(1, votingEnd - jam.end)
-      const seen = new Map<string, typeof entryEvents[number]>() // coordinate → newest event
+      const seen = new Map<string, Awaited<ReturnType<typeof fetchEvents>>[number]>() // coordinate → newest event
       let until = votingEnd
       for (let round = 0; round < 300; round++) {
         const batch = await fetchEvents(rd, {
@@ -204,25 +238,71 @@ export function JamTallyModal({
   const scoreMax = jam.scoreMax || 10
   const votingEndTs = jam.votingEnd ?? jam.end
 
-  // Top entries for the review preview (by judge rank, then user rank).
-  const topRows = [...rows]
+  // By judge rank, then user rank.
+  const rank = (list: JamResultRow[]) => [...list]
     .filter((r) => r.jRank > 0 || r.uRank > 0)
     .sort((a, b) => (a.jRank || 999) - (b.jRank || 999) || (a.uRank || 999) - (b.uRank || 999))
-    .slice(0, 5)
+
+  const topRows = rank(rows).slice(0, 5) // review preview
+  const standingRows = rank(publishedRows)
+
+  const rowLines = (r: JamResultRow) => (
+    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+      {jam.votingEnabled && (
+        <span className="text-amber-300">
+          {r.judge.votes > 0
+            ? `Judges’ rank #${r.jRank} — ${r.judge.avg.toFixed(1)}/${scoreMax} average across ${r.judge.votes} ${r.judge.votes === 1 ? 'ballot' : 'ballots'}`
+            : 'Judges — no ballots'}
+        </span>
+      )}
+      {jam.userVotingEnabled && (
+        <span className="text-sky-300">
+          {r.user.votes > 0
+            ? `Community rank #${r.uRank} — ${r.user.avg.toFixed(1)}/${scoreMax} average across ${r.user.votes} ${r.user.votes === 1 ? 'ballot' : 'ballots'}`
+            : 'Community — no ballots'}
+        </span>
+      )}
+    </div>
+  )
 
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="border-[#262626] bg-[#1a1a1a] sm:max-w-lg" onInteractOutside={(e) => { if (phase === 'fetching' || phase === 'publishing') e.preventDefault() }}>
         <DialogHeader>
-          <DialogTitle className="text-white">Tally votes</DialogTitle>
+          <DialogTitle className="text-white">{phase === 'published' ? 'Published results' : 'Tally votes'}</DialogTitle>
           <DialogDescription className="text-neutral-400">{jam.title}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {phase === 'published' && (
+            <div className="space-y-3">
+              {loadingPublished ? (
+                <div className="flex items-center gap-2 text-sm text-neutral-300"><Loader2 className="h-4 w-4 animate-spin text-[#fc4462]" /> Loading published results…</div>
+              ) : standingRows.length > 0 ? (
+                <>
+                  <p className="text-xs text-neutral-500">Published {jam.resultsAt ? fmtWindow(jam.resultsAt) : ''}</p>
+                  <div className="space-y-1.5">
+                    {standingRows.map((r) => (
+                      <div key={r.a} className="space-y-1 rounded-md border border-[#262626] px-2.5 py-2">
+                        <p className="truncate text-sm text-neutral-200">{titles.get(r.a) ?? r.a}</p>
+                        {rowLines(r)}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-neutral-500">
+                  Results are marked as published, but none could be loaded from the relays you&apos;re reading.
+                  Re-tallying will recompute and republish them.
+                </p>
+              )}
+            </div>
+          )}
+
           {phase === 'confirm' && (
             <p className="text-sm text-neutral-300">
               This counts every ballot in the voting window, ranks the entries, and publishes the results.
-              You can re-run it later if more votes arrive.
+              {jam.resultsAt ? ' Anything already published will be replaced.' : ' You can re-run it later if more votes arrive.'}
             </p>
           )}
 
@@ -273,22 +353,7 @@ export function JamTallyModal({
                   {topRows.map((r) => (
                     <div key={r.a} className="space-y-1 rounded-md border border-[#262626] px-2.5 py-2">
                       <p className="truncate text-sm text-neutral-200">{titles.get(r.a) ?? r.a}</p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
-                        {jam.votingEnabled && (
-                          <span className="text-amber-300">
-                            {r.judge.votes > 0
-                              ? `Judges’ rank #${r.jRank} — ${r.judge.avg.toFixed(1)}/${scoreMax} average across ${r.judge.votes} ${r.judge.votes === 1 ? 'ballot' : 'ballots'}`
-                              : 'Judges — no ballots'}
-                          </span>
-                        )}
-                        {jam.userVotingEnabled && (
-                          <span className="text-sky-300">
-                            {r.user.votes > 0
-                              ? `Community rank #${r.uRank} — ${r.user.avg.toFixed(1)}/${scoreMax} average across ${r.user.votes} ${r.user.votes === 1 ? 'ballot' : 'ballots'}`
-                              : 'Community — no ballots'}
-                          </span>
-                        )}
-                      </div>
+                      {rowLines(r)}
                     </div>
                   ))}
                 </div>
@@ -316,7 +381,18 @@ export function JamTallyModal({
         </div>
 
         <DialogFooter>
-          {phase === 'confirm' && <Button onClick={run} className="gap-2 bg-[#fc4462] text-white hover:bg-[#e23a56]">Start tally</Button>}
+          {phase === 'published' && (
+            <>
+              <Button variant="outline" className="border-[#262626]" onClick={() => onOpenChange(false)}>Close</Button>
+              <Button disabled={loadingPublished} onClick={() => setPhase('confirm')} className="gap-2 bg-[#fc4462] text-white hover:bg-[#e23a56]">Re-tally votes</Button>
+            </>
+          )}
+          {phase === 'confirm' && (
+            <>
+              {jam.resultsAt && <Button variant="outline" className="border-[#262626]" onClick={() => setPhase('published')}>Back</Button>}
+              <Button onClick={run} className="gap-2 bg-[#fc4462] text-white hover:bg-[#e23a56]">Start tally</Button>
+            </>
+          )}
           {phase === 'review' && (
             <>
               <Button variant="outline" className="border-[#262626]" onClick={() => setPhase('confirm')}>Back</Button>

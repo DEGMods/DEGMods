@@ -344,7 +344,7 @@ export function JamPage() {
             <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
               {isAuthor && votingOver && (
                 <Button variant="outline" className="w-full gap-2 border-[#fc4462]/40 text-[#fc4462] hover:bg-[#fc4462]/10" onClick={() => setTallyOpen(true)}>
-                  <Scale className="h-4 w-4" /> {jam.resultsAt ? 'Re-tally votes' : 'Tally votes'}
+                  <Scale className="h-4 w-4" /> {jam.resultsAt ? 'View results' : 'Tally votes'}
                 </Button>
               )}
               <Tooltip>

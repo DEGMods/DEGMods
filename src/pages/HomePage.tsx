@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, BookOpen } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ModCard } from '@/components/mod/ModCard'
 import { GameCard } from '@/components/game/GameCard'
@@ -332,10 +332,7 @@ export function HomePage() {
       {/* From the Blog */}
       <section>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="flex items-center gap-2 text-2xl font-bold text-white">
-            <BookOpen className="h-6 w-6 text-purple-400" />
-            From the Blog
-          </h2>
+          <h2 className="text-2xl font-bold text-white">From the Blog</h2>
           <Link to="/blog" className="text-purple-400 hover:text-purple-300 text-sm font-medium flex items-center gap-1">
             View All <ArrowRight className="w-4 h-4" />
           </Link>
