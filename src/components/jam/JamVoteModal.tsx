@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { signAndPublish } from '@/lib/nostr/publish'
 import {
-  buildBallotEvent, ballotCriteria, judgeHexSet, OVERALL_CRITERION,
+  buildBallotEvent, ballotCriteria, criteriaFingerprint, judgeHexSet, OVERALL_CRITERION,
   type JamBallot, type JamBallotFormState,
 } from '@/lib/nostr/jamVoting'
 import { useAuthStore } from '@/stores/authStore'
@@ -128,7 +128,7 @@ export function JamVoteModal({
   const initialScores = useMemo(() => {
     const map: Record<string, number | null> = {}
     for (const c of criteria) {
-      map[c.label] = existingBallot?.scores.find((s) => s.criterion === c.label)?.value ?? null
+      map[c.label] = existingBallot?.scores.find((s) => s.index === criteria.indexOf(c))?.value ?? null
     }
     return map
   }, [criteria, existingBallot])
@@ -148,10 +148,10 @@ export function JamVoteModal({
         jamDTag: jam.dTag,
         submissionCoordinate,
         submissionDTag,
-        scores: criteria.map((c) => ({ criterion: c.label, value: scores[c.label] as number })),
+        scores: criteria.map((c, i) => ({ index: i, criterion: c.label, value: scores[c.label] as number })),
       }
       const result = await signAndPublish(
-        buildBallotEvent(form),
+        buildBallotEvent(form, criteriaFingerprint(jam)),
         (status) => {
           if (status === 'mining') toast.loading('Processing proof of work…', { id: 'ballot' })
           if (status === 'signing') toast.loading('Signing your vote…', { id: 'ballot' })
@@ -169,6 +169,7 @@ export function JamVoteModal({
         createdAt: result.event.created_at,
         jamCoordinate: jam.aTag,
         submissionCoordinate,
+        fingerprint: criteriaFingerprint(jam),
         scores: form.scores,
         comment: '',
       }

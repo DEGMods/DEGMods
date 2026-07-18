@@ -12,7 +12,7 @@ import { fetchAllEvents, fetchEvents, fetchLatestEvent } from '@/lib/nostr/relay
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractModData } from '@/lib/nostr/events'
 import { extractJam, isValidSubmission, jamStatus, submissionWindow, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
-import { mergeResultPages, type JamResultRow } from '@/lib/nostr/jamVoting'
+import { latestResults, rowsForEntry, type JamResults } from '@/lib/nostr/jamVoting'
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
 import { useWotModFilter } from '@/hooks/useWot'
@@ -56,7 +56,7 @@ export function JamSubmissionsPage() {
 
   const [jam, setJam] = useState<JamDetails | null>(null)
   const [mods, setMods] = useState<ModDetails[]>([])
-  const [results, setResults] = useState<Map<string, JamResultRow>>(new Map())
+  const [results, setResults] = useState<JamResults | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
@@ -107,7 +107,7 @@ export function JamSubmissionsPage() {
 
     const loadResults = (jamData: JamDetails) => {
       fetchEvents([...new Set([...relays, ...jamData.relays])], { kinds: [KINDS.JAM_RESULT], authors: [pubkey], '#a': [coordinate] })
-        .then((evs) => { if (!cancelled) setResults(mergeResultPages(evs)) })
+        .then((evs) => { if (!cancelled) setResults(latestResults(evs)) })
         .catch(() => { /* no results yet */ })
     }
 
@@ -219,17 +219,17 @@ export function JamSubmissionsPage() {
       ) : paginated.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {paginated.map((mod) => {
-            const rank = results.get(mod.aTag)
-            const showRank = rank && (rank.jRank > 0 || rank.uRank > 0)
+            const rank = results ? rowsForEntry(results, mod.aTag) : null
+            const showRank = !!rank && (!!rank.judge || !!rank.community)
             return (
               <div key={mod.aTag} className="relative">
                 {showRank && (
                   <div className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-1">
-                    {jam?.votingEnabled && rank!.jRank > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 backdrop-blur-sm"><Medal className="h-3 w-3" /> Judges’ #{rank!.jRank}</span>
+                    {jam?.votingEnabled && rank!.judge && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 backdrop-blur-sm"><Medal className="h-3 w-3" /> Judges’ #{rank!.judge.r}</span>
                     )}
-                    {jam?.userVotingEnabled && rank!.uRank > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 backdrop-blur-sm"><Medal className="h-3 w-3" /> Community #{rank!.uRank}</span>
+                    {jam?.userVotingEnabled && rank!.community && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 backdrop-blur-sm"><Medal className="h-3 w-3" /> Community #{rank!.community.r}</span>
                     )}
                   </div>
                 )}

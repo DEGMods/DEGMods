@@ -14,7 +14,7 @@ import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractJam, jamStatus, type JamDetails } from '@/lib/nostr/jam'
 import { isDeleted } from '@/lib/nostr/events'
 import {
-  extractBallot, ballotDTag, judgeHexSet, mergeResultPages,
+  extractBallot, ballotDTag, judgeHexSet, latestResults, rowsForEntry,
   type JamBallot, type JamResultRow,
 } from '@/lib/nostr/jamVoting'
 import { KINDS } from '@/lib/constants'
@@ -47,7 +47,7 @@ export function ModJamBanner({
   // this doesn't match the current one, we haven't checked yet — derived rather
   // than a loading flag so there's no first-render frame claiming "not voted".
   const [checkedKey, setCheckedKey] = useState<string | null>(null)
-  const [rank, setRank] = useState<JamResultRow | null>(null)
+  const [rank, setRank] = useState<{ judge: JamResultRow | null; community: JamResultRow | null } | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [revealed, setRevealed] = useState(false)
   const [jamDeleted, setJamDeleted] = useState(false)
@@ -97,8 +97,8 @@ export function ModJamBanner({
     fetchEvents(relays, { kinds: [KINDS.JAM_RESULT], authors: [jam.pubkey], '#a': [jamCoordinate] })
       .then((events) => {
         if (cancelled) return
-        const rows = mergeResultPages(events)
-        setRank(rows.get(submissionCoordinate) ?? null)
+        const results = latestResults(events)
+        setRank(results ? rowsForEntry(results, submissionCoordinate) : null)
       })
       .catch(() => { /* no results yet */ })
     return () => { cancelled = true }
@@ -234,13 +234,13 @@ export function ModJamBanner({
         </div>
 
         {/* Rank pills once results are published */}
-        {rank && (rank.jRank > 0 || rank.uRank > 0) && (
+        {rank && (rank.judge || rank.community) && (
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            {jam.votingEnabled && rank.jRank > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-amber-300"><Medal className="h-3 w-3" /> Judges’ #{rank.jRank} · {rank.judge.avg.toFixed(1)} avg</span>
+            {jam.votingEnabled && rank.judge && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-amber-300"><Medal className="h-3 w-3" /> Judges’ #{rank.judge.r} · {rank.judge.s.toFixed(1)} avg</span>
             )}
-            {jam.userVotingEnabled && rank.uRank > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-sky-300"><Medal className="h-3 w-3" /> Community #{rank.uRank} · {rank.user.avg.toFixed(1)} avg</span>
+            {jam.userVotingEnabled && rank.community && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-sky-300"><Medal className="h-3 w-3" /> Community #{rank.community.r} · {rank.community.s.toFixed(1)} avg</span>
             )}
           </div>
         )}
