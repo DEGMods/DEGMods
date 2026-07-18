@@ -254,12 +254,18 @@ export function JamPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            {jam.theme && (
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border border-[#fc4462]/40 bg-[#fc4462]/10 px-3.5 py-2.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-[#fc4462]">Theme</span>
-                <span className="text-lg font-semibold text-white">{jam.theme}</span>
-              </div>
-            )}
+            {/* Always shown: an absent theme means "not announced yet", which is
+                itself information entrants want. Hiding the row would read as
+                "this jam has no theme" instead. */}
+            <div className={cn(
+              'flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border px-3.5 py-2.5',
+              jam.theme ? 'border-[#fc4462]/40 bg-[#fc4462]/10' : 'border-[#262626] bg-[#212121]',
+            )}>
+              <span className={cn('text-xs font-semibold uppercase tracking-wide', jam.theme ? 'text-[#fc4462]' : 'text-neutral-500')}>Theme</span>
+              {jam.theme
+                ? <span className="text-lg font-semibold text-white">{jam.theme}</span>
+                : <span className="text-lg font-semibold text-neutral-500">To be revealed</span>}
+            </div>
           </div>
 
           {jam.content && <CollapsibleMarkdown content={jam.content} />}
