@@ -159,6 +159,11 @@ export function ModJamBanner({
   const eligible = jam.userVotingEnabled || (jam.votingEnabled && isJudge)
   // Signed in but we haven't confirmed whether they've already voted on this entry.
   const ballotChecking = !!myPubkey && checkedKey !== `${jam.dTag}:${submissionDTag}:${myPubkey}`
+  // A ballot cast outside [end, voting_end] doesn't count. Treat it as "not voted"
+  // so the voter can re-cast (ballots are replaceable) rather than being shown a
+  // vote that will be silently discarded at tally time.
+  const ballotCounts = !!ballot && !!jam.votingEnd && ballot.createdAt >= jam.end && ballot.createdAt <= jam.votingEnd
+  const staleBallot = !!ballot && !ballotCounts
 
   // Vote button state → { label, disabled, reason }.
   let voteBtn: { label: string; disabled: boolean; reason?: string; icon: typeof Vote; spinning?: boolean } | null = null
@@ -166,7 +171,7 @@ export function ModJamBanner({
     if (ballotChecking) {
       // Unknown yet — never offer "Vote on it" to someone who already voted.
       voteBtn = { label: 'Checking your vote…', disabled: true, icon: Loader2, spinning: true }
-    } else if (ballot) {
+    } else if (ballotCounts) {
       voteBtn = { label: 'View your vote', disabled: false, icon: Eye }
     } else if (!myPubkey) {
       voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Vote }
@@ -237,6 +242,14 @@ export function ModJamBanner({
           </div>
         )}
 
+        {staleBallot && !ballotChecking && (
+          <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-400/90">
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+            You scored this entry before voting opened, so that vote won’t be counted.
+            {inWindow ? ' Vote again to have it count.' : ''}
+          </p>
+        )}
+
         {voteBtn && (() => {
           const button = (
             <Button
@@ -271,7 +284,7 @@ export function ModJamBanner({
           submissionDTag={submissionDTag}
           submissionTitle={submissionTitle}
           existingBallot={ballot}
-          readOnly={!!ballot}
+          readOnly={ballotCounts}
           onVoted={(b) => setBallot(b)}
         />
       )}

@@ -21,6 +21,9 @@ type Phase = 'confirm' | 'fetching' | 'review' | 'publishing' | 'done' | 'error'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+const hostOf = (url: string) => { try { return new URL(url).host } catch { return url } }
+const fmtWindow = (ts: number) => new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
 /**
  * Creator-only tally flow: sweep every ballot in the voting window, aggregate two
  * ranked tracks (judges + community), then publish paged Result events (kind 31343)
@@ -45,6 +48,10 @@ export function JamTallyModal({
   // match the jam's criteria), and conflating them makes that invisible.
   const [fetchedCount, setFetchedCount] = useState(0)
   const [countedCount, setCountedCount] = useState(0)
+  // Which relays the sweep actually asked — a ballot living only somewhere else
+  // is invisible here, and that's otherwise indistinguishable from "no vote".
+  const [searched, setSearched] = useState<string[]>([])
+  const [dropReasons, setDropReasons] = useState({ outsideWindow: 0, badScores: 0 })
   const [sweepProgress, setSweepProgress] = useState(0) // 0..1
   const [rows, setRows] = useState<JamResultRow[]>([])
   const [titles, setTitles] = useState<Map<string, string>>(new Map())
@@ -57,8 +64,10 @@ export function JamTallyModal({
   const run = async () => {
     setPhase('fetching'); setError(null)
     setFetchedCount(0); setCountedCount(0); setSweepProgress(0)
+    setDropReasons({ outsideWindow: 0, badScores: 0 })
     try {
       const rd = relays()
+      setSearched(rd)
 
       // 1. Entries — newest per coordinate, valid submissions only. Bounded at the
       // relay to the window a valid submission's created_at must fall in.
@@ -80,16 +89,20 @@ export function JamTallyModal({
       setTitles(titleMap)
       setEntryCount(entryCoordinates.length)
 
-      // 2. Sweep ballots across the window [end, voting_end], newest→oldest.
+      // 2. Sweep ballots, newest→oldest. Deliberately swept from the jam's *start*
+      // rather than from `end`: a ballot cast before voting opened can't count,
+      // but bounding it away at the relay makes it invisible — the tally would
+      // silently report "1 ballot" with no hint that a second one existed and was
+      // rejected. Fetch them, then let isBallotCounted decide, so we can say so.
       const votingEnd = jam.votingEnd ?? jam.end
-      const span = Math.max(1, votingEnd - jam.end)
+      const span = Math.max(1, votingEnd - jam.start)
       const seen = new Map<string, typeof entryEvents[number]>() // coordinate → newest event
       let until = votingEnd
       for (let round = 0; round < 300; round++) {
         const batch = await fetchEvents(rd, {
           kinds: [KINDS.JAM_BALLOT],
           '#a': [jam.aTag],
-          since: jam.end,
+          since: jam.start,
           until,
           limit: 500,
         })
@@ -104,15 +117,25 @@ export function JamTallyModal({
         }
         setFetchedCount(seen.size)
         setSweepProgress(Math.min(1, (votingEnd - min) / span))
-        if (min === Infinity || min <= jam.end) break
+        if (min === Infinity || min <= jam.start) break
         const nextUntil = min - 1
         if (nextUntil >= until) break // no progress — stop
         until = nextUntil
       }
       setSweepProgress(1)
 
-      // 3. Validate + parse.
+      // 3. Validate + parse, tracking *why* anything was rejected so the review
+      // can explain a shortfall instead of just showing a smaller number.
       const judges = judgeHexSet(jam.judges)
+      let outsideWindow = 0
+      let badScores = 0
+      for (const ev of seen.values()) {
+        if (isBallotCounted(ev, jam)) continue
+        if (ev.created_at < jam.end || ev.created_at > votingEnd) outsideWindow++
+        else badScores++
+      }
+      setDropReasons({ outsideWindow, badScores })
+
       const counted = [...seen.values()]
         .filter((ev) => isBallotCounted(ev, jam))
         .map(extractBallot)
@@ -176,6 +199,7 @@ export function JamTallyModal({
   // from "votes arrived but were rejected".
   const dropped = Math.max(0, fetchedCount - countedCount)
   const scoreMax = jam.scoreMax || 10
+  const votingEndTs = jam.votingEnd ?? jam.end
 
   // Top entries for the review preview (by judge rank, then user rank).
   const topRows = [...rows]
@@ -217,11 +241,29 @@ export function JamTallyModal({
                 )}
               </div>
               {dropped > 0 && (
-                <p className="text-[11px] leading-relaxed text-neutral-500">
-                  {dropped === 1 ? 'One ballot was' : `${dropped} ballots were`} found but {dropped === 1 ? "doesn't" : "don't"} count:
-                  cast outside the voting window, or the scores didn&apos;t match this jam&apos;s criteria exactly.
-                </p>
+                <ul className="space-y-0.5 text-[11px] leading-relaxed text-neutral-500">
+                  {dropReasons.outsideWindow > 0 && (
+                    <li>
+                      {dropReasons.outsideWindow === 1 ? '1 ballot was' : `${dropReasons.outsideWindow} ballots were`} cast
+                      outside the voting window ({fmtWindow(jam.end)} – {fmtWindow(votingEndTs)}) — voting only counts once submissions close.
+                    </li>
+                  )}
+                  {dropReasons.badScores > 0 && (
+                    <li>
+                      {dropReasons.badScores === 1 ? "1 ballot's scores didn't" : `${dropReasons.badScores} ballots' scores didn't`} match
+                      this jam&apos;s criteria exactly.
+                    </li>
+                  )}
+                </ul>
               )}
+              <details className="text-[11px] text-neutral-500">
+                <summary className="cursor-pointer list-none hover:text-neutral-300">
+                  Searched {searched.length} {searched.length === 1 ? 'relay' : 'relays'} — a ballot stored only elsewhere can&apos;t be counted
+                </summary>
+                <ul className="mt-1 space-y-0.5 pl-3">
+                  {searched.map((url) => <li key={url} className="truncate font-mono">{hostOf(url)}</li>)}
+                </ul>
+              </details>
               {topRows.length > 0 ? (
                 <div className="space-y-1.5">
                   <p className="text-xs font-medium text-neutral-400">Preview (top {topRows.length})</p>
