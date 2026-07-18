@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Clock, Plus, X, Info, Loader2, Pencil, Eye, RotateCcw, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -311,6 +311,14 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) => setS((p) => ({ ...p, [k]: v }))
 
+  // Editing: only enable saving once something actually differs from the jam we
+  // loaded, so "Save changes" can't republish an identical revision (which would
+  // still bump created_at). EditorState carries no metadata, so comparing the
+  // whole snapshot is enough. Captured once — this component is remounted (keyed
+  // on created_at) if a newer revision arrives.
+  const publishedRef = useRef(s)
+  const isDirty = useMemo(() => JSON.stringify(s) !== JSON.stringify(publishedRef.current), [s])
+
   const votingOn = s.votingEnabled || s.userVotingEnabled
 
   // Moments that have already passed can't be rewritten — they'd retroactively
@@ -615,9 +623,12 @@ export function JamEditor({ editJam, onPublish, publishing }: {
         </div>
       </Section>
 
-      <Button onClick={submit} disabled={publishing} className="w-full gap-2 bg-[#fc4462] text-white hover:bg-[#e23a56]">
+      <Button onClick={submit} disabled={publishing || (!!editJam && !isDirty)} className="w-full gap-2 bg-[#fc4462] text-white hover:bg-[#e23a56] disabled:opacity-50">
         {publishing ? <><Loader2 className="h-4 w-4 animate-spin" /> Publishing…</> : editJam ? 'Save changes' : 'Publish Mod Jam'}
       </Button>
+      {editJam && !isDirty && !publishing && (
+        <p className="text-center text-[11px] text-neutral-500">No changes yet.</p>
+      )}
     </div>
   )
 }
