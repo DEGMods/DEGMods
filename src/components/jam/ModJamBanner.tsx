@@ -48,6 +48,7 @@ export function ModJamBanner({
   const [checkedKey, setCheckedKey] = useState<string | null>(null)
   const [rank, setRank] = useState<JamResultRow | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [revealed, setRevealed] = useState(false)
 
   // Load the jam (window, criteria, judges, relays).
   useEffect(() => {
@@ -138,6 +139,7 @@ export function ModJamBanner({
   }
 
   const hasVoting = jam.votingEnabled || jam.userVotingEnabled
+  const hasWarning = !!jam.contentWarning && !revealed
   const status = jamStatus(jam, now)
   const inWindow = !!jam.votingEnd && now >= jam.end && now <= jam.votingEnd
   const isJudge = !!myPubkey && judgeHexSet(jam.judges).has(myPubkey)
@@ -179,25 +181,36 @@ export function ModJamBanner({
       <div className={shell}>
         {heading}
 
-        <Link to={`/mod-jam/${naddr}`} className="group block space-y-2">
+        <div className="group space-y-2">
           <div className="relative aspect-video overflow-hidden rounded-lg border border-[#262626] bg-[#171717]">
             {jam.image ? (
               <SkeletonImage
                 src={jam.image}
                 alt={jam.title}
-                className={cn('h-full w-full object-cover', jam.contentWarning && 'blur-lg')}
+                className={cn('h-full w-full object-cover', hasWarning && 'blur-lg')}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-xs text-neutral-600">No image</div>
             )}
-            {jam.contentWarning && (
-              <span className="absolute inset-0 flex items-center justify-center gap-1.5 text-[11px] font-medium text-neutral-200">
-                <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" /> {jam.contentWarning}
-              </span>
+            {hasWarning ? (
+              // First click reveals (doesn't navigate), like a mod card — otherwise
+              // opening the jam would show the image you chose not to see yet.
+              <button
+                onClick={() => setRevealed(true)}
+                className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-neutral-300"
+              >
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                <span className="px-3 text-center text-[11px] font-medium">{jam.contentWarning}</span>
+                <span className="text-[10px] text-neutral-500">Click to reveal</span>
+              </button>
+            ) : (
+              <Link to={`/mod-jam/${naddr}`} className="absolute inset-0" aria-label={jam.title} />
             )}
           </div>
-          <p className="line-clamp-2 text-sm font-semibold text-white transition-colors group-hover:text-[#fc4462]">{jam.title}</p>
-        </Link>
+          <Link to={`/mod-jam/${naddr}`} className="line-clamp-2 block text-sm font-semibold text-white transition-colors group-hover:text-[#fc4462]">
+            {jam.title}
+          </Link>
+        </div>
 
         {/* Rank pills once results are published */}
         {rank && (rank.jRank > 0 || rank.uRank > 0) && (
