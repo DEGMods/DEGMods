@@ -197,10 +197,8 @@ function ChipInput({ items, onChange, placeholder, transform, maxLength, max }: 
         <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} placeholder={placeholder} maxLength={maxLength} disabled={full} className={inputCls} />
         <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add} disabled={full}><Plus className="h-4 w-4" /></Button>
       </div>
-      <div className="flex items-center justify-end gap-3">
-        {maxLength && <Counter value={val} max={maxLength} />}
-        {max !== undefined && <CountBadge n={items.length} max={max} />}
-      </div>
+      {/* Chips sit directly under the input they belong to; the counters go last.
+          With the counter row in between, the chips read as a detached block. */}
       {items.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {items.map((it) => (
@@ -211,6 +209,10 @@ function ChipInput({ items, onChange, placeholder, transform, maxLength, max }: 
           ))}
         </div>
       )}
+      <div className="flex items-center justify-end gap-3">
+        {maxLength && <Counter value={val} max={maxLength} />}
+        {max !== undefined && <CountBadge n={items.length} max={max} />}
+      </div>
     </div>
   )
 }
@@ -486,9 +488,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
     if (s.tags.length === 0) return toast.error('Add at least one tag')
     if (!start) return toast.error('Set the start date and time')
     if (!end) return toast.error('Set the end date and time')
-    if (end <= start) return toast.error('The end must be after the start')
     if (votingOn && !votingEnd) return toast.error('Set when voting ends')
-    if (votingOn && votingEnd && votingEnd < end) return toast.error('Voting must end on or after the jam ends')
     if (s.votingEnabled && s.judges.length === 0) return toast.error('Add at least one judge (or turn off judge voting)')
     const labels = s.customCriteria ? s.criteria.map((c) => c.trim()).filter(Boolean) : []
     if (s.customCriteria && labels.length < 2) return toast.error('Custom scoring needs at least 2 criteria')
@@ -617,7 +617,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
         />
         <DateTimeRow
           label="End (submissions close)" required date={s.endDate} time={s.endTime}
-          onDate={(v) => set('endDate', v)} onTime={(v) => set('endTime', v)} use12h={use12h} minDate={s.startDate}
+          onDate={(v) => set('endDate', v)} onTime={(v) => set('endTime', v)} use12h={use12h}
           locked={endPassed} lockReason="Submissions have closed — moving this would change which entries count."
         />
         <p className="flex items-start gap-1.5 text-[11px] text-neutral-500"><Info className="mt-0.5 h-3 w-3 shrink-0" /> Times are entered in your local time. The jam is stored in UTC and shown to everyone in their own local time.</p>
@@ -664,7 +664,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
           <>
             <DateTimeRow
               label="Voting ends" required date={s.votingEndDate} time={s.votingEndTime}
-              onDate={(v) => set('votingEndDate', v)} onTime={(v) => set('votingEndTime', v)} use12h={use12h} minDate={s.endDate}
+              onDate={(v) => set('votingEndDate', v)} onTime={(v) => set('votingEndTime', v)} use12h={use12h}
               locked={votingEndPassed} lockReason="Voting has closed — moving this would change which ballots count."
             />
 

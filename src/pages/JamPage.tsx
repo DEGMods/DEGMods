@@ -4,6 +4,7 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown, Trash2, ChevronLeft } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
+import { JudgeRow } from '@/components/jam/JudgeList'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -347,7 +348,7 @@ export function JamPage() {
               {jam.votingEnabled && jam.judges.length > 0 && (
                 <div>
                   <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-neutral-400"><Users className="h-3.5 w-3.5" /> Judges</p>
-                  <div className="flex flex-wrap gap-1.5">{jam.judges.map((j) => <span key={j} className="rounded-md bg-[#262626] px-2 py-1 text-xs text-neutral-300">{j.startsWith('npub') ? `${j.slice(0, 12)}…` : j}</span>)}</div>
+                  <div className="space-y-1.5">{jam.judges.map((j) => <JudgeRow key={j} value={j} locked />)}</div>
                 </div>
               )}
             </Section>

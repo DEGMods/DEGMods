@@ -22,7 +22,13 @@ function npubToHex(v: string): string | null {
 }
 
 /** A full-width judge row. npubs resolve to a profile (pic, name, npub); plain names show as-is. */
-function JudgeRow({ value, onRemove, locked }: { value: string; onRemove: () => void; locked?: boolean }) {
+/**
+ * One judge as a full-width row. An npub resolves to its profile (picture, name,
+ * npub); anything else renders as the plain name it is. Exported so the jam post
+ * shows judges the same way the editor does — a truncated npub tells a reader
+ * nothing about who is judging.
+ */
+export function JudgeRow({ value, onRemove, locked }: { value: string; onRemove?: () => void; locked?: boolean }) {
   const hex = npubToHex(value)
   const [profile, setProfile] = useState<UserProfile | null>(null)
 
@@ -58,7 +64,7 @@ function JudgeRow({ value, onRemove, locked }: { value: string; onRemove: () => 
           <p className="truncate text-sm text-neutral-200">{value}</p>
         )}
       </div>
-      {!locked && <button type="button" onClick={onRemove} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
+      {!locked && onRemove && <button type="button" onClick={onRemove} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
     </div>
   )
 }
