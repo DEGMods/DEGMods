@@ -36,6 +36,24 @@ const fmtLong = (ts: number) => new Date(ts * 1000).toLocaleString(undefined, { 
 
 const STATUS_COLOR: Record<string, string> = { upcoming: 'text-sky-400', active: 'text-[#fc4462]', voting: 'text-amber-400', ended: 'text-neutral-500' }
 
+/** Per-status styling + wording for the full-width timing band. */
+const STATUS_BAND: Record<string, { label: string; box: string; dot: string; text: string }> = {
+  upcoming: { label: 'Upcoming', box: 'border-sky-400/30 bg-sky-400/10', dot: 'bg-sky-400', text: 'text-sky-400' },
+  active: { label: 'Open for submissions', box: 'border-[#fc4462]/30 bg-[#fc4462]/10', dot: 'bg-[#fc4462]', text: 'text-[#fc4462]' },
+  voting: { label: 'Voting', box: 'border-amber-400/30 bg-amber-400/10', dot: 'bg-amber-400', text: 'text-amber-400' },
+  ended: { label: 'Ended', box: 'border-[#262626] bg-[#212121]', dot: 'bg-neutral-500', text: 'text-neutral-400' },
+}
+
+/** The one date that matters at this point in the jam's life. */
+function statusMilestone(jam: JamDetails, status: string): string | null {
+  switch (status) {
+    case 'upcoming': return `Starts ${fmt(jam.start)}`
+    case 'active': return `Submissions close ${fmt(jam.end)}`
+    case 'voting': return jam.votingEnd ? `Voting closes ${fmt(jam.votingEnd)}` : null
+    default: return `Closed ${fmt(jam.votingEnd ?? jam.end)}`
+  }
+}
+
 /** Pretty-print a raw event, expanding any JSON-encoded tag values. */
 function readableEventJson(ev: Record<string, unknown>): string {
   const out = { ...ev }
@@ -222,9 +240,6 @@ export function JamPage() {
                 <span className="text-xs text-neutral-500">Click to reveal</span>
               </button>
             )}
-            <span className={cn('absolute left-3 top-3 z-10 inline-flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-xs font-medium backdrop-blur-sm', STATUS_COLOR[status])}>
-              <Clock className="h-3.5 w-3.5" /> {jamCountdownLabel(jam, now)}
-            </span>
           </div>
 
           <div className="space-y-3">
@@ -265,6 +280,26 @@ export function JamPage() {
               {jam.theme
                 ? <span className="text-lg font-semibold text-white">{jam.theme}</span>
                 : <span className="text-lg font-semibold text-neutral-500">To be revealed</span>}
+            </div>
+
+            {/* Where the jam is in its life, full width. This was a pill floating
+                over the cover image, which put the single most time-sensitive
+                fact on the page behind an NSFW blur and easy to miss. */}
+            <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg border px-3.5 py-2.5', STATUS_BAND[status].box)}>
+              <span className={cn('inline-flex items-center gap-2 text-sm font-semibold', STATUS_BAND[status].text)}>
+                <span className={cn('h-2 w-2 rounded-full', STATUS_BAND[status].dot)} />
+                {STATUS_BAND[status].label}
+                {/* An ended jam's countdown label is just "Ended" — don't say it twice. */}
+                {status !== 'ended' && (
+                  <>
+                    <span className="text-neutral-500">·</span>
+                    <span className="inline-flex items-center gap-1 font-medium"><Clock className="h-3.5 w-3.5" /> {jamCountdownLabel(jam, now)}</span>
+                  </>
+                )}
+              </span>
+              {statusMilestone(jam, status) && (
+                <span className="text-xs text-neutral-400">{statusMilestone(jam, status)}</span>
+              )}
             </div>
           </div>
 
