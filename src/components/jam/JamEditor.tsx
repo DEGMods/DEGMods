@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Clock, Plus, X, Info, Loader2, Pencil, Eye, RotateCcw } from 'lucide-react'
+import { Clock, Plus, X, Info, Loader2, Pencil, Eye, RotateCcw, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ import { JudgeList } from './JudgeList'
 import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
 import { Markdown } from '@/components/shared/Markdown'
 import { CharCounter } from '@/components/shared/CharCounter'
+import { useNow } from '@/hooks/useNow'
 import { DatePicker } from './DatePicker'
 import { TimePicker, browserUses12h } from './TimePicker'
 import { IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
@@ -264,18 +265,36 @@ function VoteRelayList({ relays, onChange }: { relays: VoteRelay[]; onChange: (v
   )
 }
 
-/** Start/End/Voting date+time row. */
-function DateTimeRow({ label, required, date, time, onDate, onTime, use12h, minDate }: {
+/** A locked date shown read-only (rather than a disabled picker, which can still be focused). */
+function lockedDateLabel(date: string, time: string): string {
+  if (!date) return '—'
+  const ts = localToUnix(date, time)
+  return ts ? new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : `${date} ${time}`
+}
+
+/** Start/End/Voting date+time row. Locks to read-only once the moment has passed. */
+function DateTimeRow({ label, required, date, time, onDate, onTime, use12h, minDate, locked, lockReason }: {
   label: string; required?: boolean; date: string; time: string
   onDate: (v: string) => void; onTime: (v: string) => void; use12h: boolean; minDate?: string
+  locked?: boolean; lockReason?: string
 }) {
   return (
     <div className="space-y-1.5">
       <Label>{label} {required ? <span className="text-[#fc4462]">*</span> : <span className="text-neutral-600">(optional)</span>}</Label>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <DatePicker value={date} onChange={onDate} placeholder="Select date" minDate={minDate} />
-        <TimePicker value={time} onChange={onTime} use12h={use12h} />
-      </div>
+      {locked ? (
+        <>
+          <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#1a1a1a] px-3 py-2 text-sm text-neutral-400">
+            <Lock className="h-3.5 w-3.5 shrink-0 text-neutral-500" />
+            {lockedDateLabel(date, time)}
+          </div>
+          {lockReason && <p className="text-[11px] text-neutral-500">{lockReason}</p>}
+        </>
+      ) : (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <DatePicker value={date} onChange={onDate} placeholder="Select date" minDate={minDate} />
+          <TimePicker value={time} onChange={onTime} use12h={use12h} />
+        </div>
+      )}
     </div>
   )
 }
@@ -293,6 +312,17 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) => setS((p) => ({ ...p, [k]: v }))
 
   const votingOn = s.votingEnabled || s.userVotingEnabled
+
+  // Moments that have already passed can't be rewritten — they'd retroactively
+  // change which submissions and ballots count. Judged against the *published*
+  // jam's dates, not the (editable) form values.
+  const now = useNow(30_000)
+  const startPassed = !!editJam && now >= editJam.start
+  const endPassed = !!editJam && now >= editJam.end
+  const votingEndPassed = !!editJam?.votingEnd && now >= editJam.votingEnd
+  // Criteria and the max score decide whether an already-cast ballot is valid, so
+  // they freeze the moment voting can begin (i.e. when submissions close).
+  const scoringLocked = endPassed
 
   const submit = async () => {
     const start = localToUnix(s.startDate, s.startTime)
@@ -430,8 +460,16 @@ export function JamEditor({ editJam, onPublish, publishing }: {
             <button type="button" onClick={() => setUse12h(false)} className={cn('px-2.5 py-1', !use12h ? 'bg-[#fc4462] text-white' : 'bg-[#212121] text-neutral-400')}>24h</button>
           </div>
         </div>
-        <DateTimeRow label="Start" required date={s.startDate} time={s.startTime} onDate={(v) => set('startDate', v)} onTime={(v) => set('startTime', v)} use12h={use12h} />
-        <DateTimeRow label="End (submissions close)" required date={s.endDate} time={s.endTime} onDate={(v) => set('endDate', v)} onTime={(v) => set('endTime', v)} use12h={use12h} minDate={s.startDate} />
+        <DateTimeRow
+          label="Start" required date={s.startDate} time={s.startTime}
+          onDate={(v) => set('startDate', v)} onTime={(v) => set('startTime', v)} use12h={use12h}
+          locked={startPassed} lockReason="The jam has already started — moving this would change which submissions count."
+        />
+        <DateTimeRow
+          label="End (submissions close)" required date={s.endDate} time={s.endTime}
+          onDate={(v) => set('endDate', v)} onTime={(v) => set('endTime', v)} use12h={use12h} minDate={s.startDate}
+          locked={endPassed} lockReason="Submissions have closed — moving this would change which entries count."
+        />
         <p className="flex items-start gap-1.5 text-[11px] text-neutral-500"><Info className="mt-0.5 h-3 w-3 shrink-0" /> Times are entered in your local time. The jam is stored in UTC and shown to everyone in their own local time.</p>
       </Section>
 
@@ -452,25 +490,37 @@ export function JamEditor({ editJam, onPublish, publishing }: {
 
         {votingOn && (
           <>
-            <DateTimeRow label="Voting ends" required date={s.votingEndDate} time={s.votingEndTime} onDate={(v) => set('votingEndDate', v)} onTime={(v) => set('votingEndTime', v)} use12h={use12h} minDate={s.endDate} />
+            <DateTimeRow
+              label="Voting ends" required date={s.votingEndDate} time={s.votingEndTime}
+              onDate={(v) => set('votingEndDate', v)} onTime={(v) => set('votingEndTime', v)} use12h={use12h} minDate={s.endDate}
+              locked={votingEndPassed} lockReason="Voting has closed — moving this would change which ballots count."
+            />
+
+            {scoringLocked && (
+              <p className="flex items-start gap-1.5 rounded-lg border border-[#262626] bg-[#1a1a1a] px-3 py-2 text-[11px] text-neutral-400">
+                <Lock className="mt-0.5 h-3 w-3 shrink-0 text-neutral-500" />
+                Scoring is locked now that submissions have closed — changing the criteria or the max
+                score would invalidate ballots people have already cast.
+              </p>
+            )}
 
             <div className="flex items-center justify-between rounded-lg bg-[#212121] px-3 py-2">
               <div><p className="text-sm text-neutral-200">Custom scoring criteria</p><p className="text-[11px] text-neutral-500">Off = a single overall score.</p></div>
-              <Switch checked={s.customCriteria} onCheckedChange={(v) => set('customCriteria', v)} />
+              <Switch checked={s.customCriteria} onCheckedChange={(v) => set('customCriteria', v)} disabled={scoringLocked} />
             </div>
             {s.customCriteria && (
               <div className="space-y-2">
                 {s.criteria.map((label, i) => (
                   <div key={i} className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <Input value={label} onChange={(e) => set('criteria', s.criteria.map((x, j) => j === i ? e.target.value : x))} placeholder="Criterion (e.g. Graphics)" maxLength={LIMITS.criterion} className={`${inputCls} flex-1`} />
-                      {s.criteria.length > 2 && <button type="button" onClick={() => set('criteria', s.criteria.filter((_, j) => j !== i))} className="text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
+                      <Input value={label} onChange={(e) => set('criteria', s.criteria.map((x, j) => j === i ? e.target.value : x))} placeholder="Criterion (e.g. Graphics)" maxLength={LIMITS.criterion} disabled={scoringLocked} className={`${inputCls} flex-1`} />
+                      {!scoringLocked && s.criteria.length > 2 && <button type="button" onClick={() => set('criteria', s.criteria.filter((_, j) => j !== i))} className="text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
                     </div>
                     <Counter value={label} max={LIMITS.criterion} />
                   </div>
                 ))}
                 <div className="flex items-center justify-between">
-                  {s.criteria.length < MAX.criteria
+                  {!scoringLocked && s.criteria.length < MAX.criteria
                     ? <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('criteria', [...s.criteria, ''])}><Plus className="mr-1 h-3 w-3" /> Add criterion</Button>
                     : <span />}
                   <CountBadge n={s.criteria.length} max={MAX.criteria} />
@@ -480,15 +530,15 @@ export function JamEditor({ editJam, onPublish, publishing }: {
 
             {/* Max score — hidden behind a toggle; governs every criterion and the overall score. */}
             <div className="space-y-2 rounded-lg bg-[#212121] px-3 py-2">
-              <label className="flex cursor-pointer items-center justify-between">
+              <label className={cn('flex items-center justify-between', scoringLocked ? 'cursor-default' : 'cursor-pointer')}>
                 <div><p className="text-sm text-neutral-200">Adjust max score</p><p className="text-[11px] text-neutral-500">{s.customCriteria ? 'Each criterion is scored' : 'The overall score is'} 0–{adjustMax ? s.scoreMax : 10}.</p></div>
-                <Switch checked={adjustMax} onCheckedChange={(v) => { setAdjustMax(v); if (!v) set('scoreMax', 10) }} />
+                <Switch checked={adjustMax} onCheckedChange={(v) => { setAdjustMax(v); if (!v) set('scoreMax', 10) }} disabled={scoringLocked} />
               </label>
               {adjustMax && (
                 <div className="flex items-center gap-3 pt-1">
-                  <Slider min={2} max={100} step={1} value={[s.scoreMax]} onValueChange={([v]) => set('scoreMax', v)} className="flex-1" />
+                  <Slider min={2} max={100} step={1} value={[s.scoreMax]} onValueChange={([v]) => set('scoreMax', v)} disabled={scoringLocked} className="flex-1" />
                   <span className="w-10 text-right text-sm font-semibold tabular-nums text-[#fc4462]">{s.scoreMax}</span>
-                  <button type="button" onClick={() => set('scoreMax', 10)} disabled={s.scoreMax === 10} className="text-neutral-500 hover:text-[#fc4462] disabled:opacity-40" title="Reset to default (10)"><RotateCcw className="h-3.5 w-3.5" /></button>
+                  <button type="button" onClick={() => set('scoreMax', 10)} disabled={scoringLocked || s.scoreMax === 10} className="text-neutral-500 hover:text-[#fc4462] disabled:opacity-40" title="Reset to default (10)"><RotateCcw className="h-3.5 w-3.5" /></button>
                 </div>
               )}
             </div>
