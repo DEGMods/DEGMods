@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Gavel } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -104,8 +104,7 @@ export function JamVoteModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-[#262626] bg-[#1a1a1a] sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-white">
-            <Gavel className="h-4 w-4 text-[#fc4462]" />
+          <DialogTitle className="text-white">
             {readOnly ? 'Your vote' : 'Score this entry'}
           </DialogTitle>
           <DialogDescription className="text-neutral-400">
