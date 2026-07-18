@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Vote, Eye, Medal, Loader2, AlertCircle } from 'lucide-react'
+import { Vote, Eye, Medal, Loader2, AlertCircle, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useNow } from '@/hooks/useNow'
 import { useAuthStore } from '@/stores/authStore'
@@ -113,22 +115,23 @@ export function ModJamBanner({
     return () => { cancelled = true }
   }, [jam, myPubkey, submissionDTag])
 
-  // The section holds its place while the jam resolves, so the mod page doesn't
-  // reflow once it lands.
-  const shell = 'space-y-2 rounded-lg border border-[#fc4462]/30 bg-[#fc4462]/10 px-3 py-2.5'
+  // The card holds its place (heading + image slot) while the jam resolves, so
+  // the sidebar doesn't reflow once it lands.
+  const shell = 'space-y-3 rounded-xl border border-[#fc4462]/30 bg-[#fc4462]/10 p-3'
+  const heading = <p className="text-xs font-medium text-[#fc9db0]">This is an entry for a mod jam event</p>
   if (!jam) {
     return loading ? (
       <div className={shell}>
-        <span className="flex items-center gap-2 text-sm text-[#fc9db0]">
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#fc4462]" />
-          Loading the mod jam this entry belongs to…
-        </span>
+        {heading}
+        <Skeleton className="aspect-video w-full rounded-lg" />
+        <Skeleton className="h-4 w-2/3" />
       </div>
     ) : (
-      <div className="space-y-2 rounded-lg border border-[#262626] bg-[#1c1c1c] px-3 py-2.5">
+      <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
+        {heading}
         <span className="flex items-center gap-2 text-sm text-neutral-400">
           <AlertCircle className="h-4 w-4 shrink-0 text-neutral-500" />
-          This mod is an entry in a mod jam that couldn’t be found on your relays.
+          The jam couldn’t be found on your relays.
         </span>
       </div>
     )
@@ -174,8 +177,26 @@ export function ModJamBanner({
   return (
     <TooltipProvider>
       <div className={shell}>
-        <Link to={`/mod-jam/${naddr}`} className="block min-w-0 text-sm text-[#fc9db0] hover:text-[#fc4462]">
-          <span className="truncate">Entry in the <span className="font-medium text-white">{jam.title}</span> mod jam</span>
+        {heading}
+
+        <Link to={`/mod-jam/${naddr}`} className="group block space-y-2">
+          <div className="relative aspect-video overflow-hidden rounded-lg border border-[#262626] bg-[#171717]">
+            {jam.image ? (
+              <SkeletonImage
+                src={jam.image}
+                alt={jam.title}
+                className={cn('h-full w-full object-cover', jam.contentWarning && 'blur-lg')}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xs text-neutral-600">No image</div>
+            )}
+            {jam.contentWarning && (
+              <span className="absolute inset-0 flex items-center justify-center gap-1.5 text-[11px] font-medium text-neutral-200">
+                <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" /> {jam.contentWarning}
+              </span>
+            )}
+          </div>
+          <p className="line-clamp-2 text-sm font-semibold text-white transition-colors group-hover:text-[#fc4462]">{jam.title}</p>
         </Link>
 
         {/* Rank pills once results are published */}

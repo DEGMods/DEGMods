@@ -671,16 +671,6 @@ export default function ModPage() {
             </section>
           )}
 
-          {/* Mod jam entry: link back to the jam + rank + voting */}
-          {mod.jamCoordinate && (
-            <ModJamBanner
-              jamCoordinate={mod.jamCoordinate}
-              submissionCoordinate={mod.aTag}
-              submissionDTag={mod.dTag}
-              submissionTitle={mod.title}
-            />
-          )}
-
           {/* For another mod */}
           {mod.forMod && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2.5">
@@ -733,6 +723,16 @@ export default function ModPage() {
               <p className="text-sm text-neutral-400">{publishedDate}</p>
               {mod.client && <p className="text-xs text-neutral-500">on {mod.client}</p>}
             </section>
+          )}
+
+          {/* Mod jam entry: the jam this mod was submitted to, rank + voting */}
+          {mod.jamCoordinate && (
+            <ModJamBanner
+              jamCoordinate={mod.jamCoordinate}
+              submissionCoordinate={mod.aTag}
+              submissionDTag={mod.dTag}
+              submissionTitle={mod.title}
+            />
           )}
 
           {/* Author's latest social posts */}
