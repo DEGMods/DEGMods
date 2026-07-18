@@ -22,7 +22,7 @@ function npubToHex(v: string): string | null {
 }
 
 /** A full-width judge row. npubs resolve to a profile (pic, name, npub); plain names show as-is. */
-function JudgeRow({ value, onRemove }: { value: string; onRemove: () => void }) {
+function JudgeRow({ value, onRemove, locked }: { value: string; onRemove: () => void; locked?: boolean }) {
   const hex = npubToHex(value)
   const [profile, setProfile] = useState<UserProfile | null>(null)
 
@@ -58,15 +58,15 @@ function JudgeRow({ value, onRemove }: { value: string; onRemove: () => void }) 
           <p className="truncate text-sm text-neutral-200">{value}</p>
         )}
       </div>
-      <button type="button" onClick={onRemove} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>
+      {!locked && <button type="button" onClick={onRemove} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
     </div>
   )
 }
 
 /** Judge entry: add by name or npub; each judge is a full-width row (npubs show a profile). */
-export function JudgeList({ judges, onChange, maxLength, max }: { judges: string[]; onChange: (v: string[]) => void; maxLength?: number; max?: number }) {
+export function JudgeList({ judges, onChange, maxLength, max, locked }: { judges: string[]; onChange: (v: string[]) => void; maxLength?: number; max?: number; locked?: boolean }) {
   const [val, setVal] = useState('')
-  const full = max !== undefined && judges.length >= max
+  const full = locked || (max !== undefined && judges.length >= max)
   const add = () => {
     if (full) return
     const v = val.trim()
@@ -75,17 +75,21 @@ export function JudgeList({ judges, onChange, maxLength, max }: { judges: string
   }
   return (
     <div className="space-y-2">
+      {!locked && (
       <div className="flex gap-2">
         <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} placeholder="Add a judge (name or npub) and press Enter" maxLength={maxLength} disabled={full} className={inputCls} />
         <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add} disabled={full}><Plus className="h-4 w-4" /></Button>
       </div>
+      )}
+      {!locked && (
       <div className="flex items-center justify-end gap-3">
         {maxLength && <CharCounter value={val} max={maxLength} />}
         {max !== undefined && <span className={cn('text-[10px] tabular-nums', judges.length >= max ? 'text-amber-400' : 'text-neutral-600')}>{judges.length}/{max}</span>}
       </div>
+      )}
       {judges.length > 0 && (
         <div className="space-y-1.5">
-          {judges.map((j) => <JudgeRow key={j} value={j} onRemove={() => onChange(judges.filter((x) => x !== j))} />)}
+          {judges.map((j) => <JudgeRow key={j} value={j} locked={locked} onRemove={() => onChange(judges.filter((x) => x !== j))} />)}
         </div>
       )}
     </div>

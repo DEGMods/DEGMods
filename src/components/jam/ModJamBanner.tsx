@@ -173,14 +173,17 @@ export function ModJamBanner({
       voteBtn = { label: 'Checking your vote…', disabled: true, icon: Loader2, spinning: true }
     } else if (ballotCounts) {
       voteBtn = { label: 'View your vote', disabled: false, icon: Eye }
+    } else if (status === 'upcoming' || status === 'active') {
+      // Window checks come before the signed-out check: a closed jam is closed to
+      // everyone, and offering a signed-out visitor a live button only to disable
+      // it the moment they log in is a worse trip through the login modal.
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting opens when submissions close.', icon: Vote }
+    } else if (!inWindow) {
+      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting has ended.', icon: Vote }
     } else if (!myPubkey) {
       voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Vote }
     } else if (!eligible) {
       voteBtn = { label: 'Judges only', disabled: true, reason: 'Only the jam’s judges can score entries.', icon: Vote }
-    } else if (status === 'upcoming' || status === 'active') {
-      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting opens when submissions close.', icon: Vote }
-    } else if (!inWindow) {
-      voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: true, reason: 'Voting has ended.', icon: Vote }
     } else {
       voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Vote }
     }

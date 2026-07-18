@@ -230,7 +230,7 @@ function GameChipInput({ games, onChange, maxLength, max }: { games: string[]; o
 }
 
 /** Vote-relay list: each relay is a full-width row with an enable toggle + remove. */
-function VoteRelayList({ relays, onChange }: { relays: VoteRelay[]; onChange: (v: VoteRelay[]) => void }) {
+function VoteRelayList({ relays, onChange, appendOnly }: { relays: VoteRelay[]; onChange: (v: VoteRelay[]) => void; appendOnly?: boolean }) {
   const [val, setVal] = useState('')
   const add = () => {
     const u = val.trim()
@@ -246,9 +246,9 @@ function VoteRelayList({ relays, onChange }: { relays: VoteRelay[]; onChange: (v
         <div className="space-y-1.5">
           {relays.map((r) => (
             <div key={r.url} className="flex items-center gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2">
-              <Switch checked={r.enabled} onCheckedChange={() => toggle(r.url)} />
+              <Switch checked={r.enabled} onCheckedChange={() => toggle(r.url)} disabled={appendOnly} />
               <span className={cn('min-w-0 flex-1 truncate font-mono text-xs', r.enabled ? 'text-neutral-200' : 'text-neutral-500 line-through')}>{r.url}</span>
-              <button type="button" onClick={() => remove(r.url)} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>
+              {!appendOnly && <button type="button" onClick={() => remove(r.url)} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
             </div>
           ))}
         </div>
@@ -258,9 +258,11 @@ function VoteRelayList({ relays, onChange }: { relays: VoteRelay[]; onChange: (v
         <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add}><Plus className="h-4 w-4" /></Button>
       </div>
       <div className="flex justify-end"><Counter value={val} max={LIMITS.relay} /></div>
-      <Button type="button" variant="outline" size="sm" className="gap-1.5 border-[#262626] text-xs" onClick={() => onChange(defaultVoteRelays())}>
-        <RotateCcw className="h-3 w-3" /> Reset to defaults
-      </Button>
+      {!appendOnly && (
+        <Button type="button" variant="outline" size="sm" className="gap-1.5 border-[#262626] text-xs" onClick={() => onChange(defaultVoteRelays())}>
+          <RotateCcw className="h-3 w-3" /> Reset to defaults
+        </Button>
+      )}
     </div>
   )
 }
@@ -483,17 +485,25 @@ export function JamEditor({ editJam, onPublish, publishing }: {
 
       {/* Voting */}
       <Section title="Voting">
+        {scoringLocked && (
+          <p className="flex items-start gap-1.5 rounded-lg border border-[#262626] bg-[#1a1a1a] px-3 py-2 text-[11px] text-neutral-400">
+            <Lock className="mt-0.5 h-3 w-3 shrink-0 text-neutral-500" />
+            Voting is locked now that submissions have closed — who votes, what they score and the
+            scale they score on all decide how ballots count, and people have already cast theirs.
+          </p>
+        )}
+
         <div className="flex items-center justify-between rounded-lg bg-[#212121] px-3 py-2">
           <div><p className="text-sm text-neutral-200">Judge voting</p><p className="text-[11px] text-neutral-500">Only the judges you list score entries.</p></div>
-          <Switch checked={s.votingEnabled} onCheckedChange={(v) => set('votingEnabled', v)} />
+          <Switch checked={s.votingEnabled} onCheckedChange={(v) => set('votingEnabled', v)} disabled={scoringLocked} />
         </div>
         <div className="flex items-center justify-between rounded-lg bg-[#212121] px-3 py-2">
           <div><p className="text-sm text-neutral-200">Community voting</p><p className="text-[11px] text-neutral-500">Anyone can score entries (proof-of-worked).</p></div>
-          <Switch checked={s.userVotingEnabled} onCheckedChange={(v) => set('userVotingEnabled', v)} />
+          <Switch checked={s.userVotingEnabled} onCheckedChange={(v) => set('userVotingEnabled', v)} disabled={scoringLocked} />
         </div>
 
         {s.votingEnabled && (
-          <div className="space-y-1.5"><Label>Judges <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(name or npub)</span></Label><JudgeList judges={s.judges} onChange={(v) => set('judges', v)} maxLength={LIMITS.judge} max={MAX.judges} /></div>
+          <div className="space-y-1.5"><Label>Judges <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(name or npub)</span></Label><JudgeList judges={s.judges} onChange={(v) => set('judges', v)} maxLength={LIMITS.judge} max={MAX.judges} locked={scoringLocked} /></div>
         )}
 
         {votingOn && (
@@ -503,14 +513,6 @@ export function JamEditor({ editJam, onPublish, publishing }: {
               onDate={(v) => set('votingEndDate', v)} onTime={(v) => set('votingEndTime', v)} use12h={use12h} minDate={s.endDate}
               locked={votingEndPassed} lockReason="Voting has closed — moving this would change which ballots count."
             />
-
-            {scoringLocked && (
-              <p className="flex items-start gap-1.5 rounded-lg border border-[#262626] bg-[#1a1a1a] px-3 py-2 text-[11px] text-neutral-400">
-                <Lock className="mt-0.5 h-3 w-3 shrink-0 text-neutral-500" />
-                Scoring is locked now that submissions have closed — changing the criteria or the max
-                score would invalidate ballots people have already cast.
-              </p>
-            )}
 
             <div className="flex items-center justify-between rounded-lg bg-[#212121] px-3 py-2">
               <div><p className="text-sm text-neutral-200">Custom scoring criteria</p><p className="text-[11px] text-neutral-500">Off = a single overall score.</p></div>
@@ -598,8 +600,20 @@ export function JamEditor({ editJam, onPublish, publishing }: {
 
       {/* Vote relays */}
       <Section title="Vote relays">
-        <Label hint="Where votes are published and read. Seeded from your client + user relays — toggle, remove, or reset to re-roll.">Relays <span className="text-[#fc4462]">*</span></Label>
-        <VoteRelayList relays={s.relays} onChange={(v) => set('relays', v)} />
+        <Label hint={scoringLocked
+          ? 'Where votes are published and read.'
+          : 'Where votes are published and read. Seeded from your client + user relays — toggle, remove, or reset to re-roll.'}>Relays <span className="text-[#fc4462]">*</span></Label>
+        {scoringLocked && (
+          // Append-only rather than fully locked: dropping a relay now would hide
+          // ballots already sitting on it, but adding one can only help the tally
+          // find more of them.
+          <p className="flex items-start gap-1.5 rounded-lg border border-[#262626] bg-[#1a1a1a] px-3 py-2 text-[11px] text-neutral-400">
+            <Lock className="mt-0.5 h-3 w-3 shrink-0 text-neutral-500" />
+            Voting is underway, so relays can only be added — removing one would hide ballots
+            already stored there from the tally.
+          </p>
+        )}
+        <VoteRelayList relays={s.relays} onChange={(v) => set('relays', v)} appendOnly={scoringLocked} />
       </Section>
 
       {/* FAQ */}
