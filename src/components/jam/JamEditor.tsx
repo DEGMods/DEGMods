@@ -69,6 +69,15 @@ const MAX = {
  */
 const CRITERIA_TEMPLATE = ['Gameplay', 'Creativity', 'Theme fit', 'Visuals', 'Audio', 'Polish']
 
+/**
+ * Treat a deadline as reached slightly early when deciding what may still be
+ * edited. Our clock governs the lock while each voter's clock stamps their
+ * ballot, so without a margin a slow clock here could let criteria move under
+ * ballots that already count. Nobody legitimately needs to retune a jam in the
+ * last minute before its deadline.
+ */
+const LOCK_MARGIN_SECONDS = 60
+
 /** A small "N/max" item-count badge (amber once the cap is hit). */
 const CountBadge = ({ n, max }: { n: number; max: number }) => (
   <span className={cn('text-[10px] tabular-nums', n >= max ? 'text-amber-400' : 'text-neutral-600')}>{n}/{max}</span>
@@ -402,7 +411,9 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   // Moments that have already passed can't be rewritten — they'd retroactively
   // change which submissions and ballots count. Judged against the *published*
   // jam's dates, not the (editable) form values.
-  const now = useNow(30_000)
+  // The margin is applied here too, so the form never offers a field that submit
+  // would immediately revert.
+  const now = useNow(30_000) + LOCK_MARGIN_SECONDS
   const startPassed = !!editJam && now >= editJam.start
   const endPassed = !!editJam && now >= editJam.end
   const votingEndPassed = !!editJam?.votingEnd && now >= editJam.votingEnd
@@ -410,7 +421,59 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   // they freeze the moment voting can begin (i.e. when submissions close).
   const scoringLocked = endPassed
 
+  /**
+   * Restore any field that locked while the editor was open, returning what was
+   * put back. Reverting beats refusing the whole save: someone who also fixed a
+   * typo in the description shouldn't lose that too.
+   */
+  const revertLockedFields = (nowTs: number): string[] => {
+    if (!editJam) return []
+    const pub = publishedRef.current
+    const reverted: string[] = []
+    const restore = <K extends keyof EditorState>(key: K) => {
+      if (JSON.stringify(s[key]) !== JSON.stringify(pub[key])) setS((p) => ({ ...p, [key]: pub[key] }))
+    }
+    if (nowTs >= editJam.end) {
+      const scoringChanged = (['customCriteria', 'criteria', 'scoreMax', 'votingEnabled', 'userVotingEnabled', 'judges'] as const)
+        .filter((k) => JSON.stringify(s[k]) !== JSON.stringify(pub[k]))
+      if (scoringChanged.length) {
+        scoringChanged.forEach(restore)
+        reverted.push('the voting setup')
+      }
+      if (s.endDate !== pub.endDate || s.endTime !== pub.endTime) {
+        restore('endDate'); restore('endTime')
+        reverted.push('the submission deadline')
+      }
+    }
+    if (nowTs >= editJam.start && (s.startDate !== pub.startDate || s.startTime !== pub.startTime)) {
+      restore('startDate'); restore('startTime')
+      reverted.push('the start date')
+    }
+    if (editJam.votingEnd && nowTs >= editJam.votingEnd && (s.votingEndDate !== pub.votingEndDate || s.votingEndTime !== pub.votingEndTime)) {
+      restore('votingEndDate'); restore('votingEndTime')
+      reverted.push('the voting deadline')
+    }
+    return reverted
+  }
+
   const submit = async () => {
+    // The lock above is driven by a 30s timer, so an editor left open can still
+    // render scoring as editable for a moment after voting opens. Re-check
+    // against a fresh clock, with a margin covering the other direction too: our
+    // clock decides the lock while the *voter's* decides whether their ballot
+    // counts, so a slow clock here could otherwise let criteria move under
+    // ballots that already count.
+    if (editJam) {
+      const reverted = revertLockedFields(Math.floor(Date.now() / 1000) + LOCK_MARGIN_SECONDS)
+      if (reverted.length) {
+        toast.warning(
+          `Voting has opened, so ${reverted.join(' and ')} can no longer change — ${reverted.length === 1 ? 'it has' : 'they have'} been restored. Your other edits are ready to publish.`,
+          { duration: 8000 },
+        )
+        return
+      }
+    }
+
     const start = localToUnix(s.startDate, s.startTime)
     const end = localToUnix(s.endDate, s.endTime)
     const votingEnd = votingOn ? localToUnix(s.votingEndDate, s.votingEndTime) : null
