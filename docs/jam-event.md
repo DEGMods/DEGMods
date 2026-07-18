@@ -13,7 +13,7 @@ The three kinds in the jam family:
 |---|---|---|---|
 | `31143` | Jam | jam creator | The jam itself: metadata, dates, voting config, criteria. |
 | `31243` | Ballot | a voter | One person's scores for one entry. |
-| `31343` | Result | jam creator | The creator's published, paged tally (aggregates + ranks). |
+| `31343` | Result | jam creator | The creator's published tally — top 100 per track (aggregates + ranks). |
 
 ---
 
@@ -337,7 +337,7 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 ["results", "1771722000"]
 ```
 
-- **Required:** No — added by the creator **after** publishing the paged result events (kind `31343`).
+- **Required:** No — added by the creator **after** publishing the result event (kind `31343`).
 - **Value:** the Unix timestamp when the tally was published.
 - **Purpose:** A lightweight marker telling clients "results are out." The per-entry data lives in the `31343` events, never on the jam event (which would blow past relay size limits at scale). Adding it is an edit, so `created_at` becomes `previous + 1`.
 
@@ -605,36 +605,116 @@ can express (see 1b).
 
 Compute **two ranks**: a **judges' rank** and a **users' rank**. Optionally a **combined** rank if the creator wants one (e.g. weight judges 70% / users 30%). Ties broken by vote count, then earliest submission.
 
-### 4. Publish — paged Result events (kind `31343`)
+### 4. Publish — one Result event (kind `31343`)
 
-**Do not publish one event per entry** — 1,000 writes hit relay rate limits. Publish **paged** results (~100 entries per event) so a large jam becomes ~10 events, each well under the size cap:
+**A jam publishes exactly one result event: the top 100 of each track.**
+
+Every page costs a PoW mine and a signer round-trip, so publishing a full
+leaderboard for a large jam means dozens of mining runs and dozens of approval
+prompts — unusable at scale. And nobody reads a leaderboard past the top: the
+person who cares about entry #487 is its creator, who can compute it on demand
+(see [Per-entry results on demand](#per-entry-results-on-demand)).
 
 ```jsonc
 {
   "kind": 31343,
   "pubkey": "<jam-creator>",
-  "content": "[{\"a\":\"31142:…\",\"judge\":{\"avg\":7.9,\"votes\":3},\"user\":{\"avg\":8.1,\"votes\":1240},\"jRank\":2,\"uRank\":5}, …]",
+  "content": "{\"judge\":[…100 rows…],\"community\":[…100 rows…]}",
   "tags": [
-    ["d", "<jam-d>:r:0"],              // results page 0
+    ["d", "<jam-d>:r:0"],
     ["a", "31143:<jam-pk>:<jam-d>"],
-    ["page", "0", "10"]                // page 0 of 10
+    ["truncated", "100"],             // top N per track; absence ≠ "no votes"
+    ["client", "DEG MODS"]
   ]
 }
 ```
 
-- Publish pages **sequentially with a small delay, a progress bar, and resumable retry** (on a `429`/rate-limit, back off and retry that page — never restart the whole run).
-- **Read results:** `{ "kinds":[31343], "authors":["<jam-pk>"], "#a":["31143:<pk>:<jam-d>"] }` → assemble the pages → leaderboard. (You load them all to render a leaderboard anyway, so per-entry addressability isn't lost in practice.)
-- The results are the creator's **cached, signed** tally; since ballots are public, anyone can **recompute and verify** them.
+**Two sections, ranked independently.** `judge` holds the top 100 by judges'
+rank, `community` the top 100 by community rank. **An entry may appear in both,
+and the duplication is intended** — the two tracks are separate results, not two
+views of one. Cutting on a single ranking would be a bug: an entry can place #3
+with judges and #400 with the community, and a judge-track winner must never be
+dropped because the crowd ignored it.
+
+**Row format.** One row per entry, per section:
+
+```jsonc
+{
+  "a": "31142:<mod-pk>:<mod-d>",   // the entry
+  "r": 1,                           // rank within this section
+  "v": 1240,                        // ballots counted in this track
+  "s": 8.4,                         // aggregate score (mean of the criteria means)
+  "c": [8.8, 7.9, 9.1, 8.0]         // per-criterion means, in the jam's criterion order
+}
+```
+
+`c` is positional — index *i* is the jam's criterion *i*, so labels aren't
+repeated 200 times. A jam with no `criterion` tags has a single-element `c`
+equal to `s`. Averages are rounded to **one decimal**: ranks are precomputed and
+stored, so display precision can't affect ordering.
+
+**Zero-vote entries are omitted.** A row of `avg 0, votes 0, rank 0` carries no
+information. Absence, combined with the `truncated` marker, means "not in the
+top N" — which the entry's own page can resolve exactly.
+
+**Size budget.** Worst case — 15 criteria (the cap), 200 rows, 8-digit vote
+counts, `99.9` averages, full 107-char coordinates, signature and PoW nonce —
+lands at **~47 KB**, inside the 64 KB relays commonly allow. Two levers exist if
+a stricter relay needs them: dropping the redundant `31142:` prefix (~1 KB), and
+trimming the criteria breakdown.
+
+- **Read results:** `{ "kinds":[31343], "authors":["<jam-pk>"], "#a":["31143:<pk>:<jam-d>"] }` → one event → both leaderboards.
+- The result is the creator's **signed** tally. The judge track can be independently recomputed from the ballots and verified; the community track can only be re-queried (see [1b](#1b-what-this-costs-in-rigour)).
 - Finally, stamp the jam event with `["results", "<ts>"]` (edit → `created_at = prev + 1`).
+
+### Per-entry results on demand
+
+Any entry — ranked, unranked, or outside the published top 100 — can be tallied
+on its own, cheaply, without the published result. Clients surface this as an
+explicit action on the entry (DEG Mods: a button on the mod post), not as an
+automatic fetch on every page view.
+
+- **Judges:** one events fetch — `{ "kinds":[31243], "#a":["31142:<mod-pk>:<mod-d>"], "authors":[<judges>], "since":<end>, "until":<voting_end> }`. Bounded by the judge count; validated and averaged exactly like the main tally.
+- **Community:** the same COUNT histogram as the main tally, for this entry only — *criteria × (score_max + 1)* tiny queries.
+
+Two things this **must** distinguish, because conflating them is the worst
+failure mode here: **"no ballots were cast"** and **"not enough relays answered
+to say."** Silently rendering zeros for a relay outage would report a real result
+as a shutout.
+
+This is a live view, not a record: it reads whatever relays hold *now*, it isn't
+signed, and two viewers may see different numbers. Relays prune, so an entry
+outside the published top 100 has results that **degrade over time** — the
+accepted cost of not publishing thousands of rows nobody reads.
+
+### Who wins
+
+**The judge track is authoritative.** Judges' ballots are fetched as real events,
+validated whole, PoW-checked and independently verifiable; a jam's winner is
+judge rank #1, and clients should say so plainly.
+
+**The community track is an audience signal, not an award.** It is counted, not
+verified — no PoW check, no whole-ballot validation, and per-bucket maximums mean
+the *highest* claim from any relay wins by construction. That is fine for "what
+did people like" and disqualifying for "who took the prize."
+
+**A jam with community voting and no judges therefore has no verifiable result.**
+Clients should either discourage that combination at creation or label its
+results plainly as unofficial — never render them with the authority of a judged
+jam's.
+
+**Displaying ranks.** Where both tracks exist, show both, judges first: on the
+entry card in the submissions list, and in the entry's own results section on the
+mod post.
 
 ### Result Tag Summary (`31343`)
 
 | Tag | Required | Format | Notes |
 |---|---|---|---|
-| `d` | Yes | `<jam-d>:r:<page>` | Paged; replaceable (re-tally updates) |
+| `d` | Yes | `<jam-d>:r:0` | Replaceable (re-tally updates in place) |
 | `a` | Yes | `31143:<pk>:<jam-d>` | The jam |
-| `page` | Yes | `<index>` + `<total>` | Page N of M |
-| `content` | Yes | JSON array | Per-entry aggregates + ranks for this page |
+| `truncated` | Yes | `<N>` | Top N published per track; absence ≠ no votes |
+| `content` | Yes | JSON object | `{judge: [...], community: [...]}` |
 
 ---
 
@@ -666,6 +746,6 @@ Game jams reuse **this exact design**; only a few things differ, and none are bu
 - **Ballot** identity via composite `d` (`<jam-d>:<sub-d>`); edits use `created_at = now`; no `published_at`.
 - **Jam/mod edits** use `created_at = prev + 1` (feed-stable); **ballot edits** use `now` (deadline-enforcing).
 - **Tally:** creator-triggered. Judges' ballots are **fetched** by author filter and counted exactly; community ballots are **counted** via NIP-45 per (entry, criterion, score) bucket, taking the highest count per bucket across relays. Query cost tracks entries, not votes. Two ranks, progress UI.
-- **Results:** paged `31343` events (~100/entry per page) to dodge size + rate limits; jam keeps only a `results` marker; fully recomputable/verifiable.
+- **Results:** one `31343` event holding the top 100 of each track, with a `truncated` marker; zero-vote entries omitted; anything below the cut is computed on demand from the entry's own page. Jam keeps only a `results` marker. Judge track fully recomputable/verifiable; community track re-queryable.
 - **Relays** tag declares where ballots go / tally reads; client auto-seeds up to 3 working, removable relays.
 - **Games** get their own future kind; never overloaded onto `31142`.
