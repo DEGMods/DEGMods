@@ -247,18 +247,7 @@ function GameChipInput({ games, onChange, maxLength, max }: { games: string[]; o
  * so whether a relay supports it is worth knowing while you're picking relays
  * rather than after the jam has run.
  */
-function CountBadgeForRelay({ url }: { url: string }) {
-  const [state, setState] = useState<CountSupport>(() => cachedCountSupport(url))
-
-  useEffect(() => {
-    if (state === 'yes' || state === 'no' || state === 'unreachable') return
-    let cancelled = false
-    setState('checking')
-    probeCountSupport(url).then((r) => { if (!cancelled) setState(r) })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url])
-
+function CountBadgeForRelay({ state }: { state: CountSupport }) {
   const style: Record<string, { text: string; cls: string; tip: string }> = {
     checking: { text: 'checking…', cls: 'border-[#333] text-neutral-500', tip: 'Asking this relay whether it supports counting.' },
     yes: { text: 'counts', cls: 'border-emerald-500/40 text-emerald-400', tip: 'Supports NIP-45 — community votes here can be tallied by counting.' },
@@ -276,7 +265,7 @@ function CountBadgeForRelay({ url }: { url: string }) {
 }
 
 /** Vote-relay list: each relay is a full-width row with an enable toggle + remove. */
-function VoteRelayList({ relays, onChange, appendOnly }: { relays: VoteRelay[]; onChange: (v: VoteRelay[]) => void; appendOnly?: boolean }) {
+function VoteRelayList({ relays, onChange, appendOnly, support }: { relays: VoteRelay[]; onChange: (v: VoteRelay[]) => void; appendOnly?: boolean; support: Record<string, CountSupport> }) {
   const [val, setVal] = useState('')
   const add = () => {
     const u = val.trim()
@@ -294,7 +283,7 @@ function VoteRelayList({ relays, onChange, appendOnly }: { relays: VoteRelay[]; 
             <div key={r.url} className="flex items-center gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2">
               <Switch checked={r.enabled} onCheckedChange={() => toggle(r.url)} disabled={appendOnly} />
               <span className={cn('min-w-0 flex-1 truncate font-mono text-xs', r.enabled ? 'text-neutral-200' : 'text-neutral-500 line-through')}>{r.url}</span>
-              <CountBadgeForRelay url={r.url} />
+              <CountBadgeForRelay state={support[r.url] ?? 'unknown'} />
               {!appendOnly && <button type="button" onClick={() => remove(r.url)} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
             </div>
           ))}
@@ -358,6 +347,45 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   // "Adjust max score" disclosure — collapsed by default so most jams stay at 0–10.
   const [adjustMax, setAdjustMax] = useState(() => (editJam ? (editJam.scoreMax || 10) !== 10 : false))
   const [templateOpen, setTemplateOpen] = useState(false)
+
+  // ─── Vote-relay counting support ──────────────────────────────────
+  // Community votes are tallied by asking relays to COUNT ballots, so at least
+  // one enabled vote relay has to support NIP-45 or there is no way to produce
+  // community results at all.
+  const [support, setSupport] = useState<Record<string, CountSupport>>({})
+  const relayUrls = s.relays.map((r) => r.url).join(',')
+
+  useEffect(() => {
+    let cancelled = false
+    for (const r of s.relays) {
+      const known = cachedCountSupport(r.url)
+      if (known !== 'unknown') { setSupport((p) => ({ ...p, [r.url]: known })); continue }
+      setSupport((p) => (p[r.url] ? p : { ...p, [r.url]: 'checking' }))
+      probeCountSupport(r.url).then((res) => { if (!cancelled) setSupport((p) => ({ ...p, [r.url]: res })) })
+    }
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relayUrls])
+
+  const enabledRelays = s.relays.filter((r) => r.enabled)
+  const canCommunityVote = enabledRelays.some((r) => support[r.url] === 'yes')
+  // Don't judge until every enabled relay has answered — mid-probe we don't yet
+  // know whether counting is available.
+  const probingRelays = enabledRelays.some((r) => {
+    const st = support[r.url]
+    return !st || st === 'unknown' || st === 'checking'
+  })
+
+  // Removing or disabling the last counting relay silently strands community
+  // voting, so turn it off with the relay rather than leaving a toggle on that
+  // can no longer be honoured.
+  useEffect(() => {
+    if (!probingRelays && !canCommunityVote && s.userVotingEnabled) {
+      set('userVotingEnabled', false)
+      toast.warning('Community voting turned off — no enabled vote relay supports counting.')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probingRelays, canCommunityVote, s.userVotingEnabled])
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) => setS((p) => ({ ...p, [k]: v }))
 
@@ -547,8 +575,22 @@ export function JamEditor({ editJam, onPublish, publishing }: {
           <Switch checked={s.votingEnabled} onCheckedChange={(v) => set('votingEnabled', v)} disabled={scoringLocked} />
         </div>
         <div className="flex items-center justify-between rounded-lg bg-[#212121] px-3 py-2">
-          <div><p className="text-sm text-neutral-200">Community voting</p><p className="text-[11px] text-neutral-500">Anyone can score entries (proof-of-worked).</p></div>
-          <Switch checked={s.userVotingEnabled} onCheckedChange={(v) => set('userVotingEnabled', v)} disabled={scoringLocked} />
+          <div>
+            <p className="text-sm text-neutral-200">Community voting</p>
+            <p className="text-[11px] text-neutral-500">Anyone can score entries (proof-of-worked).</p>
+            {!scoringLocked && !canCommunityVote && (
+              <p className="mt-1 text-[11px] text-amber-400">
+                {probingRelays
+                  ? 'Checking whether your vote relays support counting…'
+                  : 'Needs a vote relay that supports counting — community votes are tallied by counting them, and none of your enabled relays can. Add one below.'}
+              </p>
+            )}
+          </div>
+          <Switch
+            checked={s.userVotingEnabled}
+            onCheckedChange={(v) => set('userVotingEnabled', v)}
+            disabled={scoringLocked || probingRelays || !canCommunityVote}
+          />
         </div>
 
         {s.votingEnabled && (
@@ -667,7 +709,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
             already stored there from the tally.
           </p>
         )}
-        <VoteRelayList relays={s.relays} onChange={(v) => set('relays', v)} appendOnly={scoringLocked} />
+        <VoteRelayList relays={s.relays} onChange={(v) => set('relays', v)} appendOnly={scoringLocked} support={support} />
       </Section>
 
       {/* Rules */}

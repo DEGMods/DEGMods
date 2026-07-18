@@ -267,7 +267,7 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 - **Format:** `["criterion", "<label>", "<max?>"]`. `max` mirrors `score_max` (all criteria share it); readers should prefer `score_max` and fall back to this, then to `10`.
 - **Purpose:** Defines the dimensions ballots score. The ballot UI is generated from these.
 - **Rules:**
-  - **No `criterion` tags** → voting is a single **overall** `0–score_max` score (ballots carry `["score","overall","<n>"]`).
+  - **No `criterion` tags** → voting is a single **overall** `0–score_max` score (ballots carry `["c","0:<n>","overall"]`).
   - **Custom criteria** → **2 to 15** criteria (a single custom criterion is just a renamed "overall", so ≥2 is required; the upper cap keeps ballots and the event bounded — though many criteria make ballots slower to fill).
 - Only meaningful when a voting track is enabled.
 
@@ -445,10 +445,10 @@ One ballot = one voter's scores for one entry.
     ["d", "<jam-d>:<submission-d>"],                 // one ballot per voter per entry per jam
     ["a", "31143:<jam-pk>:<jam-d>"],                 // the jam
     ["a", "31142:<mod-pk>:<mod-d>"],                 // the entry
-    ["score", "Graphics", "8"],
-    ["score", "Sound Design", "7"],
-    ["score", "Gameplay", "9"],
-    ["score", "Originality", "6"],
+    ["c", "0:8", "Graphics"],                        // criterion #0 scored 8
+    ["c", "1:7", "Sound Design"],
+    ["c", "2:9", "Gameplay"],
+    ["c", "3:6", "Originality"],
     ["nonce", "<n>", "<difficulty>"]                 // NIP-13 proof of work
   ]
 }
@@ -463,7 +463,19 @@ One ballot = one voter's scores for one entry.
 
 So no client-side de-duplication of "multiple ballots from one person" is ever needed.
 
-**`score` tags.** One per active criterion: `["score", "<criterion label>", "<0…max>"]`. If the jam has no `criterion` tags, a single `["score", "overall", "<0…score_max>"]`. The set must match the jam's criteria exactly — see [Dedup, validate, aggregate](#2-dedup-validate-aggregate), which drops any ballot that doesn't.
+**`c` tags — the scores.** One per active criterion:
+
+```
+["c", "<criterion-index>:<value>", "<label>"]
+```
+
+If the jam has no `criterion` tags, a single `["c", "0:<0…score_max>", "overall"]`.
+
+- **`criterion-index`** is the criterion's **position in the jam event's `criterion` tags**, zero-based. Position rather than label so a creator fixing a typo in a label doesn't invalidate every ballot already cast.
+- **`value`** is the score, `0…score_max`.
+- **`label`** is carried purely for human readability when inspecting a raw event. Nothing reads it — the index is authoritative. A ballot whose label disagrees with the jam is not thereby invalid.
+
+**Why one single-letter tag holding both index and value.** Relays index single-letter tags only, and a filter matches on the tag's *first* value. Putting the score alone there (`["c","8",…]`) would make `#c:["8"]` match "scored 8 on **anything**", collapsing every criterion together. Encoding `index:value` makes each (criterion, score) bucket independently queryable, which is what lets the community tally run on counts instead of downloads — see [Tallying](#tallying-the-votes). The set must still match the jam's criteria — see [Dedup, validate, aggregate](#2-dedup-validate-aggregate).
 
 **`content`.** Free for a note, but DEG Mods neither collects nor shows one, so it publishes an empty string: a ballot there is just its scores. A comment nobody surfaces would invite voters to write feedback that's never read. Clients that do want judge feedback can use this field and render it.
 
@@ -495,28 +507,99 @@ For v1, community (`user-voting`) results are a **plain count, gated only by PoW
 
 Triggered **manually by the jam creator** after `voting_end`.
 
-### 1. Fetch — two paginated sweeps (never per-entry)
+### 1. Two tracks, two very different methods
 
-Every ballot carries the jam's `a` tag, so **one sweep** returns all ballots for the whole jam; bucket them client-side by each ballot's submission `a` tag.
+The judge track and the community track are gathered in completely different
+ways, because they have completely different scaling properties.
+
+**Judges — fetch the actual ballots.** The judge list is bounded (≤25) and known
+in advance, so the ballots can be pulled directly with an author filter:
 
 ```json
-// entries
-{ "kinds":[31142], "#l":["jam-entry"], "#a":["31143:<pk>:<jam-d>"] }
-
-// all ballots in the window
-{ "kinds":[31243], "#a":["31143:<pk>:<jam-d>"], "since":<end>, "until":<voting_end>, "limit":500 }
+{ "kinds":[31243], "#a":["31143:<pk>:<jam-d>"], "authors":["<judge-hex>", "…"],
+  "since":<end>, "until":<voting_end> }
 ```
 
-Paginate the ballot sweep by walking the `until` cursor down from `voting_end` (set `until = oldest_created_at_in_batch − 1` each round); `since:<end>` caps the bottom, so stop when a batch comes back empty. Query the jam's `relays` ∪ the reader's relays, then merge.
+Cost is bounded by *judges × entries*, never by how many people voted. These
+ballots are validated and averaged exactly as written below, and anyone can
+re-fetch them and independently verify the published result. **This is the
+authoritative track.**
 
-**Progress UI.** The total is unknown up front, so show a running count ("Counted 84,120 ballots…") and a determinate bar from the cursor position: `progress = (voting_end − currentUntil) / (voting_end − end)`, plus per-relay status. This keeps a large tally from looking frozen.
+**Community — count, don't download.** Community voting is unbounded: a popular
+jam can attract millions of ballots, and no browser can download them all. So
+the community track never fetches ballots at all. It asks relays to **count**
+them (NIP-45), one query per (entry, criterion, score) bucket:
 
-### 2. Dedup, validate, aggregate
+```json
+// how many ballots gave this entry a 8 on criterion #0?
+{ "kinds":[31243], "#a":["31142:<mod-pk>:<mod-d>"], "#c":["0:8"],
+  "since":<end>, "until":<voting_end> }
+```
+
+From the resulting histogram: `total = Σ counts`, `average = Σ (value × count) / total`.
+
+The decisive property is that **query count is independent of ballot volume**.
+It is *entries × criteria × (score_max + 1)* whether the jam received a thousand
+ballots or ten million. A 20-entry jam with 6 criteria on a 0–10 scale costs
+~1,300 tiny queries at any scale. Cost now tracks entries — bounded by how many
+mods humans actually made — instead of votes, which are bounded by nothing.
+
+There is no sweep. The paginated download of every ballot is gone.
+
+### 1a. Merging counts across relays — best effort
+
+Counts cannot be deduplicated. If relay A reports 60,000 and relay B reports
+60,000, there is no way to tell union from overlap; only the raw events would
+say, and not downloading them is the point.
+
+**Rule: take the highest count for each bucket independently.** A relay holds
+only a subset of the ballots, so its count for a bucket is always **≤** the true
+count. The maximum across relays therefore can never inflate a bucket — it is
+always a floor, never an invention — and taking it per bucket rather than
+per relay keeps the best available evidence for every bucket.
+
+The consequence is that the community tally is **best effort and may undercount**.
+A relay that is down or slow when the tally runs takes any ballots stored only
+there with it. This must be stated plainly to the creator *and* to voters at the
+moment they cast a ballot — a close result that nobody was warned about is an
+argument that cannot be settled.
+
+### 1b. What this costs in rigour
+
+Counting buys scale by giving up three things the judge track keeps:
+
+- **No whole-ballot validity.** A ballot that omits a criterion still counts in
+  the criteria it did fill, where a downloaded ballot would be dropped whole.
+  The damage is bounded — an out-of-range or undeclared score matches no valid
+  bucket and is silently excluded — but partial ballots do slip through.
+- **No PoW check.** Proof of work can't be verified from a count.
+- **Reproducible, not verifiable.** Re-running the queries proves the relay
+  agrees with itself, not that the ballots exist. Anyone wanting real
+  verification can still download every ballot and recompute by hand; it just
+  stops being the default path.
+
+These are acceptable on the community track precisely because it is *not* the
+authoritative one. The result that decides who won never depends on a relay's
+arithmetic.
+
+### 1c. Relay requirement
+
+A jam with `user-voting` enabled **must** list at least one `relays` entry that
+supports NIP-45, or its community votes can never be tallied. Clients should
+probe each vote relay (send a trivial `COUNT`, see whether a `COUNT` response
+comes back) and refuse to enable community voting until one qualifies. DEG Mods
+badges each vote relay in the editor and auto-disables community voting if the
+last counting relay is removed or switched off.
+
+### 2. Validate and aggregate
+
+Applies in full to the **judge track**; the community track gets what counting
+can express (see 1b).
 
 - **Dedup** by ballot coordinate `31243:<voter>:<jam-d>:<sub-d>`; across relays keep the version with the **highest `created_at` that is still ≤ `voting_end`**.
-- **Validate:** `created_at ∈ [end, voting_end]`, PoW meets difficulty, and the `score` tags match the jam's criteria **exactly** — one score per declared criterion, no extras, no duplicates, each value within that criterion's `0…max`. For the **judge tally**, additionally require the author ∈ the jam's `judge` list.
-  - **A ballot that doesn't match exactly is dropped whole**, not partially counted, and the tally continues without it. Partial acceptance is gameable: an undeclared label has no `max`, so it would contribute an unbounded value to the average, and a ballot that skips criteria would be averaged over a smaller denominator than its rivals'.
-- **Aggregate** per entry, per criterion → **average**. Keep **two independent tracks**: judges (judge-authored ballots) and users (all valid ballots), each with its vote count.
+- **Validate:** `created_at ∈ [end, voting_end]`, PoW meets difficulty, and the `c` tags match the jam's criteria **exactly** — one score per declared criterion index, no extras, no duplicates, each value within `0…score_max`. For the **judge tally**, additionally require the author ∈ the jam's `judge` list.
+  - **A ballot that doesn't match exactly is dropped whole**, not partially counted, and the tally continues without it. Partial acceptance is gameable: a ballot that skips criteria would be averaged over a smaller denominator than its rivals'.
+- **Aggregate** per entry, per criterion → **average**. Keep **two independent tracks**: judges (judge-authored ballots, fetched) and community (all ballots, counted), each with its vote count.
 
 ### 3. Rank
 
@@ -582,7 +665,7 @@ Game jams reuse **this exact design**; only a few things differ, and none are bu
 - **Rewards:** repeatable `reward` tags (toggle `monetary` [free-text currency + amount] or `other` [text]) + a single free-text `reward_note` for distribution.
 - **Ballot** identity via composite `d` (`<jam-d>:<sub-d>`); edits use `created_at = now`; no `published_at`.
 - **Jam/mod edits** use `created_at = prev + 1` (feed-stable); **ballot edits** use `now` (deadline-enforcing).
-- **Tally:** creator-triggered, two paginated sweeps (all ballots in one, bucket locally), dedup by highest-in-window version, two ranks, progress UI.
+- **Tally:** creator-triggered. Judges' ballots are **fetched** by author filter and counted exactly; community ballots are **counted** via NIP-45 per (entry, criterion, score) bucket, taking the highest count per bucket across relays. Query cost tracks entries, not votes. Two ranks, progress UI.
 - **Results:** paged `31343` events (~100/entry per page) to dodge size + rate limits; jam keeps only a `results` marker; fully recomputable/verifiable.
 - **Relays** tag declares where ballots go / tally reads; client auto-seeds up to 3 working, removable relays.
 - **Games** get their own future kind; never overloaded onto `31142`.

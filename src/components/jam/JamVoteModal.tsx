@@ -10,9 +10,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { signAndPublish } from '@/lib/nostr/publish'
 import {
-  buildBallotEvent, ballotCriteria, OVERALL_CRITERION,
+  buildBallotEvent, ballotCriteria, judgeHexSet, OVERALL_CRITERION,
   type JamBallot, type JamBallotFormState,
 } from '@/lib/nostr/jamVoting'
+import { useAuthStore } from '@/stores/authStore'
 import type { JamDetails } from '@/lib/nostr/jam'
 import { cn } from '@/lib/utils'
 
@@ -117,6 +118,10 @@ export function JamVoteModal({
   const isSingle = criteria.length === 1 && criteria[0].label === OVERALL_CRITERION
   // Only relevant for a malformed jam declaring more than the spec's 2–100.
   const clamped = criteria.some((c) => c.max > MAX_RENDERED_SCORE)
+  // Judges' ballots are fetched individually and counted exactly; community
+  // ballots are tallied by asking relays to count them, which is best-effort.
+  const myPubkey = useAuthStore((st) => st.pubkey)
+  const isJudge = !!myPubkey && judgeHexSet(jam.judges).has(myPubkey)
 
   // Nothing is pre-selected — an unscored criterion stays null until picked, so a
   // voter can't submit a score they never chose.
@@ -211,6 +216,14 @@ export function JamVoteModal({
           )}
           {!readOnly && !allScored && (
             <p className="text-[11px] text-neutral-500">Pick a score for every criterion to submit your vote.</p>
+          )}
+          {!isJudge && (
+            <p className="rounded-md border border-[#262626] bg-[#212121] px-2.5 py-2 text-[11px] leading-relaxed text-neutral-400">
+              Community votes are counted best-effort: the tally asks each vote relay how many
+              ballots it holds and takes the highest answer. If a relay is down or slow when the
+              jam is tallied, votes stored only there can be missed. Judges&apos; scores are counted
+              exactly.
+            </p>
           )}
         </div>
 
