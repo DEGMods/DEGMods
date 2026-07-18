@@ -20,6 +20,8 @@ export type JamReward =
   | { type: 'monetary'; currency: string; amount: string }
   | { type: 'other'; text: string }
 export interface JamFaq { question: string; answer: string }
+/** One jam rule: a short headline plus the detail behind it. */
+export interface JamRule { title: string; detail: string }
 
 export interface JamDetails {
   id: string
@@ -54,6 +56,7 @@ export interface JamDetails {
   rewardNote: string
   relays: string[]
   faq: JamFaq[]
+  rules: JamRule[]
   client: string // NIP-89 publishing client
   resultsAt: number | null
 }
@@ -89,6 +92,7 @@ export interface JamFormState {
   rewardNote: string
   relays: string[]
   faq: JamFaq[]
+  rules: JamRule[]
   resultsAt?: number | null
 }
 
@@ -171,6 +175,9 @@ export function buildJamEvent(form: JamFormState): UnsignedEvent {
   for (const f of form.faq) {
     if (f.question.trim() && f.answer.trim()) tags.push(['faq', f.question.trim(), f.answer.trim()])
   }
+  for (const r of form.rules) {
+    if (r.title.trim() && r.detail.trim()) tags.push(['rule', r.title.trim(), r.detail.trim()])
+  }
   if (form.resultsAt) tags.push(['results', String(form.resultsAt)])
 
   tags.push(['client', CLIENT_NAME])
@@ -238,6 +245,7 @@ export function extractJam(event: NostrEvent): JamDetails | null {
     rewardNote: get('reward_note'),
     relays: (all('relays')[0] ?? []).slice(1).filter(Boolean),
     faq: all('faq').filter((t) => t[1] && t[2]).map((t) => ({ question: t[1], answer: t[2] })),
+    rules: all('rule').filter((t) => t[1] && t[2]).map((t) => ({ title: t[1], detail: t[2] })),
     client: get('client'),
     resultsAt: Number(get('results')) || null,
   }

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Clock, Plus, X, Info, Loader2, Pencil, Eye, RotateCcw, Lock } from 'lucide-react'
+import { Clock, Plus, X, Info, Loader2, Pencil, Eye, RotateCcw, Lock, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { BlossomUploadField } from '@/components/upload/BlossomUploadField'
 import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
 import { ScreenshotsEditor } from '@/components/shared/ScreenshotsEditor'
@@ -19,7 +20,7 @@ import { DatePicker } from './DatePicker'
 import { TimePicker, browserUses12h } from './TimePicker'
 import { IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { localToUnix, unixToLocal, MOD_JAM_TYPE, type JamFormState, type JamReward, type JamCriterion, type JamFaq, type JamDetails } from '@/lib/nostr/jam'
+import { localToUnix, unixToLocal, MOD_JAM_TYPE, type JamFormState, type JamReward, type JamCriterion, type JamFaq, type JamRule, type JamDetails } from '@/lib/nostr/jam'
 import { cn } from '@/lib/utils'
 
 // ─── Character limits ───────────────────────────────────────────────
@@ -42,6 +43,8 @@ const LIMITS = {
   relay: 200,
   faqQuestion: 200,
   faqAnswer: 1000,
+  ruleTitle: 200,
+  ruleDetail: 1000,
 } as const
 
 const Counter = CharCounter
@@ -54,8 +57,16 @@ const MAX = {
   judges: 25,
   rewards: 20,
   faq: 30,
+  rules: 30,
   criteria: 15,
 } as const
+
+/**
+ * A ready-made criteria set for creators who don't want to invent one. Kept
+ * short and generic on purpose — these are the axes most mod jams end up
+ * scoring anyway, and a creator can edit any of them after filling.
+ */
+const CRITERIA_TEMPLATE = ['Gameplay', 'Creativity', 'Theme fit', 'Visuals', 'Audio', 'Polish']
 
 /** A small "N/max" item-count badge (amber once the cap is hit). */
 const CountBadge = ({ n, max }: { n: number; max: number }) => (
@@ -89,6 +100,7 @@ interface EditorState {
   rewardNote: string
   relays: VoteRelay[]
   faq: JamFaq[]
+  rules: JamRule[]
 }
 
 /** Randomly pick up to `n` items (Fisher–Yates on a copy). */
@@ -123,7 +135,7 @@ function emptyState(): EditorState {
     votingEnabled: false, userVotingEnabled: false, judges: [],
     votingEndDate: '', votingEndTime: '',
     customCriteria: false, criteria: ['', ''], scoreMax: 10,
-    rewards: [], rewardNote: '', relays: defaultVoteRelays(), faq: [],
+    rewards: [], rewardNote: '', relays: defaultVoteRelays(), faq: [], rules: [],
   }
 }
 
@@ -142,7 +154,7 @@ function stateFromJam(jam: JamDetails): EditorState {
     criteria: jam.criteria.length ? jam.criteria.map((c) => c.label) : ['', ''],
     scoreMax: jam.scoreMax || 10,
     rewards: jam.rewards.map((r) => ({ ...r })), rewardNote: jam.rewardNote,
-    relays: jam.relays.map((url) => ({ url, enabled: true })), faq: jam.faq.map((f) => ({ ...f })),
+    relays: jam.relays.map((url) => ({ url, enabled: true })), faq: jam.faq.map((f) => ({ ...f })), rules: jam.rules.map((r) => ({ ...r })),
   }
 }
 
@@ -310,6 +322,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   const [use12h, setUse12h] = useState(browserUses12h())
   // "Adjust max score" disclosure — collapsed by default so most jams stay at 0–10.
   const [adjustMax, setAdjustMax] = useState(() => (editJam ? (editJam.scoreMax || 10) !== 10 : false))
+  const [templateOpen, setTemplateOpen] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) => setS((p) => ({ ...p, [k]: v }))
 
@@ -385,6 +398,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       rewardNote: s.rewardNote,
       relays,
       faq: s.faq,
+      rules: s.rules,
     }
     await onPublish(form)
   }
@@ -529,10 +543,15 @@ export function JamEditor({ editJam, onPublish, publishing }: {
                     <Counter value={label} max={LIMITS.criterion} />
                   </div>
                 ))}
-                <div className="flex items-center justify-between">
-                  {!scoringLocked && s.criteria.length < MAX.criteria
-                    ? <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('criteria', [...s.criteria, ''])}><Plus className="mr-1 h-3 w-3" /> Add criterion</Button>
-                    : <span />}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {!scoringLocked && s.criteria.length < MAX.criteria && (
+                      <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('criteria', [...s.criteria, ''])}><Plus className="mr-1 h-3 w-3" /> Add criterion</Button>
+                    )}
+                    {!scoringLocked && (
+                      <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => setTemplateOpen(true)}><Wand2 className="mr-1 h-3 w-3" /> Auto-fill from template</Button>
+                    )}
+                  </div>
                   <CountBadge n={s.criteria.length} max={MAX.criteria} />
                 </div>
               </div>
@@ -616,6 +635,27 @@ export function JamEditor({ editJam, onPublish, publishing }: {
         <VoteRelayList relays={s.relays} onChange={(v) => set('relays', v)} appendOnly={scoringLocked} />
       </Section>
 
+      {/* Rules */}
+      <Section title="Rules">
+        {s.rules.map((r, i) => (
+          <div key={i} className="space-y-1.5 rounded-lg border border-[#262626] p-2">
+            <div className="flex items-center gap-2">
+              <Input value={r.title} onChange={(e) => set('rules', s.rules.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} placeholder="Rule (e.g. One submission per person)" maxLength={LIMITS.ruleTitle} className={`${inputCls} flex-1`} />
+              <button type="button" onClick={() => set('rules', s.rules.filter((_, j) => j !== i))} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>
+            </div>
+            <Counter value={r.title} max={LIMITS.ruleTitle} />
+            <Textarea value={r.detail} onChange={(e) => set('rules', s.rules.map((x, j) => j === i ? { ...x, detail: e.target.value } : x))} rows={2} placeholder="The detail behind it" maxLength={LIMITS.ruleDetail} className={inputCls} />
+            <Counter value={r.detail} max={LIMITS.ruleDetail} />
+          </div>
+        ))}
+        <div className="flex items-center justify-between">
+          {s.rules.length < MAX.rules
+            ? <Button type="button" variant="outline" size="sm" className="border-[#262626] text-xs" onClick={() => set('rules', [...s.rules, { title: '', detail: '' }])}><Plus className="mr-1 h-3 w-3" /> Add rule</Button>
+            : <span />}
+          <CountBadge n={s.rules.length} max={MAX.rules} />
+        </div>
+      </Section>
+
       {/* FAQ */}
       <Section title="FAQ">
         {s.faq.map((f, i) => (
@@ -643,6 +683,35 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       {editJam && !isDirty && !publishing && (
         <p className="text-center text-[11px] text-neutral-500">No changes yet.</p>
       )}
+
+      <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
+        <DialogContent className="border-[#262626] bg-[#1a1a1a] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Auto-fill from template</DialogTitle>
+            <DialogDescription className="text-neutral-400">
+              This replaces every criterion you&apos;ve written with the set below. You can edit or
+              remove any of them afterwards.
+            </DialogDescription>
+          </DialogHeader>
+          <ol className="space-y-1 py-1">
+            {CRITERIA_TEMPLATE.map((c, i) => (
+              <li key={c} className="flex items-center gap-2.5 rounded-md bg-[#212121] px-3 py-1.5 text-sm text-neutral-200">
+                <span className="w-4 shrink-0 text-right text-[11px] tabular-nums text-neutral-500">{i + 1}</span>
+                {c}
+              </li>
+            ))}
+          </ol>
+          <DialogFooter>
+            <Button variant="outline" className="border-[#262626]" onClick={() => setTemplateOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => { set('criteria', [...CRITERIA_TEMPLATE]); setTemplateOpen(false) }}
+              className="bg-[#fc4462] text-white hover:bg-[#e23a56]"
+            >
+              Replace criteria
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

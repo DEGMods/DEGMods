@@ -69,7 +69,8 @@ The three kinds in the jam family:
     ["relays", "wss://relay.degmods.com", "wss://relay.damus.io", "wss://nos.lol"],
 
     ["faq", "Can I submit more than one mod?", "Yes — each mod is its own submission."],
-    ["faq", "Do assets have to be original?", "Free-to-use resources are fine if credited."]
+    ["faq", "Do assets have to be original?", "Free-to-use resources are fine if credited."],
+    ["rule", "One submission per person", "Pick your best entry — extra submissions are ignored."]
   ]
 }
 ```
@@ -308,6 +309,18 @@ These behave exactly as in the [mod event](./game-mod-event.md):
   - **Voting:** clients publish each ballot to the jam's `relays` (primary) **plus** the voter's own write relays (best-effort backup).
   - **Tally:** reads the jam's `relays` ∪ the reader's own relays, then dedups.
 
+### `rule` — Jam Rules
+
+```json
+["rule", "One submission per person", "Pick your best entry — extra submissions are ignored."]
+```
+
+- **Required:** No.
+- **Repeatable:** Yes, one rule per tag.
+- **Format:** `["rule", "<title>", "<detail>"]`.
+- **Purpose:** The binding conditions of entering, kept structured rather than buried in the body so a client can list them on their own.
+- **Client behavior:** rendered as its own collapsible section on the jam post, above the FAQ. Limits mirror the FAQ's: 200 chars for the title, 1000 for the detail, up to 30 rules.
+
 ### `faq` — Frequently Asked Questions
 
 ```json
@@ -363,6 +376,7 @@ A jam is "a mod event minus the mod-specific parts, plus jam parts." Removed fro
 | `reward` | No | Yes | `monetary`+`currency`+`amount`, or `other`+`text` | One per prize |
 | `reward_note` | No | No | Text | How prizes are distributed |
 | `relays` | Recommended | No (multi-value) | Relay URLs | Where ballots go / tally reads |
+| `rule` | No | Yes | `title` + `detail` | |
 | `faq` | No | Yes | `question` + `answer` | |
 | `results` | No | No | Unix ts string | Added after tally |
 
