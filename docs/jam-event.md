@@ -466,16 +466,53 @@ So no client-side de-duplication of "multiple ballots from one person" is ever n
 **`c` tags — the scores.** One per active criterion:
 
 ```
-["c", "<criterion-index>:<value>", "<label>"]
+["c", "<fingerprint>:<criterion-index>:<value>", "<label>"]
+
+e.g. ["c", "6x10:a3f91c0e:0:8", "Gameplay"]
 ```
 
-If the jam has no `criterion` tags, a single `["c", "0:<0…score_max>", "overall"]`.
+If the jam has no `criterion` tags, a single overall score at index 0.
 
-- **`criterion-index`** is the criterion's **position in the jam event's `criterion` tags**, zero-based. Position rather than label so a creator fixing a typo in a label doesn't invalidate every ballot already cast.
+- **`fingerprint`** identifies the criteria set this ballot was cast against — see below.
+- **`criterion-index`** is the criterion's **position in the jam event's `criterion` tags**, zero-based. Position rather than label, so the label is free to be decorative.
 - **`value`** is the score, `0…score_max`.
 - **`label`** is carried purely for human readability when inspecting a raw event. Nothing reads it — the index is authoritative. A ballot whose label disagrees with the jam is not thereby invalid.
 
-**Why one single-letter tag holding both index and value.** Relays index single-letter tags only, and a filter matches on the tag's *first* value. Putting the score alone there (`["c","8",…]`) would make `#c:["8"]` match "scored 8 on **anything**", collapsing every criterion together. Encoding `index:value` makes each (criterion, score) bucket independently queryable, which is what lets the community tally run on counts instead of downloads — see [Tallying](#tallying-the-votes). The set must still match the jam's criteria — see [Dedup, validate, aggregate](#2-dedup-validate-aggregate).
+**Why one single-letter tag holding all of it.** Relays index single-letter tags only, and a filter matches on the tag's *first* value. Putting the score alone there (`["c","8",…]`) would make `#c:["8"]` match "scored 8 on **anything**", collapsing every criterion together. Packing the whole bucket key into that one slot makes each (criteria set, criterion, score) bucket independently queryable, which is what lets the community tally run on counts instead of downloads — see [Tallying](#tallying--results).
+
+#### The criteria fingerprint
+
+```
+fingerprint = "<criteria-count>x<score_max>:<hash>"
+hash        = sha256(JSON([score_max, ...labels.map(normalize)])).slice(0, 8)
+normalize   = s => s.normalize('NFC').replace(/\s+/g, ' ').trim()
+```
+
+A ballot binds to a *slot*, not a name. Without the fingerprint, a creator who
+renamed or reordered criteria mid-voting would silently turn "rated Gameplay 10"
+into "rated Sound 10" — the aggregate and the ranking survive (a mean is
+permutation-invariant), but the published breakdown would assert something about
+voter opinion that is false. Changing the criteria *count* or `score_max` is
+worse: it genuinely reshuffles rankings.
+
+Binding ballots to the fingerprint converts all of that into a **loud, reversible**
+failure. A ballot cast against a different criteria set matches no bucket the
+tally queries, so its votes read as zero — obvious immediately, and fixed by
+reverting the criteria. The alternative, a silent misattribution nobody detects,
+is strictly worse.
+
+**Why normalize only Unicode form and whitespace.** Those are the differences a
+*client* can introduce by re-serializing the jam — an innocent creator fixing a
+typo in the description on a tidy-minded client shouldn't zero out every vote.
+Case, hyphen-vs-dash and quote style are deliberately **not** folded: no client
+rewrites those on its own, so a difference there means a human retyped the label,
+which is exactly the change the fingerprint exists to catch.
+
+**Note this is a guard against mistakes, not a trust boundary.** A creator
+determined to publish false results can simply do so — they sign the result event.
+What the fingerprint protects is the *unsigned* per-entry view that every viewer's
+client computes for itself, which a criteria change would otherwise silently
+corrupt for everyone.
 
 **`content`.** Free for a note, but DEG Mods neither collects nor shows one, so it publishes an empty string: a ballot there is just its scores. A comment nobody surfaces would invite voters to write feedback that's never read. Clients that do want judge feedback can use this field and render it.
 

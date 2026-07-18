@@ -20,6 +20,7 @@ import {
 import { KINDS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { JamVoteModal } from './JamVoteModal'
+import { EntryScoresPanel } from './EntryScoresPanel'
 
 /**
  * Shown on a mod post that is a jam entry: links back to the jam, shows the
@@ -233,16 +234,29 @@ export function ModJamBanner({
           </Link>
         </div>
 
-        {/* Rank pills once results are published */}
+        {/* Rank pills once results are published. Judges first — that track is
+            the official one; the community pill is an audience signal. */}
         {rank && (rank.judge || rank.community) && (
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {jam.votingEnabled && rank.judge && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-amber-300"><Medal className="h-3 w-3" /> Judges’ #{rank.judge.r} · {rank.judge.s.toFixed(1)} avg</span>
+              <span className={cn(
+                'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5',
+                rank.judge.r === 1 ? 'bg-amber-400/20 font-semibold text-amber-200' : 'bg-black/30 text-amber-300',
+              )}>
+                <Medal className="h-3 w-3" />
+                {rank.judge.r === 1 ? 'Winner' : `Judges’ #${rank.judge.r}`} · {rank.judge.s.toFixed(1)} avg
+              </span>
             )}
             {jam.userVotingEnabled && rank.community && (
               <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-sky-300"><Medal className="h-3 w-3" /> Community #{rank.community.r} · {rank.community.s.toFixed(1)} avg</span>
             )}
           </div>
+        )}
+
+        {/* Only the top 100 of each track is published, and nothing at all before
+            the tally runs — so every entry keeps a route to its own numbers. */}
+        {(jam.votingEnabled || jam.userVotingEnabled) && now >= jam.end && (
+          <EntryScoresPanel jam={jam} entryCoordinate={submissionCoordinate} />
         )}
 
         {staleBallot && !ballotChecking && (
