@@ -89,20 +89,20 @@ export function JamTallyModal({
       setTitles(titleMap)
       setEntryCount(entryCoordinates.length)
 
-      // 2. Sweep ballots, newest→oldest. Deliberately swept from the jam's *start*
-      // rather than from `end`: a ballot cast before voting opened can't count,
-      // but bounding it away at the relay makes it invisible — the tally would
-      // silently report "1 ballot" with no hint that a second one existed and was
-      // rejected. Fetch them, then let isBallotCounted decide, so we can say so.
+      // 2. Sweep ballots across the voting window [end, voting_end], newest→oldest.
+      // Bounded at the relay: a ballot outside the window can never count, and
+      // fetching the whole jam just to report it as dropped isn't worth the extra
+      // traffic on every tally. The editor stops the dates moving under a cast
+      // ballot, and a voter is warned when theirs falls outside.
       const votingEnd = jam.votingEnd ?? jam.end
-      const span = Math.max(1, votingEnd - jam.start)
+      const span = Math.max(1, votingEnd - jam.end)
       const seen = new Map<string, typeof entryEvents[number]>() // coordinate → newest event
       let until = votingEnd
       for (let round = 0; round < 300; round++) {
         const batch = await fetchEvents(rd, {
           kinds: [KINDS.JAM_BALLOT],
           '#a': [jam.aTag],
-          since: jam.start,
+          since: jam.end,
           until,
           limit: 500,
         })
@@ -117,7 +117,7 @@ export function JamTallyModal({
         }
         setFetchedCount(seen.size)
         setSweepProgress(Math.min(1, (votingEnd - min) / span))
-        if (min === Infinity || min <= jam.start) break
+        if (min === Infinity || min <= jam.end) break
         const nextUntil = min - 1
         if (nextUntil >= until) break // no progress — stop
         until = nextUntil
@@ -125,7 +125,10 @@ export function JamTallyModal({
       setSweepProgress(1)
 
       // 3. Validate + parse, tracking *why* anything was rejected so the review
-      // can explain a shortfall instead of just showing a smaller number.
+      // can explain a shortfall instead of just showing a smaller number. In
+      // practice that means mismatched scores — the sweep is already bounded to
+      // the window, so an out-of-window ballot only reaches here from a relay
+      // that ignored our since/until.
       const judges = judgeHexSet(jam.judges)
       let outsideWindow = 0
       let badScores = 0
