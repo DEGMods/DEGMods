@@ -15,6 +15,7 @@ import {
   type JamBallot, type JamResultRow,
 } from '@/lib/nostr/jamVoting'
 import { KINDS } from '@/lib/constants'
+import { cn } from '@/lib/utils'
 import { JamVoteModal } from './JamVoteModal'
 
 /**
@@ -39,6 +40,10 @@ export function ModJamBanner({
   const [jam, setJam] = useState<JamDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [ballot, setBallot] = useState<JamBallot | null>(null)
+  // Which (jam, entry, voter) the current `ballot` value is an answer for. While
+  // this doesn't match the current one, we haven't checked yet — derived rather
+  // than a loading flag so there's no first-render frame claiming "not voted".
+  const [checkedKey, setCheckedKey] = useState<string | null>(null)
   const [rank, setRank] = useState<JamResultRow | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -90,10 +95,12 @@ export function ModJamBanner({
     return () => { cancelled = true }
   }, [jam, jamCoordinate, submissionCoordinate])
 
-  // Load my existing ballot for this entry.
+  // Load my existing ballot for this entry. Until this resolves we don't know
+  // whether the user has voted, so the button stays in a checking state rather
+  // than claiming "Vote on it" and then flipping to "View your vote".
   useEffect(() => {
     let cancelled = false
-    if (!jam || !myPubkey) { setBallot(null); return }
+    if (!jam || !myPubkey) { setBallot(null); setCheckedKey(null); return }
     const relays = [...new Set([...useSettingsStore.getState().getAllEnabledRelayUrls('read'), ...jam.relays])]
     fetchLatestEvent(relays, {
       kinds: [KINDS.JAM_BALLOT],
@@ -101,7 +108,8 @@ export function ModJamBanner({
       '#d': [ballotDTag(jam.dTag, submissionDTag)],
     })
       .then((ev) => { if (!cancelled) setBallot(ev ? extractBallot(ev) : null) })
-      .catch(() => { /* ignore */ })
+      .catch(() => { /* ignore — treated as "no ballot found" */ })
+      .finally(() => { if (!cancelled) setCheckedKey(`${jam.dTag}:${submissionDTag}:${myPubkey}`) })
     return () => { cancelled = true }
   }, [jam, myPubkey, submissionDTag])
 
@@ -131,11 +139,16 @@ export function ModJamBanner({
   const inWindow = !!jam.votingEnd && now >= jam.end && now <= jam.votingEnd
   const isJudge = !!myPubkey && judgeHexSet(jam.judges).has(myPubkey)
   const eligible = jam.userVotingEnabled || (jam.votingEnabled && isJudge)
+  // Signed in but we haven't confirmed whether they've already voted on this entry.
+  const ballotChecking = !!myPubkey && checkedKey !== `${jam.dTag}:${submissionDTag}:${myPubkey}`
 
   // Vote button state → { label, disabled, reason }.
-  let voteBtn: { label: string; disabled: boolean; reason?: string; icon: typeof Vote } | null = null
+  let voteBtn: { label: string; disabled: boolean; reason?: string; icon: typeof Vote; spinning?: boolean } | null = null
   if (hasVoting) {
-    if (ballot) {
+    if (ballotChecking) {
+      // Unknown yet — never offer "Vote on it" to someone who already voted.
+      voteBtn = { label: 'Checking your vote…', disabled: true, icon: Loader2, spinning: true }
+    } else if (ballot) {
       voteBtn = { label: 'View your vote', disabled: false, icon: Eye }
     } else if (!myPubkey) {
       voteBtn = { label: isJudge ? 'Judge it' : 'Vote on it', disabled: false, icon: Vote }
@@ -177,20 +190,29 @@ export function ModJamBanner({
           </div>
         )}
 
-        {voteBtn && (
-          voteBtn.disabled ? (
+        {voteBtn && (() => {
+          const button = (
+            <Button
+              size="sm"
+              disabled={voteBtn.disabled}
+              onClick={voteBtn.disabled ? undefined : onVoteClick}
+              className={cn(
+                'w-full gap-1.5 text-xs text-white',
+                voteBtn.disabled ? 'bg-[#fc4462]/40' : 'bg-[#fc4462] hover:bg-[#e23a56]',
+              )}
+            >
+              <VoteIcon className={cn('h-3.5 w-3.5', voteBtn.spinning && 'animate-spin')} /> {voteBtn.label}
+            </Button>
+          )
+          // Only wrap in a tooltip when there's a reason to explain — the
+          // checking state already says what it's doing.
+          return voteBtn.reason ? (
             <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="block">
-                  <Button size="sm" disabled className="w-full gap-1.5 bg-[#fc4462]/40 text-xs text-white"><VoteIcon className="h-3.5 w-3.5" /> {voteBtn.label}</Button>
-                </span>
-              </TooltipTrigger>
+              <TooltipTrigger asChild><span className="block">{button}</span></TooltipTrigger>
               <TooltipContent>{voteBtn.reason}</TooltipContent>
             </Tooltip>
-          ) : (
-            <Button size="sm" onClick={onVoteClick} className="w-full gap-1.5 bg-[#fc4462] text-xs text-white hover:bg-[#e23a56]"><VoteIcon className="h-3.5 w-3.5" /> {voteBtn.label}</Button>
-          )
-        )}
+          ) : button
+        })()}
       </div>
 
       {modalOpen && (
