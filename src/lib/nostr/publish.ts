@@ -10,6 +10,7 @@ import { publishEvent } from './relay-pool'
 import { signEvent, useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { mineEvent } from '@/lib/pow/pow'
+import { computeShortCode, SHORT_KINDS } from './nipShort'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -48,6 +49,18 @@ export async function signAndPublish(
 
   try {
     let eventToSign = unsignedEvent
+
+    // Step 0: NIP-SHORT code. Added before mining, which is safe because mining
+    // only rewrites the nonce tag — the fields the code derives from (kind,
+    // pubkey, created_at, content) survive it. Doing it after would invalidate
+    // the proof of work, since the tag is part of what's hashed.
+    if (SHORT_KINDS.has(eventToSign.kind) && !eventToSign.tags.some((t) => t[0] === 's')) {
+      const pubkey = useAuthStore.getState().pubkey
+      if (pubkey) {
+        const code = computeShortCode({ ...eventToSign, pubkey })
+        eventToSign = { ...eventToSign, tags: [...eventToSign.tags, ['s', code]] }
+      }
+    }
 
     // Step 1: PoW (if difficulty > 0). Mine against the logged-in pubkey — don't
     // ask the signer (its active account may differ from the one we logged in with).
