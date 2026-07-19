@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
+import { useShortUrl } from '@/hooks/useShortUrl'
 import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
@@ -121,6 +122,9 @@ export default function ModPage() {
   const [newerEvent, setNewerEvent] = useState<NostrEvent | null>(null)
 
   const modStatus = useModStatus(mod?.aTag, mod?.pubkey)
+
+  // Show the short address in the URL bar once this post has one.
+  useShortUrl(rawEvent as unknown as NostrEvent | null)
 
   const isOwner = rawEvent && pubkey ? (rawEvent as { pubkey?: string }).pubkey === pubkey : false
 

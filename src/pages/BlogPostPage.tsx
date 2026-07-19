@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
+import { useShortUrl } from '@/hooks/useShortUrl'
 import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
@@ -63,6 +64,9 @@ export default function BlogPostPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const isOwner = rawEvent && pubkey ? (rawEvent as { pubkey?: string }).pubkey === pubkey : false
+
+  // Show the short address in the URL bar once this post has one.
+  useShortUrl(rawEvent as unknown as NostrEvent | null)
 
   // Render a fetched event into page state (initial + refresh), incl. author.
   const applyEvent = useCallback((event: NostrEvent) => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useShortUrl } from '@/hooks/useShortUrl'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown, Trash2, ChevronLeft } from 'lucide-react'
@@ -127,6 +128,9 @@ export function JamPage() {
   const [showRawDialog, setShowRawDialog] = useState(false)
   const [readableRaw, setReadableRaw] = useState(false)
   const [newerEvent, setNewerEvent] = useState<NostrEvent | null>(null)
+
+  // Show the short address in the URL bar once this jam has one.
+  useShortUrl(rawEvent)
 
   const rawJson = useMemo(
     () => (rawEvent ? (readableRaw ? readableEventJson(rawEvent as unknown as Record<string, unknown>) : JSON.stringify(rawEvent, null, 2)) : ''),
