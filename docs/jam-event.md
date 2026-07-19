@@ -66,7 +66,7 @@ The three kinds in the jam family:
     ["reward", "other", "Featured spot on the DEG Mods homepage for a month"],
     ["reward_note", "1st place takes the $500; the sats pool splits across the top 3 by judge rank; the featured spot goes to the community favourite."],
 
-    ["relays", "wss://relay.degmods.com", "wss://relay.damus.io", "wss://nos.lol"],
+    ["relays", "wss://brs.degmods.com", "wss://nos.lol", "wss://pyramid.fiatjaf.com"],
 
     ["faq", "Can I submit more than one mod?", "Yes — each mod is its own submission."],
     ["faq", "Do assets have to be original?", "Free-to-use resources are fine if credited."],
@@ -180,7 +180,7 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 - **Required:** Yes (both)
 - **Value:** Unix timestamp (seconds) as a string — a single timestamp encodes date **and** time.
 - **Purpose:** `start` = jam opens; `end` = submissions close. Follows the NIP-52 (Calendar Events) convention for interoperability. Timezones are handled by storing UTC and rendering local (optional `start_tzid`/`end_tzid` could be added later if needed).
-- **Constraint:** `end` must be **greater than** `start`.
+- **Constraint:** none enforced. `end` before `start` yields an empty submission window, so the jam accepts no entries — inert rather than malformed. Clients should render it, not reject it. Leaving this open lets a creator backdate a jam.
 
 ### `y` — Month Buckets (date-range index)
 
@@ -241,7 +241,7 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 - **Required:** When `voting` **or** `user-voting` is `"true"`.
 - **Value:** Unix timestamp string.
 - **Purpose:** When voting closes.
-- **Constraint:** Must be **≥ `end`** (voting can't close before submissions do). The voting window is **`[end, voting_end]`** — see [Voting Window](#voting-window).
+- **Constraint:** none enforced. The voting window is **`[end, voting_end]`** — see [Voting Window](#voting-window) — so a `voting_end` before `end` yields an empty window and voting never opens. Inert, not malformed.
 
 ### `score_max` — Shared Score Scale
 
@@ -298,16 +298,25 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 ### `relays` — Where to Publish Ballots
 
 ```json
-["relays", "wss://relay.degmods.com", "wss://relay.damus.io", "wss://nos.lol"]
+["relays", "wss://brs.degmods.com", "wss://nos.lol", "wss://pyramid.fiatjaf.com"]
 ```
 
-- **Required:** No (but strongly recommended when voting is enabled).
+- **Required:** No for judge-only jams; **effectively required** when `user-voting` is on, since community votes are tallied by counting and at least one relay must support NIP-45.
 - **Value:** Multi-value list of relay URLs.
-- **Purpose:** Declares the canonical relays where **ballots should be published** and where the **tally reads from**, so the count is complete and reliable.
+- **Purpose:** Declares the canonical relays where **ballots should be published** and where the **tally reads from**, so the count is as complete as it can be.
 - **Client behavior:**
-  - **Auto-seed:** on jam creation the client auto-adds **up to 3 of the creator's enabled relays**, but only after a **connection test** — only working relays are added, and each is **removable**. This is a safety net so a creator who doesn't care about relays still gets a usable set.
+  - **Auto-seed:** on jam creation the client seeds up to **3 random client relays + 3 random user relays**, each individually toggleable and removable, with a "reset to defaults" that re-rolls the sample.
+  - **Capability badge:** each relay is probed with a trivial `COUNT` and labelled *counts* / *no count* / *unreachable*. A creator needs to know this while choosing relays, not when the tally comes back empty.
+  - **Community voting is gated on it:** the toggle stays disabled until at least one enabled relay answers `COUNT`, and switches itself off if the last counting relay is removed or disabled — otherwise the setting promises results that can never be produced.
+  - **Append-only once voting starts:** relays can be added but not removed or disabled, since dropping one would hide ballots already stored there from the tally, while adding one can only help it find more.
   - **Voting:** clients publish each ballot to the jam's `relays` (primary) **plus** the voter's own write relays (best-effort backup).
-  - **Tally:** reads the jam's `relays` ∪ the reader's own relays, then dedups.
+  - **Tally:** reads the jam's `relays` ∪ the reader's own relays.
+
+**Note on NIP-45 in the wild.** A scan of 1811 public relays in July 2026 found
+**96** answering `COUNT` correctly — around 5%. A handful more reply with a bare
+number (`["COUNT", id, 219]`) instead of NIP-45's `{"count": 219}`; those are
+non-conforming and most client libraries won't parse them. Picking vote relays is
+therefore a real constraint, not a formality.
 
 ### `rule` — Jam Rules
 
@@ -366,13 +375,13 @@ A jam is "a mod event minus the mod-specific parts, plus jam parts." Removed fro
 | `g` | No | Yes | Game name | 0 = general; game jams ignore |
 | `j` | Yes | No | `mod` \| `game` | Jam type |
 | `start` | Yes | No | Unix ts string | Jam opens |
-| `end` | Yes | No | Unix ts string | Submissions close (`> start`) |
+| `end` | Yes | No | Unix ts string | Submissions close |
 | `y` | Should | Yes | `YYYY-MM` | Derived month buckets (date-range index); ignored on read |
 | `voting` | No | No | `true`/`false` | Judge voting |
 | `user-voting` | No | No | `true`/`false` | Community voting |
 | `judge` | If `voting` | Yes | name or npub | ≥1 when judge voting on |
-| `voting_end` | If any voting | No | Unix ts string | `≥ end` |
-| `criterion` | No | Yes | `label` + optional `max` | 0 = overall; else 2–6 |
+| `voting_end` | If any voting | No | Unix ts string | Voting closes |
+| `criterion` | No | Yes | `label` + optional `max` | 0 = overall; else 2–15 |
 | `reward` | No | Yes | `monetary`+`currency`+`amount`, or `other`+`text` | One per prize |
 | `reward_note` | No | No | Text | How prizes are distributed |
 | `relays` | Recommended | No (multi-value) | Relay URLs | Where ballots go / tally reads |
@@ -380,7 +389,16 @@ A jam is "a mod event minus the mod-specific parts, plus jam parts." Removed fro
 | `faq` | No | Yes | `question` + `answer` | |
 | `results` | No | No | Unix ts string | Added after tally |
 
-**Validation:** `end` > `start`; if `voting` or `user-voting` → `voting_end` ≥ `end`; if `voting` → ≥1 `judge`; custom criteria → 2–6.
+**Validation:** if `voting` → ≥1 `judge`; if `user-voting` → ≥1 counting relay in `relays`; custom criteria → 2–15; `score_max` 2–100.
+
+**Dates are deliberately unconstrained.** A creator may set `end` before `start`,
+or `voting_end` before `end` — useful for backdating a jam, and nothing downstream
+breaks on it: `monthBuckets` clamps with `max(end, start)`, an empty submission
+window simply accepts no entries, and an empty voting window opens no voting. Such
+a jam is inert, not malformed, so readers should render it rather than reject it.
+
+**Other caps DEG Mods applies** (client policy, not protocol): 25 judges, 20
+rewards, 30 rules, 30 FAQ entries, 20 tags, 10 games, 15 screenshots.
 
 ---
 
@@ -562,6 +580,12 @@ ballots are validated and averaged exactly as written below, and anyone can
 re-fetch them and independently verify the published result. **This is the
 authoritative track.**
 
+**A judge listed by name rather than npub cannot be counted.** The `judge` tag
+accepts free text so a creator can credit someone who has no Nostr identity, but
+an author filter can only be built from a pubkey. If a jam's `judge` list contains
+no npubs at all, its judge track is necessarily empty, and a client should say so
+plainly at tally time rather than reporting a silent zero.
+
 **Community — count, don't download.** Community voting is unbounded: a popular
 jam can attract millions of ballots, and no browser can download them all. So
 the community track never fetches ballots at all. It asks relays to **count**
@@ -573,7 +597,14 @@ them (NIP-45), one query per (entry, criterion, score) bucket:
   "since":<end>, "until":<voting_end> }
 ```
 
-From the resulting histogram: `total = Σ counts`, `average = Σ (value × count) / total`.
+From the resulting histogram: `average = Σ (value × count) / Σ counts`, per criterion,
+then the entry's score is the mean of those.
+
+**Reported vote count is the largest per-criterion total, not a sum.** Each
+criterion is counted independently, and a relay may answer some buckets and not
+others, so summing across criteria would multiply the same voters. The criterion
+with the most complete picture is the best available estimate of how many people
+voted — an estimate, and worth remembering when a displayed count looks off.
 
 The decisive property is that **query count is independent of ballot volume**.
 It is *entries × criteria × (score_max + 1)* whether the jam received a thousand
@@ -773,16 +804,18 @@ Game jams reuse **this exact design**; only a few things differ, and none are bu
 
 - **Kinds:** `31143` jam, `31243` ballot, `31343` result — an addressable "…43" family.
 - **Jam type** via single-letter `j` (`mod` now, `game` later). Mod jam only in current UI.
-- **Dates** use NIP-52 `start`/`end` unix timestamps; `voting_end ≥ end`; voting window `[end, voting_end]`.
+- **Dates** use NIP-52 `start`/`end` unix timestamps; voting window `[end, voting_end]`. Ordering is not enforced — an out-of-order jam is inert, not malformed.
 - **Date search:** multi-letter tags aren't relay-indexable, so a derived single-letter **`y` month-bucket** index (one per month spanned, `start` → `voting_end || end`) enables `#y` prefiltering. Untrusted and ignored on read (truth is re-derived from `start`/`end`); jams capped at **12 months** on creation.
 - **`g`** optional + repeatable for jams (0 = general).
 - **Submissions** = normal entry event + `["a","31143:…"]` + `["l","jam-entry"]` (bare `l`, no `L`).
 - **Two voting tracks:** `voting` (judges, self-verified via `judge` list) and `user-voting` (community, PoW only for now; future weighting via DNN ID / purchases; WoT rejected).
-- **Criteria:** none = single overall 0–10; custom = 2–6 `criterion` tags.
+- **Criteria:** none = single overall `0–score_max`; custom = 2–15 `criterion` tags, all sharing one `score_max` (2–100, default 10).
+- **Ballot scores** live in `c` tags keyed by a criteria fingerprint (`"<n>x<max>:<hash>"`) plus criterion index and value, so each (criterion, score) bucket is independently countable and a mid-voting criteria change fails loudly instead of misattributing.
 - **Rewards:** repeatable `reward` tags (toggle `monetary` [free-text currency + amount] or `other` [text]) + a single free-text `reward_note` for distribution.
 - **Ballot** identity via composite `d` (`<jam-d>:<sub-d>`); edits use `created_at = now`; no `published_at`.
 - **Jam/mod edits** use `created_at = prev + 1` (feed-stable); **ballot edits** use `now` (deadline-enforcing).
 - **Tally:** creator-triggered. Judges' ballots are **fetched** by author filter and counted exactly; community ballots are **counted** via NIP-45 per (entry, criterion, score) bucket, taking the highest count per bucket across relays. Query cost tracks entries, not votes. Two ranks, progress UI.
 - **Results:** one `31343` event holding the top 100 of each track, with a `truncated` marker; zero-vote entries omitted; anything below the cut is computed on demand from the entry's own page. Jam keeps only a `results` marker. Judge track fully recomputable/verifiable; community track re-queryable.
-- **Relays** tag declares where ballots go / tally reads; client auto-seeds up to 3 working, removable relays.
+- **Relays** tag declares where ballots go / tally reads; client auto-seeds up to 3 client + 3 user relays, each removable, and badges NIP-45 support. Community voting can't be enabled without at least one counting relay, and switches itself off if the last one is removed.
+- **Edit locks:** `start`, `end`, `voting_end` and the whole voting setup freeze once their moment passes (60s early, to absorb clock skew), re-checked on save rather than only on render.
 - **Games** get their own future kind; never overloaded onto `31142`.
