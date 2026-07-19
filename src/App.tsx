@@ -26,6 +26,7 @@ import { ModsPage } from '@/pages/ModsPage'
 import { ModJamsPage } from '@/pages/ModJamsPage'
 import { JamSubmitPage } from '@/pages/JamSubmitPage'
 import { JamPage } from '@/pages/JamPage'
+import { ShortAddressPage } from '@/pages/ShortAddressPage'
 import { JamSubmissionsPage } from '@/pages/JamSubmissionsPage'
 import ModPage from '@/pages/ModPage'
 import { SubmitModPage } from '@/pages/SubmitModPage'
@@ -185,6 +186,7 @@ export default function App() {
           {/* legacy path — keep old links/bookmarks (and ?edit=…) working */}
           <Route path="/write" element={<LegacyRedirect to="/submit-blog" />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/s/:address" element={<ShortAddressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/mod-manager" element={<ModManagerPage />} />

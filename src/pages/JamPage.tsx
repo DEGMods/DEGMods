@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown, Trash2, ChevronLeft } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
 import { JudgeRow } from '@/components/jam/JudgeList'
+import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -259,6 +260,7 @@ export function JamPage() {
                 <DropdownMenuContent align="end" className="border-[#262626] bg-[#1c1c1c]">
                   <DropdownMenuItem onClick={copyNaddr} className="cursor-pointer"><Copy className="mr-2 h-4 w-4" /> Copy Note ID</DropdownMenuItem>
                   <DropdownMenuItem onClick={copyNpub} className="cursor-pointer"><Copy className="mr-2 h-4 w-4" /> Copy Author npub</DropdownMenuItem>
+                  {rawEvent && <CopyShortLinkItem event={rawEvent} />}
                   <DropdownMenuItem onClick={() => setShowRawDialog(true)} className="cursor-pointer"><FileJson className="mr-2 h-4 w-4" /> View Raw Event</DropdownMenuItem>
                   {isAuthor && (
                     <>

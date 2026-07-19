@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
+import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
@@ -424,6 +425,7 @@ export default function ModPage() {
               <Copy className="h-4 w-4 mr-2" />
               Copy Author npub
             </DropdownMenuItem>
+            {rawEvent && <CopyShortLinkItem event={rawEvent as unknown as NostrEvent} />}
             <DropdownMenuItem onClick={() => setShowRawDialog(true)} className="cursor-pointer">
               <FileJson className="h-4 w-4 mr-2" />
               View Raw Event
