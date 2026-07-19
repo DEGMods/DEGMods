@@ -134,6 +134,45 @@ export async function publishToRelays(
   return accepted
 }
 
+// ─── Read throttling ────────────────────────────────────────────────
+//
+// Relays cap how many subscriptions one connection may hold open, and answer
+// past that with "subscription limit reached". The pool can't tell that refusal
+// apart from a relay that genuinely has nothing, so a read fired during a burst
+// silently returns empty — most visibly at startup, when the feed, profile,
+// notification, DM and redundancy reads all begin at once.
+//
+// Two guards, both here rather than at the ~100 call sites:
+//   1. a ceiling on concurrent one-shot reads, with the rest queued;
+//   2. de-duplication, so identical concurrent reads share one subscription.
+//
+// Long-lived subscribe() calls are left alone — they hold their slot for the
+// session either way, and queueing them would just delay the inbox.
+
+const MAX_CONCURRENT_READS = 6
+let activeReads = 0
+const readQueue: (() => void)[] = []
+
+function acquireRead(): Promise<void> {
+  if (activeReads < MAX_CONCURRENT_READS) {
+    activeReads++
+    return Promise.resolve()
+  }
+  return new Promise((resolve) => readQueue.push(() => { activeReads++; resolve() }))
+}
+
+function releaseRead(): void {
+  activeReads--
+  readQueue.shift()?.()
+}
+
+/** In-flight reads keyed by relays+filter, so duplicates share one round trip. */
+const inFlight = new Map<string, Promise<NostrEvent[]>>()
+
+function readKey(relayUrls: string[], filter: Filter, extra = ''): string {
+  return JSON.stringify([[...relayUrls].sort(), filter, extra])
+}
+
 export async function fetchEvents(
   relayUrls: string[],
   filter: Filter,
@@ -142,6 +181,30 @@ export async function fetchEvents(
 ): Promise<NostrEvent[]> {
   if (relayUrls.length === 0) return []
 
+  const key = readKey(relayUrls, filter, `events:${timeoutMs}:${maxWait ?? ''}`)
+  const existing = inFlight.get(key)
+  if (existing) return existing
+
+  const run = (async () => {
+    await acquireRead()
+    try {
+      return await fetchEventsUnthrottled(relayUrls, filter, timeoutMs, maxWait)
+    } finally {
+      releaseRead()
+    }
+  })()
+
+  inFlight.set(key, run)
+  run.finally(() => { if (inFlight.get(key) === run) inFlight.delete(key) })
+  return run
+}
+
+function fetchEventsUnthrottled(
+  relayUrls: string[],
+  filter: Filter,
+  timeoutMs: number,
+  maxWait?: number
+): Promise<NostrEvent[]> {
   return new Promise((resolve) => {
     const events: NostrEvent[] = []
     const timeout = setTimeout(() => {
@@ -186,6 +249,31 @@ export async function fetchEvent(
 ): Promise<NostrEvent | null> {
   if (relayUrls.length === 0) return null
 
+  // Throttled and de-duplicated alongside fetchEvents — see the note there.
+  const key = readKey(relayUrls, filter, `event:${timeoutMs}`)
+  const existing = inFlight.get(key)
+  if (existing) return existing.then((evs) => evs[0] ?? null)
+
+  const run = (async () => {
+    await acquireRead()
+    try {
+      const ev = await fetchEventUnthrottled(relayUrls, filter, timeoutMs)
+      return ev ? [ev] : []
+    } finally {
+      releaseRead()
+    }
+  })()
+
+  inFlight.set(key, run)
+  run.finally(() => { if (inFlight.get(key) === run) inFlight.delete(key) })
+  return run.then((evs) => evs[0] ?? null)
+}
+
+function fetchEventUnthrottled(
+  relayUrls: string[],
+  filter: Filter,
+  timeoutMs: number
+): Promise<NostrEvent | null> {
   return new Promise((resolve) => {
     let best: NostrEvent | null = null
     let settled = false
