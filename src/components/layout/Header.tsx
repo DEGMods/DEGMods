@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Gamepad2, Package, Rss, Settings, User, Menu, X, Eye, Pencil, LogOut, Bell, MessageSquare } from 'lucide-react'
+import { Gamepad2, Package, Rss, Settings, User, Menu, X, Eye, Pencil, LogOut, Bell, MessageSquare, PlusSquare } from 'lucide-react'
 import { JamIcon } from '@/components/shared/JamIcon'
+import { CreateMenu } from '@/components/shared/CreateMenu'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
@@ -102,6 +103,8 @@ export function Header() {
     if (pubkey) useNotificationsStore.getState().refresh(pubkey)
   }, [pubkey])
 
+  const [createOpen, setCreateOpen] = useState(false)
+
   return (
     <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -155,6 +158,15 @@ export function Header() {
               </Button>
             </Link>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Create"
+            onClick={() => setCreateOpen(true)}
+            className="text-muted-foreground hover:text-foreground hover:bg-transparent"
+          >
+            <PlusSquare size={18} />
+          </Button>
           <Link to="/settings">
             <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hover:bg-transparent">
               <Settings size={18} />
@@ -206,6 +218,8 @@ export function Header() {
           ))}
         </nav>
       )}
+
+      <CreateMenu open={createOpen} onOpenChange={setCreateOpen} />
     </header>
   )
 }

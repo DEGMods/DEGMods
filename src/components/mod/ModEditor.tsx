@@ -37,6 +37,7 @@ import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BlossomUploadField } from '@/components/upload/BlossomUploadField'
+import { RequiredDot } from '@/components/shared/RequiredDot'
 import { EmulatedPlatformField } from '@/components/mod/EmulatedPlatformField'
 import { DownloadScanReports } from '@/components/mod/DownloadScanReports'
 import { IMAGE_UPLOAD_ACCEPT, MOD_FILE_UPLOAD_ACCEPT, MOD_FILE_UPLOAD_LIMIT_MB, CATEGORY_MAX_DEPTH, CATEGORY_MAX_CHAINS, CATEGORY_SEGMENT_MAXLEN } from '@/lib/constants'
@@ -171,9 +172,7 @@ function Section({
             Required
           </span>
         )}
-        {incomplete && (
-          <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-label="This required field is still empty" />
-        )}
+        {incomplete && <RequiredDot label="This required field is still empty" />}
       </div>
       <div className="px-5 py-4 space-y-3">
         {children}

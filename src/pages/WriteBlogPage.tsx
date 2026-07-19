@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { KINDS, IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import { RequiredDot } from '@/components/shared/RequiredDot'
 import { toast } from 'sonner'
 import type { BlogFormState } from '@/types/blog'
 import { createEmptyBlogFormState } from '@/types/blog'
@@ -273,7 +274,10 @@ export default function WriteBlogPage() {
 
       {/* Title */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-neutral-300">Title *</label>
+        <label className="flex items-center gap-2 text-sm font-medium text-neutral-300">
+          Title *
+          {!form.title.trim() && <RequiredDot label="A title is still needed" />}
+        </label>
         <Input
           value={form.title}
           onChange={e => updateField('title', e.target.value)}
@@ -335,7 +339,10 @@ export default function WriteBlogPage() {
 
       {/* Body with Edit/Preview tabs */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-neutral-300">Content *</label>
+        <label className="flex items-center gap-2 text-sm font-medium text-neutral-300">
+          Content *
+          {!form.content.trim() && <RequiredDot label="The post body is still empty" />}
+        </label>
         <Tabs defaultValue="edit" className="w-full">
           <TabsList className="bg-[#1c1c1c] border border-[#262626]">
             <TabsTrigger

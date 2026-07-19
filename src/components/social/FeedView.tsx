@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { nip19, type Filter, type Event as NostrEvent } from 'nostr-tools'
-import { Repeat2, Loader2, User } from 'lucide-react'
+import { Repeat2, Loader2, User, Package, BookOpen, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { KINDS } from '@/lib/constants'
 import { extractBlogData } from '@/lib/nostr/events'
@@ -12,6 +12,8 @@ import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
 import { useBlockStore } from '@/stores/blockStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useLoginModalStore } from '@/stores/loginModalStore'
 import { classifyPost, parseRepostInner } from '@/lib/nostr/socialThread'
 import type { BlogDetails } from '@/types/blog'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
@@ -248,6 +250,31 @@ function SocialFeed({ authors }: { authors: string[] }) {
 
 // ─── Tabbed feed home ───────────────────────────────────────────────────
 
+/**
+ * The mods/blog counterpart to the social tab's composer.
+ *
+ * Those flows are whole pages rather than an inline box, but the prompt belongs
+ * in the same place — otherwise the social tab is the only one that suggests you
+ * can publish anything at all.
+ */
+function CreatePrompt({ to, icon: Icon, label }: { to: string; icon: typeof Package; label: string }) {
+  const navigate = useNavigate()
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  return (
+    <button
+      type="button"
+      onClick={() => { if (!isAuthenticated) { useLoginModalStore.getState().open(); return } navigate(to) }}
+      className="group flex w-full items-center gap-3 rounded-lg border border-[#262626] bg-[#1c1c1c] px-4 py-3 text-left transition-colors hover:border-purple-500/40"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-500/10 text-purple-400">
+        <Icon size={16} />
+      </span>
+      <span className="flex-1 text-sm text-neutral-400 transition-colors group-hover:text-neutral-200">{label}</span>
+      <Plus size={16} className="shrink-0 text-neutral-600 transition-colors group-hover:text-purple-400" />
+    </button>
+  )
+}
+
 export function FeedView({ authors }: { authors: string[] }) {
   return (
     <Tabs defaultValue="mods" className="w-full">
@@ -257,8 +284,14 @@ export function FeedView({ authors }: { authors: string[] }) {
         <TabsTrigger value="social" className={tabTrigger}>Social</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="mods" className="mt-4"><FeedModsTab authors={authors} /></TabsContent>
-      <TabsContent value="blogs" className="mt-4"><FeedBlogsTab authors={authors} /></TabsContent>
+      <TabsContent value="mods" className="mt-4 space-y-4">
+        <CreatePrompt to="/submit-mod" icon={Package} label="Publish a mod…" />
+        <FeedModsTab authors={authors} />
+      </TabsContent>
+      <TabsContent value="blogs" className="mt-4 space-y-4">
+        <CreatePrompt to="/submit-blog" icon={BookOpen} label="Write a blog post…" />
+        <FeedBlogsTab authors={authors} />
+      </TabsContent>
       <TabsContent value="social" className="mt-4"><SocialFeed authors={authors} /></TabsContent>
     </Tabs>
   )

@@ -15,6 +15,7 @@ import { JudgeList } from './JudgeList'
 import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
 import { Markdown } from '@/components/shared/Markdown'
 import { CharCounter } from '@/components/shared/CharCounter'
+import { RequiredDot } from '@/components/shared/RequiredDot'
 import { useNow } from '@/hooks/useNow'
 import { DatePicker } from './DatePicker'
 import { TimePicker, browserUses12h } from './TimePicker'
@@ -168,9 +169,14 @@ function stateFromJam(jam: JamDetails): EditorState {
   }
 }
 
-const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
+/** `incomplete` shows an amber dot — something required in this section is still
+ *  empty, so a long form says what's left without waiting for a failed submit. */
+const Section = ({ title, children, incomplete }: { title: string; children: React.ReactNode; incomplete?: boolean }) => (
   <section className="space-y-3 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
-    <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <div className="flex items-center gap-2">
+      <h2 className="text-sm font-semibold text-white">{title}</h2>
+      {incomplete && <RequiredDot label="Something required in this section is still empty" />}
+    </div>
     {children}
   </section>
 )
@@ -359,6 +365,22 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   const [adjustMax, setAdjustMax] = useState(() => (editJam ? (editJam.scoreMax || 10) !== 10 : false))
   const [templateOpen, setTemplateOpen] = useState(false)
 
+  // Which sections still have an unfilled required field. Mirrors the checks in
+  // submit() so the dots and the error you'd get on publish never disagree.
+  const missing = useMemo(() => {
+    const votingOn = s.votingEnabled || s.userVotingEnabled
+    return {
+      basics: !s.title.trim() || !s.image.trim() || !s.summary.trim() || !s.content.trim(),
+      tags: s.tags.length === 0,
+      dates: !s.startDate || !s.startTime || !s.endDate || !s.endTime,
+      voting:
+        (votingOn && (!s.votingEndDate || !s.votingEndTime)) ||
+        (s.votingEnabled && s.judges.length === 0) ||
+        (s.customCriteria && s.criteria.map((c) => c.trim()).filter(Boolean).length < 2),
+      relays: s.relays.filter((r) => r.enabled).length === 0,
+    }
+  }, [s])
+
   // ─── Vote-relay counting support ──────────────────────────────────
   // Community votes are tallied by asking relays to COUNT ballots, so at least
   // one enabled vote relay has to support NIP-45 or there is no way to produce
@@ -532,7 +554,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   return (
     <div className="space-y-4">
       {/* Basics */}
-      <Section title="Basics">
+      <Section title="Basics" incomplete={missing.basics}>
         <div className="space-y-1.5">
           <Label>Title <span className="text-[#fc4462]">*</span></Label>
           <Input value={s.title} onChange={(e) => set('title', e.target.value)} placeholder="Winter Survival Mod Jam 2026" maxLength={LIMITS.title} className={inputCls} />
@@ -586,7 +608,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       </Section>
 
       {/* Games + tags + screenshots */}
-      <Section title="Games & tags">
+      <Section title="Games & tags" incomplete={missing.tags}>
         <div className="space-y-1.5"><Label>Games <span className="text-neutral-600">(leave empty for a general "any game" jam)</span></Label><GameChipInput games={s.games} onChange={(v) => set('games', v)} maxLength={LIMITS.game} max={MAX.games} /></div>
         <div className="space-y-1.5"><Label>Tags <span className="text-[#fc4462]">*</span></Label><ChipInput items={s.tags} onChange={(v) => set('tags', v)} placeholder="Add a tag and press Enter" transform={(x) => x.toLowerCase()} maxLength={LIMITS.tag} max={MAX.tags} /></div>
         <div className="space-y-3">
@@ -602,7 +624,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       </Section>
 
       {/* Dates & times */}
-      <Section title="Dates & times">
+      <Section title="Dates & times" incomplete={missing.dates}>
         <div className="flex items-center gap-2">
           <Clock className="h-3.5 w-3.5 text-neutral-500" />
           <div className="flex overflow-hidden rounded-md border border-[#262626] text-xs">
@@ -624,7 +646,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       </Section>
 
       {/* Voting */}
-      <Section title="Voting">
+      <Section title="Voting" incomplete={missing.voting}>
         {scoringLocked && (
           <p className="flex items-start gap-1.5 rounded-lg border border-[#262626] bg-[#1a1a1a] px-3 py-2 text-[11px] text-neutral-400">
             <Lock className="mt-0.5 h-3 w-3 shrink-0 text-neutral-500" />
@@ -758,7 +780,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       </Section>
 
       {/* Vote relays */}
-      <Section title="Vote relays">
+      <Section title="Vote relays" incomplete={missing.relays}>
         <Label hint={scoringLocked
           ? 'Where votes are published and read.'
           : 'Where votes are published and read. Seeded from your client + user relays — toggle, remove, or reset to re-roll.'}>Relays <span className="text-[#fc4462]">*</span></Label>

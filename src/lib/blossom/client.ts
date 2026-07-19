@@ -165,39 +165,6 @@ async function existingBlobUrl(serverUrl: string, hash: string, file: File | Blo
   }
 }
 
-export async function uploadToServers(
-  file: File | Blob,
-  serverUrls: string[],
-  signEvent: (event: Record<string, unknown>) => Promise<Record<string, unknown>>,
-  onProgress?: (progress: UploadProgress & { serverUrl: string }) => void,
-  limitMbOverride?: number,
-): Promise<UploadResult> {
-  // Enforce the size limit (caller override, else the user's media limit from settings).
-  const { useSettingsStore } = await import('@/stores/settingsStore')
-  const limitMb = limitMbOverride ?? useSettingsStore.getState().blossomUploadLimitMb
-  const fileSizeMb = file.size / (1024 * 1024)
-  if (fileSizeMb > limitMb) {
-    throw new UploadLimitError(fileSizeMb, limitMb)
-  }
-
-  const hash = await computeFileHash(file)
-  // Compute the auth header lazily so we don't prompt the signer when the blob
-  // already exists everywhere.
-  let authHeader: string | null = null
-  const getAuth = async () => (authHeader ??= await createBlossomAuthEvent(signEvent, 'upload', hash))
-  const errors: Error[] = []
-  for (const serverUrl of serverUrls) {
-    try {
-      const existing = await existingBlobUrl(serverUrl, hash, file)
-      if (existing) return { url: existing, hash, size: file.size, serverUrl }
-      return await uploadFile(file, serverUrl, await getAuth(), onProgress ? (p) => onProgress({ ...p, serverUrl }) : undefined)
-    } catch (err) {
-      errors.push(err instanceof Error ? err : new Error(String(err)))
-    }
-  }
-  throw new Error(`All servers failed:\n${errors.map(e => e.message).join('\n')}`)
-}
-
 // ─── Upload to ALL Servers ──────────────────────────────────────────
 
 export async function uploadToAllServers(
