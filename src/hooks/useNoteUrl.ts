@@ -36,10 +36,19 @@ export function useNoteUrl(open: boolean, event: NostrEvent | null | undefined) 
     const previous = window.location.pathname + window.location.search
     let cancelled = false
 
-    noteAddress(event).then((address) => {
-      if (cancelled) return
+    // Address it immediately with what's already in hand — the nevent needs no
+    // network. Waiting on the short address first would leave the URL saying
+    // /feed for a second or two, which is exactly when someone copies it.
+    const nevent = nip19.neventEncode({ id: event.id, author: event.pubkey })
+    const set = (address: string) => {
       const next = `/feed/note/${address}`
       if (window.location.pathname !== next) window.history.replaceState(null, '', next)
+    }
+    set(nevent)
+
+    // Then upgrade, once the short address is known to be collision-free.
+    noteAddress(event).then((address) => {
+      if (!cancelled && address !== nevent) set(address)
     })
 
     return () => {

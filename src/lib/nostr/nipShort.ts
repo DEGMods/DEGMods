@@ -262,21 +262,29 @@ export async function resolveShortAddress(
   if (!pubkey && resolveAuthority) pubkey = await resolveAuthority(parsed.authority)
   if (!pubkey) return { status: 'bad-address' }
 
-  // Retried with a growing gap, because a miss here is usually contention rather
-  // than absence. Typically a single relay holds the event, and the pool counts a
-  // relay that closes or never connects as having answered — so while the app is
-  // opening its feed, profile and DM subscriptions at once, that relay can drop
-  // the request and the fetch returns empty. Backing off lets the load settle.
+  const filter = { authors: [pubkey], '#s': [parsed.code] }
+
+  // Queried in small groups rather than all relays at once.
+  //
+  // One pooled subscription across every relay resolves as soon as all of them
+  // have EOSE'd — and a relay that closes, never connects, or drops the request
+  // counts as having answered. Typically a single relay holds the event, so
+  // while the app is opening its other subscriptions that one relay's failure is
+  // indistinguishable from "nobody has it", and the lookup reports not-found.
+  // Small groups keep one relay's failure from speaking for the rest, and the
+  // search stops at the first verified hit.
+  const GROUP = 3
   let verified: NostrEvent[] = []
-  for (const [delay, timeout] of [[0, 6000], [1500, 8000], [4000, 8000]] as const) {
-    if (delay) await new Promise((r) => setTimeout(r, delay))
-    try {
-      const events = await fetchEvents(relays, { authors: [pubkey], '#s': [parsed.code] }, timeout)
-      verified = events.filter(verifyShortCode)
-    } catch {
-      verified = []
+  for (let round = 0; round < 2 && verified.length === 0; round++) {
+    for (let i = 0; i < relays.length; i += GROUP) {
+      try {
+        const events = await fetchEvents(relays.slice(i, i + GROUP), filter, 4000)
+        const hits = events.filter(verifyShortCode)
+        if (hits.length > 0) { verified = hits; break }
+      } catch {
+        // try the next group
+      }
     }
-    if (verified.length > 0) break
   }
   if (verified.length === 0) return { status: 'not-found' }
 

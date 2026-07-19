@@ -5,7 +5,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { decodeNoteParam } from '@/lib/nostr/nipShort'
 import { ThreadModal } from '@/components/social/ThreadModal'
-import { Bell, Rss, MessageSquare } from 'lucide-react'
+import { Bell, Rss, MessageSquare, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
@@ -18,6 +18,7 @@ import { FeedView } from '@/components/social/FeedView'
 import { NotificationsView } from '@/components/social/NotificationsView'
 import { DirectMessagesView } from '@/components/dm/DirectMessagesView'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 type View = 'home' | 'notifications' | 'dm'
 
@@ -43,23 +44,41 @@ export function FeedPage() {
   const { address: noteAddressParam } = useParams<{ address?: string }>()
   const navigate = useNavigate()
   const [deepNote, setDeepNote] = useState<NostrEvent | null>(null)
+  const [deepState, setDeepState] = useState<'idle' | 'loading' | 'missing'>('idle')
 
   // Resolve /feed/note/<address> — a short address or an nevent/note id.
   useEffect(() => {
-    if (!noteAddressParam) { setDeepNote(null); return }
+    if (!noteAddressParam) { setDeepNote(null); setDeepState('idle'); return }
     let cancelled = false
+    setDeepNote(null); setDeepState('loading')
     const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-    // Deliberately deferred. On a cold load the app opens its feed, profile,
-    // notification and DM subscriptions at once, and a lookup fired into that
-    // burst comes back empty — the one relay holding the note drops the request
-    // and the pool counts it as answered. Measured: resolving at mount fails
-    // every time; the same call a moment later succeeds.
-    const t = setTimeout(() => {
-      decodeNoteParam(noteAddressParam, relays, (id) => fetchEvent(relays, { ids: [id] }))
-        .then((ev) => { if (!cancelled) setDeepNote(ev) })
-        .catch(() => { if (!cancelled) setDeepNote(null) })
-    }, 3000)
-    return () => { cancelled = true; clearTimeout(t) }
+    // Retried on a schedule rather than resolved once.
+    //
+    // At startup the app opens enough subscriptions to hit relays' concurrency
+    // caps — they answer with "subscription limit reached", which the pool can't
+    // distinguish from a relay that simply has nothing. Since typically one relay
+    // holds a given note, that reads as "not found". Measured repeatedly: the
+    // same lookup fails for the first ~20 seconds after load and then succeeds.
+    // So keep asking until the startup traffic drains, and only report it missing
+    // once we've genuinely stopped trying.
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const attempt = async () => {
+      if (cancelled) return true
+      const ev = await decodeNoteParam(noteAddressParam, relays, (id) => fetchEvent(relays, { ids: [id] }))
+        .catch(() => null)
+      if (cancelled || !ev) return false
+      setDeepNote(ev)
+      setDeepState('idle')
+      return true
+    }
+    ;(async () => {
+      for (const wait of [500, 3000, 6000, 10000, 12000]) {
+        await new Promise((r) => timers.push(setTimeout(r, wait)))
+        if (await attempt()) return
+      }
+      if (!cancelled) setDeepState('missing')
+    })()
+    return () => { cancelled = true; timers.forEach(clearTimeout) }
   }, [noteAddressParam])
 
   const myPubkey = useAuthStore((s) => s.pubkey)
@@ -117,11 +136,34 @@ export function FeedPage() {
           rootNote={deepNote}
         />
       )}
+
+      {/* Resolving takes a relay round-trip, so say so rather than showing a
+          feed that abruptly sprouts a modal seconds later. */}
+      <Dialog open={deepState !== 'idle'} onOpenChange={(o) => { if (!o) navigate('/feed', { replace: true }) }}>
+        <DialogContent className="border-[#262626] bg-[#1c1c1c] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-neutral-100">
+              {deepState === 'loading' ? 'Opening post…' : 'Post not found'}
+            </DialogTitle>
+          </DialogHeader>
+          {deepState === 'loading' ? (
+            <div className="flex items-center gap-3 py-6 text-sm text-neutral-400">
+              <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+              Looking this up on your relays…
+            </div>
+          ) : (
+            <p className="py-4 text-sm text-neutral-400">
+              None of your relays have this post. It may have been deleted, or live on relays you
+              don’t read from.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column: feed / notifications */}
         <div className="lg:col-span-2 min-w-0 order-2 lg:order-1">
           {view === 'home'
-            ? <FeedView authors={authors} />
+            ? <FeedView authors={authors} initialTab={noteAddressParam ? 'social' : 'mods'} />
             : view === 'notifications'
               ? <NotificationsView myPubkey={myPubkey} />
               : <DirectMessagesView />}

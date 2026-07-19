@@ -275,9 +275,9 @@ function CreatePrompt({ to, icon: Icon, label }: { to: string; icon: typeof Pack
   )
 }
 
-export function FeedView({ authors }: { authors: string[] }) {
+export function FeedView({ authors, initialTab = 'mods' }: { authors: string[]; initialTab?: 'mods' | 'blogs' | 'social' }) {
   return (
-    <Tabs defaultValue="mods" className="w-full">
+    <Tabs defaultValue={initialTab} className="w-full">
       <TabsList className="grid h-auto w-full grid-cols-3 items-stretch bg-[#1c1c1c] border border-[#262626]">
         <TabsTrigger value="mods" className={tabTrigger}>Mods</TabsTrigger>
         <TabsTrigger value="blogs" className={tabTrigger}>Blog</TabsTrigger>
