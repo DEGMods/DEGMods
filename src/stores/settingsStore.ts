@@ -190,6 +190,18 @@ function withNewDefaults<T extends { url: string }>(stored: T[], defaults: T[]):
   return [...stored, ...defaults.filter(d => !have.has(d.url))]
 }
 
+/**
+ * Client relays we used to ship and no longer do. Dropping an entry from the
+ * defaults only affects fresh installs — anyone who already ran the app has it
+ * saved — so retiring one has to be explicit. Users can still add any of these
+ * back as a custom relay.
+ */
+const RETIRED_CLIENT_RELAYS = new Set(['wss://relay.damus.io'])
+
+function withoutRetired<T extends { url: string }>(relays: T[]): T[] {
+  return relays.filter(r => !RETIRED_CLIENT_RELAYS.has(r.url.replace(/\/$/, '')))
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...POSTING_DEFAULTS,
   clientRelays: DEFAULT_RELAYS.map(r => ({ ...r })),
@@ -446,7 +458,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const userRelays = loadJson<RelayConfig[]>(StorageKey.USER_RELAYS, [])
     const userBlossoms = loadJson<BlossomConfig[]>(StorageKey.USER_BLOSSOMS, [])
     set({
-      clientRelays: withNewDefaults(loadJson(StorageKey.CLIENT_RELAYS, DEFAULT_RELAYS), DEFAULT_RELAYS),
+      clientRelays: withoutRetired(withNewDefaults(loadJson(StorageKey.CLIENT_RELAYS, DEFAULT_RELAYS), DEFAULT_RELAYS)),
       customRelays: loadJson(StorageKey.CUSTOM_RELAYS, []),
       userRelays,
       userRelaysBaseline: relayListSignature(userRelays),

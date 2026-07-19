@@ -1,8 +1,16 @@
 [
   { "url": "wss://brs.degmods.com", "read": true, "write": true, "enabled": true },
-  { "url": "wss://relay.damus.io", "read": true, "write": true, "enabled": true },
   { "url": "wss://relay.primal.net", "read": true, "write": true, "enabled": true },
   { "url": "wss://nos.lol", "read": true, "write": true, "enabled": true },
+  { "url": "wss://nostr.mom", "read": true, "write": true, "enabled": true },
+  { "url": "wss://nostr.novacisko.cz", "read": true, "write": true, "enabled": true, "search": true },
+  { "url": "wss://nostrcheck.me", "read": true, "write": true, "enabled": true, "search": true },
+  { "url": "wss://pyramid.fiatjaf.com", "read": true, "write": true, "enabled": true, "search": true },
+  { "url": "wss://relay.cxplay.org", "read": true, "write": true, "enabled": true, "search": true },
+  { "url": "wss://relay.layer.systems", "read": true, "write": true, "enabled": true, "search": true },
+  { "url": "wss://relay.nostr.moe", "read": true, "write": true, "enabled": true, "search": true },
+  { "url": "wss://relay.poster.place", "read": true, "write": true, "enabled": true, "search": true },
+  { "url": "wss://wheat.happytavern.co", "read": true, "write": true, "enabled": true, "search": true },
   { "url": "wss://relay.nostr.band", "read": true, "write": false, "enabled": true, "search": true },
   { "url": "wss://relay.noswhere.com", "read": true, "write": false, "enabled": true, "search": true },
   { "url": "wss://search.nos.today", "read": true, "write": false, "enabled": true, "search": true }
