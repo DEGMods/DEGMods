@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { Loader2, User } from 'lucide-react'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { KINDS } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useNotificationsStore } from '@/stores/notificationsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
 import { zapReceiptAmountMsat } from '@/lib/nostr/social'
@@ -121,10 +122,16 @@ function SocialNotifRow({ notif }: { notif: SocialNotif }) {
   )
 }
 
-function SocialNotifications({ myPubkey }: { myPubkey: string }) {
+function SocialNotifications({ myPubkey, onNewest }: { myPubkey: string; onNewest?: (ts: number) => void }) {
   const [notifs, setNotifs] = useState<SocialNotif[]>([])
   const [loading, setLoading] = useState(true)
   const { enabled, toggle } = useToggleSet<SocialType>(SOCIAL_TYPES.map((t) => t.id))
+
+  // Report the newest notification so the tab can show an unseen dot. Uses the
+  // unfiltered list: hiding reactions shouldn't hide that something arrived.
+  useEffect(() => {
+    onNewest?.(notifs.reduce((max, n) => Math.max(max, n.createdAt), 0))
+  }, [notifs, onNewest])
 
   useEffect(() => {
     let cancelled = false
@@ -231,11 +238,16 @@ function AddrNotifRow({ notif, title }: { notif: AddrNotif; title: string }) {
   )
 }
 
-function AddressableNotifications({ myPubkey, kind }: { myPubkey: string; kind: number }) {
+function AddressableNotifications({ myPubkey, kind, onNewest }: { myPubkey: string; kind: number; onNewest?: (ts: number) => void }) {
   const [notifs, setNotifs] = useState<AddrNotif[]>([])
   const [titles, setTitles] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const { enabled, toggle } = useToggleSet<AddrType>(ADDR_TYPES.map((t) => t.id))
+
+  // See SocialNotifications: unfiltered, so a type toggle can't hide the dot.
+  useEffect(() => {
+    onNewest?.(notifs.reduce((max, n) => Math.max(max, n.createdAt), 0))
+  }, [notifs, onNewest])
 
   useEffect(() => {
     let cancelled = false
@@ -294,17 +306,49 @@ function Empty() {
 
 // ─── Tabbed notifications ───────────────────────────────────────────────
 
+/** Tab content stays mounted so every category can report whether it has
+ *  anything new — an unmounted tab fetches nothing and could never show a dot. */
+const hideInactive = 'mt-4 data-[state=inactive]:hidden'
+
+function TabLabel({ label, dot }: { label: string; dot: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {label}
+      {dot && <span className="h-2 w-2 shrink-0 rounded-full bg-purple-500" aria-label={`Unseen ${label} notifications`} />}
+    </span>
+  )
+}
+
 export function NotificationsView({ myPubkey }: { myPubkey: string }) {
+  // Opening this view marks everything seen, so the live `lastSeen` is already
+  // "now" by the time the tabs render. Snapshot it during the first render —
+  // before that effect runs — or no tab could ever show a dot.
+  const [seenAtOpen] = useState(() => useNotificationsStore.getState().lastSeen)
+  const seenLoaded = useNotificationsStore((s) => s.seenLoaded)
+  const [newest, setNewest] = useState<Record<string, number>>({})
+
+  const report = useCallback((key: string) => (ts: number) => {
+    setNewest((prev) => (prev[key] === ts ? prev : { ...prev, [key]: ts }))
+  }, [])
+
+  const dot = (key: string) => seenLoaded && (newest[key] ?? 0) > seenAtOpen
+
   return (
     <Tabs defaultValue="mods" className="w-full">
       <TabsList className="grid h-auto w-full grid-cols-3 items-stretch bg-[#1c1c1c] border border-[#262626]">
-        <TabsTrigger value="mods" className={tabTrigger}>Mods</TabsTrigger>
-        <TabsTrigger value="blog" className={tabTrigger}>Blog</TabsTrigger>
-        <TabsTrigger value="social" className={tabTrigger}>Social</TabsTrigger>
+        <TabsTrigger value="mods" className={tabTrigger}><TabLabel label="Mods" dot={dot('mods')} /></TabsTrigger>
+        <TabsTrigger value="blog" className={tabTrigger}><TabLabel label="Blog" dot={dot('blog')} /></TabsTrigger>
+        <TabsTrigger value="social" className={tabTrigger}><TabLabel label="Social" dot={dot('social')} /></TabsTrigger>
       </TabsList>
-      <TabsContent value="mods" className="mt-4"><AddressableNotifications myPubkey={myPubkey} kind={KINDS.MOD} /></TabsContent>
-      <TabsContent value="blog" className="mt-4"><AddressableNotifications myPubkey={myPubkey} kind={KINDS.BLOG} /></TabsContent>
-      <TabsContent value="social" className="mt-4"><SocialNotifications myPubkey={myPubkey} /></TabsContent>
+      <TabsContent value="mods" forceMount className={hideInactive}>
+        <AddressableNotifications myPubkey={myPubkey} kind={KINDS.MOD} onNewest={report('mods')} />
+      </TabsContent>
+      <TabsContent value="blog" forceMount className={hideInactive}>
+        <AddressableNotifications myPubkey={myPubkey} kind={KINDS.BLOG} onNewest={report('blog')} />
+      </TabsContent>
+      <TabsContent value="social" forceMount className={hideInactive}>
+        <SocialNotifications myPubkey={myPubkey} onNewest={report('social')} />
+      </TabsContent>
     </Tabs>
   )
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { Event as NostrEvent } from 'nostr-tools'
 import { Loader2, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/authStore'
@@ -12,7 +13,8 @@ interface SocialReplyFormProps {
   parent?: SocialRef
   placeholder?: string
   autoFocus?: boolean
-  onPublished: () => void
+  /** Receives the signed reply so callers can show it without waiting for relays. */
+  onPublished: (event: NostrEvent) => void
   onCancel?: () => void
 }
 
@@ -32,7 +34,7 @@ export function SocialReplyForm({ root, parent, placeholder, autoFocus, onPublis
       if (!res.success) throw new Error(res.error || 'Failed to publish')
       toast.success('Reply posted')
       setText('')
-      onPublished()
+      if (res.event) onPublished(res.event)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to reply')
     } finally {

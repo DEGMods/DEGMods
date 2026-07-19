@@ -6,7 +6,7 @@ import { formatRelativeTime } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
-import { fetchReplies, directReplies, replyParentId, type SocialRef } from '@/lib/nostr/socialThread'
+import { fetchReplies, directReplies, replyParentId, threadRootId, type SocialRef } from '@/lib/nostr/socialThread'
 import type { NostrTarget } from '@/lib/nostr/social'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
@@ -29,7 +29,7 @@ function ThreadItem({
   rootRef: SocialRef
   focused?: boolean
   onOpen?: () => void
-  onReplyPublished: () => void
+  onReplyPublished: (event?: NostrEvent) => void
 }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
@@ -111,7 +111,7 @@ function ThreadItem({
             autoFocus
             placeholder={`Reply to ${name}…`}
             onCancel={() => setReplyOpen(false)}
-            onPublished={() => { setReplyOpen(false); onReplyPublished() }}
+            onPublished={(ev) => { setReplyOpen(false); onReplyPublished(ev) }}
           />
         </div>
       )}
@@ -121,7 +121,7 @@ function ThreadItem({
 
 // ─── Standalone reply box shown below the focused post ─────────────────
 
-function ReplyBox({ rootRef, focused, onReplyPublished }: { rootRef: SocialRef; focused: NostrEvent; onReplyPublished: () => void }) {
+function ReplyBox({ rootRef, focused, onReplyPublished }: { rootRef: SocialRef; focused: NostrEvent; onReplyPublished: (event?: NostrEvent) => void }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -147,59 +147,53 @@ interface ThreadModalProps {
   rootNote: NostrEvent
 }
 
-/** How far up a thread to walk. Deep chains are rare and each hop is a fetch. */
-const MAX_ANCESTORS = 5
-
 export function ThreadModal({ open, onOpenChange, rootNote }: ThreadModalProps) {
   const [stack, setStack] = useState<NostrEvent[]>([rootNote])
   const [replies, setReplies] = useState<NostrEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [ancestors, setAncestors] = useState<NostrEvent[]>([])
-  const [loadingAncestors, setLoadingAncestors] = useState(false)
+  const [parentEvent, setParentEvent] = useState<NostrEvent | null>(null)
+  const [rootEvent, setRootEvent] = useState<NostrEvent | null>(null)
+  const [loadingParent, setLoadingParent] = useState(false)
 
   useEffect(() => { if (open) setStack([rootNote]) }, [open, rootNote.id])
 
   const focused = stack[stack.length - 1]
 
-  // Walk up from the focused note. Opening a reply — from notifications, say —
-  // otherwise shows it with no idea what it answers, and (worse) would treat the
-  // reply as its own thread root, mis-threading anything published from here.
+  // Just the post being replied to — enough context to make sense of the reply
+  // without turning the modal into the whole thread. The root is resolved too
+  // but not shown: it's needed so a reply composed here threads under the real
+  // root rather than under whatever happened to be on screen.
   useEffect(() => {
     if (!open) return
     let cancelled = false
-    setAncestors([])
+    setParentEvent(null); setRootEvent(null)
+    const parentId = replyParentId(focused)
+    if (!parentId) return
+    const rootId = threadRootId(focused)
+    setLoadingParent(true)
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
     ;(async () => {
-      if (!replyParentId(focused)) return
-      setLoadingAncestors(true)
-      const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-      const chain: NostrEvent[] = []
-      let cursor = focused
       try {
-        for (let i = 0; i < MAX_ANCESTORS; i++) {
-          const parentId = replyParentId(cursor)
-          if (!parentId) break
-          const ev = await fetchEvent(relays, { ids: [parentId] })
-          if (cancelled) return
-          if (!ev) break
-          chain.unshift(ev)
-          cursor = ev
-        }
-        if (!cancelled) setAncestors(chain)
+        const [parent, root] = await Promise.all([
+          fetchEvent(relays, { ids: [parentId] }),
+          rootId && rootId !== parentId ? fetchEvent(relays, { ids: [rootId] }) : Promise.resolve(null),
+        ])
+        if (cancelled) return
+        setParentEvent(parent ?? null)
+        setRootEvent(root ?? null)
       } catch {
-        /* keep whatever we resolved — a missing parent just isn't shown */
+        /* a parent we can't fetch simply isn't shown */
       } finally {
-        if (!cancelled) setLoadingAncestors(false)
+        if (!cancelled) setLoadingParent(false)
       }
     })()
     return () => { cancelled = true }
   }, [open, focused])
 
-  // The topmost note we could resolve is the thread root. Falls back to the
-  // focused note when it has no parent (it *is* the root) or when the chain
-  // couldn't be fetched.
-  const rootRef: SocialRef = ancestors.length
-    ? { id: ancestors[0].id, pubkey: ancestors[0].pubkey }
-    : { id: focused.id, pubkey: focused.pubkey }
+  // Best available thread root: the explicit one, else the parent, else this
+  // note (which is then a root itself, or its chain couldn't be resolved).
+  const rootSource = rootEvent ?? parentEvent ?? focused
+  const rootRef: SocialRef = { id: rootSource.id, pubkey: rootSource.pubkey }
 
   const loadReplies = useCallback(async (eventId: string) => {
     setLoading(true)
@@ -215,6 +209,21 @@ export function ThreadModal({ open, onOpenChange, rootNote }: ThreadModalProps) 
   }, [])
 
   useEffect(() => { if (open) loadReplies(focused.id) }, [open, focused.id, loadReplies])
+
+  /**
+   * Show a just-published reply immediately.
+   *
+   * Refetching instead would usually come back without it: relays need a moment
+   * to index, and the request often races the write. Inserting the signed event
+   * we already hold means the reply appears the instant it's posted; the next
+   * refetch reconciles (deduped by id).
+   */
+  const addReply = useCallback((event?: NostrEvent) => {
+    if (event && replyParentId(event) === focused.id) {
+      setReplies((prev) => (prev.some((r) => r.id === event.id) ? prev : [...prev, event]))
+    }
+    void loadReplies(focused.id)
+  }, [focused.id, loadReplies])
 
   const push = (e: NostrEvent) => setStack((s) => [...s, e])
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s))
@@ -234,31 +243,27 @@ export function ThreadModal({ open, onOpenChange, rootNote }: ThreadModalProps) 
         </DialogHeader>
 
         <div className="min-w-0 space-y-4 py-1">
-          {/* What the focused note is answering, oldest first. Muted and compact:
-              context, not the subject of the modal. */}
-          {loadingAncestors && ancestors.length === 0 && (
+          {/* The post being replied to — context, not the subject of the modal. */}
+          {loadingParent && !parentEvent && (
             <div className="flex items-center gap-2 px-1 text-xs text-neutral-500">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading what this replies to…
             </div>
           )}
-          {ancestors.length > 0 && (
+          {parentEvent && (
             <div className="space-y-2">
-              {ancestors.map((a) => (
-                <ThreadItem
-                  key={a.id}
-                  event={a}
-                  rootRef={rootRef}
-                  onOpen={() => push(a)}
-                  onReplyPublished={() => loadReplies(focused.id)}
-                />
-              ))}
+              <ThreadItem
+                event={parentEvent}
+                rootRef={rootRef}
+                onOpen={() => push(parentEvent)}
+                onReplyPublished={addReply}
+              />
               <div className="ml-5 h-3 w-px bg-[#333]" aria-hidden />
             </div>
           )}
 
-          <ThreadItem event={focused} rootRef={rootRef} focused onReplyPublished={() => loadReplies(focused.id)} />
+          <ThreadItem event={focused} rootRef={rootRef} focused onReplyPublished={addReply} />
 
-          <ReplyBox rootRef={rootRef} focused={focused} onReplyPublished={() => loadReplies(focused.id)} />
+          <ReplyBox rootRef={rootRef} focused={focused} onReplyPublished={addReply} />
 
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-neutral-500">
@@ -274,7 +279,7 @@ export function ThreadModal({ open, onOpenChange, rootNote }: ThreadModalProps) 
                   event={reply}
                   rootRef={rootRef}
                   onOpen={() => push(reply)}
-                  onReplyPublished={() => loadReplies(focused.id)}
+                  onReplyPublished={addReply}
                 />
               ))}
             </div>

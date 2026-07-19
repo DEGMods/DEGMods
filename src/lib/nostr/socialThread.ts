@@ -29,6 +29,23 @@ export function replyParentId(event: NostrEvent): string | null {
   return eTags[eTags.length - 1][1]
 }
 
+/**
+ * The id of the thread's root, per NIP-10, or null if this event starts one.
+ *
+ * Prefers the explicit `root` marker; falls back to the deprecated positional
+ * form, where the *first* e tag is the root. Needed so a reply composed from a
+ * reply is threaded under the real root rather than under whatever happened to
+ * be on screen.
+ */
+export function threadRootId(event: NostrEvent): string | null {
+  const eTags = event.tags.filter((t) => t[0] === 'e' && t[1])
+  if (eTags.length === 0) return null
+  const root = eTags.find((t) => t[3] === 'root')
+  if (root) return root[1]
+  // A lone e tag is both root and parent.
+  return eTags[0][1]
+}
+
 /** Direct replies of `parentId` from a fetched batch, deduped + sorted oldest-first. */
 export function directReplies(events: NostrEvent[], parentId: string): NostrEvent[] {
   const byId = new Map<string, NostrEvent>()
