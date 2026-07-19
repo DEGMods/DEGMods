@@ -20,7 +20,7 @@ const DEFAULT_SOURCES: SourceEntry[] = [
   { name: UNTAGGED, enabled: false },
 ]
 
-interface JamFiltersState {
+export interface JamFiltersState {
   nsfwMode: NsfwMode
   status: JamStatusFilter
   /** Month range ("YYYY-MM", '' = unset). Drives the relay-side `y` filter. */
@@ -45,29 +45,53 @@ interface JamFiltersState {
   applyExcludedTagsDefaults: (defaults: string[]) => void
 }
 
-export const useJamFiltersStore = create<JamFiltersState>()(
-  persist(
-    (set, get) => ({
-      nsfwMode: 'hide',
-      status: 'all',
-      fromMonth: '',
-      toMonth: '',
-      sources: DEFAULT_SOURCES,
-      searchTags: [],
-      excludedTags: DEFAULT_EXCLUDED_TAGS,
-      excludedTagsTouched: false,
+/**
+ * One filter store per listing, same shape.
+ *
+ * A jam's submissions are filtered independently of the jam listing itself —
+ * narrowing entries inside one jam shouldn't quietly reshape /mod-jams — but the
+ * controls are identical, so the state is too. The submissions listing simply
+ * doesn't render the status and range controls (see `JamFiltersBar`), leaving
+ * those fields inert there.
+ */
+function createFiltersStore(persistKey: string) {
+  return create<JamFiltersState>()(
+    persist(
+      (set, get) => ({
+        nsfwMode: 'hide',
+        status: 'all',
+        fromMonth: '',
+        toMonth: '',
+        sources: DEFAULT_SOURCES,
+        searchTags: [],
+        excludedTags: DEFAULT_EXCLUDED_TAGS,
+        excludedTagsTouched: false,
 
-      setNsfwMode: (nsfwMode) => set({ nsfwMode }),
-      setStatus: (status) => set({ status }),
-      setRange: (fromMonth, toMonth) => set({ fromMonth, toMonth }),
-      setSources: (sources) => set({ sources }),
-      setSearchTags: (searchTags) => set({ searchTags }),
-      setExcludedTags: (excludedTags) => set({ excludedTags, excludedTagsTouched: true }),
-      resetExcludedTags: (defaults) => set({ excludedTags: defaults, excludedTagsTouched: false }),
-      applyExcludedTagsDefaults: (defaults) => {
-        if (!get().excludedTagsTouched) set({ excludedTags: defaults })
-      },
-    }),
-    { name: 'deg-mods:jam-filters' },
-  ),
-)
+        setNsfwMode: (nsfwMode) => set({ nsfwMode }),
+        setStatus: (status) => set({ status }),
+        setRange: (fromMonth, toMonth) => set({ fromMonth, toMonth }),
+        setSources: (sources) => set({ sources }),
+        setSearchTags: (searchTags) => set({ searchTags }),
+        setExcludedTags: (excludedTags) => set({ excludedTags, excludedTagsTouched: true }),
+        resetExcludedTags: (defaults) => set({ excludedTags: defaults, excludedTagsTouched: false }),
+        applyExcludedTagsDefaults: (defaults) => {
+          if (!get().excludedTagsTouched) set({ excludedTags: defaults })
+        },
+      }),
+      { name: persistKey },
+    ),
+  )
+}
+
+export const useJamFiltersStore = createFiltersStore('deg-mods:jam-filters')
+
+/** Filters for the entries inside one jam (`/mod-jam/:naddr/submissions`). */
+export const useSubmissionFiltersStore = createFiltersStore('deg-mods:submission-filters')
+
+/**
+ * A filter store as consumed by the shared bar. Declared as a plain callable
+ * rather than `typeof useJamFiltersStore` — the bound-store type's overloads
+ * defeat inference when it arrives as a prop, leaving the destructured state
+ * implicitly `any`.
+ */
+export type FiltersStore = () => JamFiltersState

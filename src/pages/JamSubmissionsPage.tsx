@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { nip19 } from 'nostr-tools'
+import { nip19, type Filter } from 'nostr-tools'
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Loader2, ArrowLeft, Plus, Medal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ModCard } from '@/components/mod/ModCard'
 import { SearchBar } from '@/components/search/SearchBar'
+import { AdvancedSearch } from '@/components/search/AdvancedSearch'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchAllEvents, fetchEvents, fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
@@ -16,6 +17,10 @@ import { latestResults, rowsForEntry, type JamResults } from '@/lib/nostr/jamVot
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
 import { useWotModFilter } from '@/hooks/useWot'
+import { useFollowedSet } from '@/hooks/useFollowedSet'
+import { applyModFilters } from '@/lib/mods/filterMods'
+import { useSubmissionFiltersStore } from '@/stores/jamFiltersStore'
+import { JamFiltersBar } from '@/components/jam/JamFiltersBar'
 import { KINDS } from '@/lib/constants'
 import type { ModDetails } from '@/types/mod'
 import { cn } from '@/lib/utils'
@@ -63,10 +68,15 @@ export function JamSubmissionsPage() {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('newest')
   const [page, setPage] = useState(1)
+  const [advanced, setAdvanced] = useState<Filter | null>(null)
+  const [advancedMods, setAdvancedMods] = useState<ModDetails[] | null>(null)
 
   const moderate = useModerationFilter()
   const blockFilter = useBlockFilter()
   const wotFilter = useWotModFilter()
+  const powExempt = useFollowedSet()
+  const { nsfwMode, sources, searchTags, excludedTags } = useSubmissionFiltersStore()
+  const minPow = useSettingsStore((st) => st.powFilterDifficulty)
 
   useEffect(() => {
     let cancelled = false
@@ -142,8 +152,54 @@ export function JamSubmissionsPage() {
     return () => { cancelled = true }
   }, [naddr])
 
+  /** The jam's coordinate, for pinning an advanced query to this jam's entries. */
+  const jamCoordinate = useMemo(() => {
+    try {
+      const d = nip19.decode(naddr!)
+      if (d.type !== 'naddr' || d.data.kind !== KINDS.JAM) return null
+      return `${KINDS.JAM}:${d.data.pubkey}:${d.data.identifier}`
+    } catch { return null }
+  }, [naddr])
+
+  // An advanced query replaces the listing, but stays inside this jam: the filter
+  // carries the jam's `a` tag, and results are still validated as submissions.
+  useEffect(() => {
+    if (!advanced || !jam) { setAdvancedMods(null); return }
+    let cancelled = false
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    fetchAllEvents(relays, advanced)
+      .then((evs) => {
+        if (cancelled) return
+        const byCoord = new Map<string, typeof evs[number]>()
+        for (const ev of evs) {
+          const d = ev.tags.find((t) => t[0] === 'd')?.[1] ?? ''
+          const key = `${ev.pubkey}:${d}`
+          const cur = byCoord.get(key)
+          if (!cur || ev.created_at > cur.created_at) byCoord.set(key, ev)
+        }
+        setAdvancedMods([...byCoord.values()]
+          .filter((ev) => !ev.tags.some((t) => t[0] === 'deleted' && t[1] === 'true'))
+          .filter((ev) => isValidSubmission(ev, jam))
+          .map(extractModData))
+      })
+      .catch(() => { if (!cancelled) setAdvancedMods([]) })
+    return () => { cancelled = true }
+  }, [advanced, jam])
+
+  const availableClients = useMemo(
+    () => [...new Set((advancedMods ?? mods).map((m) => m.client).filter((c): c is string => !!c))].sort(),
+    [mods, advancedMods],
+  )
+
   const filtered = useMemo(() => {
-    let result = wotFilter(blockFilter(moderate(mods)))
+    // Entries are mods, so they get the mod filter predicate — but driven by the
+    // submissions store, so narrowing one jam's entries doesn't reshape /mods.
+    // Status and range are the jam listing's concern and stay unused here.
+    let result = wotFilter(blockFilter(moderate(applyModFilters(advancedMods ?? mods, {
+      nsfwMode, minPow, sources, searchTags, excludedTags,
+      categoryFilters: [], repostMode: 'show', emulationMode: 'show', legacyMode: 'show',
+      powExempt,
+    }))))
 
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -159,9 +215,9 @@ export function JamSubmissionsPage() {
       return b.publishedAt - a.publishedAt
     })
     return result
-  }, [mods, moderate, blockFilter, wotFilter, search, sort])
+  }, [mods, advancedMods, moderate, blockFilter, wotFilter, search, sort, nsfwMode, minPow, sources, searchTags, excludedTags, powExempt])
 
-  useEffect(() => { setPage(1) }, [search, sort])
+  useEffect(() => { setPage(1) }, [search, sort, advanced, nsfwMode, minPow, sources, searchTags, excludedTags])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
   const currentPage = Math.min(page, totalPages)
@@ -191,7 +247,40 @@ export function JamSubmissionsPage() {
 
       {/* Search + filters */}
       <div className="space-y-3">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search entries by title, game, or tags…" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-[240px] flex-1">
+            <SearchBar value={search} onChange={setSearch} placeholder="Search entries by title, game, or tags…" />
+          </div>
+          {jamCoordinate && (
+            <AdvancedSearch
+              subject="entry"
+              base={{ '#a': [jamCoordinate], '#l': [JAM_ENTRY_LABEL] }}
+              active={!!advanced}
+              onSearch={setAdvanced}
+              onClear={() => setAdvanced(null)}
+            />
+          )}
+        </div>
+
+        {advanced && (
+          <button
+            type="button"
+            onClick={() => setAdvanced(null)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-1.5 text-sm text-purple-300 transition-colors hover:border-purple-400"
+          >
+            Advanced search active — clear
+          </button>
+        )}
+        {/* Same controls as the jam listing, minus status and range — an entry has
+            no lifecycle of its own, and every entry shares the jam's window. */}
+        <JamFiltersBar
+          availableClients={availableClients}
+          resultCount={filtered.length}
+          store={useSubmissionFiltersStore}
+          showStatus={false}
+          showRange={false}
+          noun={['entry', 'entries']}
+        />
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="ml-auto flex items-center gap-2">
             <span className="text-neutral-500">Sort</span>
@@ -202,7 +291,6 @@ export function JamSubmissionsPage() {
             />
           </span>
         </div>
-        {!loading && <p className="text-xs text-neutral-500">{filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}</p>}
       </div>
 
       {/* Grid */}

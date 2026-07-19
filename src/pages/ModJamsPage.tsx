@@ -5,6 +5,7 @@ import type { Filter } from 'nostr-tools'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SearchBar } from '@/components/search/SearchBar'
+import { AdvancedSearch } from '@/components/search/AdvancedSearch'
 import { JamCard } from '@/components/jam/JamCard'
 import { JamFiltersBar } from '@/components/jam/JamFiltersBar'
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
@@ -38,6 +39,7 @@ function compareJams(a: JamDetails, b: JamDetails, now: number): number {
 
 export function ModJamsPage() {
   const [search, setSearch] = useState('')
+  const [advanced, setAdvanced] = useState<Filter | null>(null)
   const [page, setPage] = useState(1)
   const now = Math.floor(Date.now() / 1000)
 
@@ -53,10 +55,12 @@ export function ModJamsPage() {
   // No range picked → newest jams, paged progressively. With a range → narrow at
   // the relay via the `y` month index (one bucket per month, so ≤ MAX_SPAN values).
   const baseFilter = useMemo<Filter>(() => (
-    range
+    // An advanced query replaces the listing outright, so it also replaces the
+    // month index — the two would otherwise fight over the same result set.
+    advanced ?? (range
       ? { kinds: [KINDS.JAM], '#y': monthBuckets(monthToTs(range.from), monthToTs(range.to, true)) }
-      : { kinds: [KINDS.JAM] }
-  ), [range])
+      : { kinds: [KINDS.JAM] })
+  ), [range, advanced])
 
   const { events, loading, loadingMore, reachedEnd, loadMore } = useProgressiveEvents(baseFilter, BATCH)
   const jams = useMemo(() => constructJamListFromEvents(events), [events])
@@ -98,7 +102,7 @@ export function ModJamsPage() {
   const paginated = filtered.slice((currentPage - 1) * JAMS_PER_PAGE, currentPage * JAMS_PER_PAGE)
 
   // Reset to page 1 on filter changes.
-  useEffect(() => { setPage(1) }, [search, status, fromMonth, toMonth, nsfwMode, sources, searchTags, excludedTags, minPow])
+  useEffect(() => { setPage(1) }, [search, advanced, status, fromMonth, toMonth, nsfwMode, sources, searchTags, excludedTags, minPow])
 
   // Prefetch an older batch as the user nears the last loaded page.
   useEffect(() => {
@@ -131,7 +135,27 @@ export function ModJamsPage() {
         </Link>
       </div>
 
-      <SearchBar value={search} onChange={setSearch} placeholder="Quick local search by title, game, or tags…" />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-[240px] flex-1"><SearchBar value={search} onChange={setSearch} placeholder="Quick local search by title, game, or tags…" /></div>
+        <AdvancedSearch
+          kind={KINDS.JAM}
+          subject="jam"
+          showCategories={false}
+          active={!!advanced}
+          onSearch={setAdvanced}
+          onClear={() => setAdvanced(null)}
+        />
+      </div>
+
+      {advanced && (
+        <button
+          type="button"
+          onClick={() => setAdvanced(null)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-1.5 text-sm text-purple-300 transition-colors hover:border-purple-400"
+        >
+          Advanced search active — clear
+        </button>
+      )}
 
       <JamFiltersBar availableClients={availableClients} resultCount={filtered.length} wotHiddenCount={wotHiddenCount} />
 

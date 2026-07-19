@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { TagEditor, SourcesEditor } from '@/components/search/ModFiltersBar'
 import { MonthPicker } from '@/components/jam/MonthPicker'
-import { useJamFiltersStore, type JamStatusFilter } from '@/stores/jamFiltersStore'
+import { useJamFiltersStore, type JamStatusFilter, type FiltersStore } from '@/stores/jamFiltersStore'
 import { DEFAULT_MIN_POW, type NsfwMode } from '@/stores/modFiltersStore'
 import { MAX_SPAN, addMonths, effectiveRange } from '@/lib/jams/monthRange'
 import { monthLabel } from '@/lib/nostr/jam'
@@ -42,6 +42,17 @@ interface JamFiltersBarProps {
   resultCount: number
   /** How many jams in this listing are hidden by the user's Web of Trust. */
   wotHiddenCount?: number
+  /**
+   * Which filter store to drive. Defaults to the jam listing's; the submissions
+   * listing passes its own so narrowing entries inside a jam doesn't reshape
+   * /mod-jams.
+   */
+  store?: FiltersStore
+  /** Status and date range only make sense for the jam listing itself. */
+  showStatus?: boolean
+  showRange?: boolean
+  /** What the result count is counting. */
+  noun?: [singular: string, plural: string]
 }
 
 function FilterButton({ icon: Icon, label, count, active, onClick }: {
@@ -68,11 +79,14 @@ function FilterButton({ icon: Icon, label, count, active, onClick }: {
   )
 }
 
-export function JamFiltersBar({ availableClients, resultCount, wotHiddenCount = 0 }: JamFiltersBarProps) {
+export function JamFiltersBar({
+  availableClients, resultCount, wotHiddenCount = 0,
+  store = useJamFiltersStore, showStatus = true, showRange = true, noun = ['jam', 'jams'],
+}: JamFiltersBarProps) {
   const {
     nsfwMode, setNsfwMode, status, setStatus, fromMonth, toMonth, setRange, sources, setSources,
     searchTags, setSearchTags, excludedTags, setExcludedTags, resetExcludedTags,
-  } = useJamFiltersStore()
+  } = store()
   // Viewing-PoW is shared with Settings (single source of truth).
   const minPow = useSettingsStore((s) => s.powFilterDifficulty)
   const setMinPow = useSettingsStore((s) => s.setPowFilterDifficulty)
@@ -125,13 +139,15 @@ export function JamFiltersBar({ availableClients, resultCount, wotHiddenCount = 
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <FilterButton icon={CalendarClock} label={`Status: ${currentStatus.label}`} active={status !== 'all'} onClick={() => setStatusOpen(true)} />
-        <FilterButton
-          icon={CalendarRange}
-          label={range ? `Range: ${monthLabel(range.from)} – ${monthLabel(range.to)}` : 'Range'}
-          active={!!range}
-          onClick={openRange}
-        />
+        {showStatus && <FilterButton icon={CalendarClock} label={`Status: ${currentStatus.label}`} active={status !== 'all'} onClick={() => setStatusOpen(true)} />}
+        {showRange && (
+          <FilterButton
+            icon={CalendarRange}
+            label={range ? `Range: ${monthLabel(range.from)} – ${monthLabel(range.to)}` : 'Range'}
+            active={!!range}
+            onClick={openRange}
+          />
+        )}
         <FilterButton icon={Boxes} label="Sources" count={enabledSources} onClick={() => setSourcesOpen(true)} />
         <FilterButton icon={TagIcon} label="Tags" count={searchTags.length} onClick={() => setTagsOpen(true)} />
         <FilterButton icon={EyeOff} label="Excluded" count={excludedTags.length} onClick={() => setExcludedOpen(true)} />
@@ -139,7 +155,7 @@ export function JamFiltersBar({ availableClients, resultCount, wotHiddenCount = 
         <FilterButton icon={ShieldCheck} label="PoW" count={minPow > 0 ? minPow : undefined} onClick={() => setPowOpen(true)} />
 
         <span className="ml-auto text-sm text-neutral-500">
-          at least {resultCount} {resultCount === 1 ? 'jam' : 'jams'}
+          at least {resultCount} {resultCount === 1 ? noun[0] : noun[1]}
         </span>
       </div>
 

@@ -19,13 +19,28 @@ interface AdvancedSearchProps {
   active: boolean
   onSearch: (filter: Filter) => void
   onClear: () => void
+  /** Event kind to query. Defaults to mods. */
+  kind?: number
+  /**
+   * Constraints merged into every query — how a listing that is already scoped
+   * stays scoped. A jam's submissions page pins the query to that jam, so an
+   * advanced search narrows the entries rather than escaping into all of Nostr.
+   */
+  base?: Filter
+  /** Category chains are a mod concept; jams have none. */
+  showCategories?: boolean
+  /** What's being searched, for the field placeholder. */
+  subject?: string
 }
 
 /**
  * Relay-side advanced search for mods. Builds a Nostr filter (#g / #t / #c /
  * authors) and runs it against relays, replacing the current listing.
  */
-export function AdvancedSearch({ fixedGame, active, onSearch, onClear }: AdvancedSearchProps) {
+export function AdvancedSearch({
+  fixedGame, active, onSearch, onClear,
+  kind = KINDS.MOD, base, showCategories = true, subject = 'mod',
+}: AdvancedSearchProps) {
   const [open, setOpen] = useState(false)
   const [term, setTerm] = useState('')
   const [game, setGame] = useState('')
@@ -34,7 +49,7 @@ export function AdvancedSearch({ fixedGame, active, onSearch, onClear }: Advance
   const [author, setAuthor] = useState('')
 
   const submit = () => {
-    const filter: Filter = { kinds: [KINDS.MOD] }
+    const filter: Filter = { kinds: [kind], ...base }
 
     const q = term.trim()
     if (q) filter.search = q
@@ -126,7 +141,7 @@ export function AdvancedSearch({ fixedGame, active, onSearch, onClear }: Advance
               <Input
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
-                placeholder="Search by mod name or keyword"
+                placeholder={`Search by ${subject} name or keyword`}
                 className="bg-[#212121] border-[#262626] text-white"
               />
               <p className="text-[11px] text-neutral-500">Full-text search on relays that support it (NIP-50); other relays are matched on this device.</p>
@@ -148,10 +163,12 @@ export function AdvancedSearch({ fixedGame, active, onSearch, onClear }: Advance
               <TagEditor tags={tags} onChange={setTags} placeholder="Add a tag…" />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs text-neutral-400">Categories (exact chain)</label>
-              <CategoryChainsEditor chains={categories} onChange={setCategories} />
-            </div>
+            {showCategories && (
+              <div className="space-y-1">
+                <label className="text-xs text-neutral-400">Categories (exact chain)</label>
+                <CategoryChainsEditor chains={categories} onChange={setCategories} />
+              </div>
+            )}
 
             <div className="space-y-1">
               <label className="text-xs text-neutral-400">Author (npub)</label>
