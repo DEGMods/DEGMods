@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Wallet, Loader2, Plus, Pencil, Trash2, X, Save, Copy, Check } from 'lucide-react'
+import { HandCoins, Loader2, Plus, Pencil, Trash2, X, Save, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -62,7 +62,9 @@ function TypeField({ value, onChange }: { value: string; onChange: (v: string) =
   const [rect, setRect] = useState<{ left: number; top: number; width: number; drop: 'down' | 'up' } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
-  const matches = suggestPaymentTypes(value)
+  // Suggestions are a response to typing, not a menu that greets you — an empty
+  // field shows nothing.
+  const matches = value.trim() ? suggestPaymentTypes(value) : []
 
   const place = useCallback(() => {
     const el = wrapRef.current
@@ -126,7 +128,9 @@ function TypeField({ value, onChange }: { value: string; onChange: (v: string) =
             width: Math.max(rect.width, 240),
             ...(rect.drop === 'down' ? { top: rect.top } : { bottom: window.innerHeight - rect.top }),
           }}
-          className="z-[60] max-h-56 overflow-y-auto rounded-lg border border-[#262626] bg-[#1a1a1a] py-1 shadow-xl"
+          // Matches the site's dropdown menus: 1-unit container padding with
+          // rounded, inset items rather than full-bleed rows.
+          className="z-[60] max-h-56 min-w-[8rem] overflow-y-auto rounded-lg border border-[#262626] bg-[#1c1c1c] p-1 shadow-xl"
         >
           {matches.map((m, i) => (
             <li key={m.type}>
@@ -135,7 +139,7 @@ function TypeField({ value, onChange }: { value: string; onChange: (v: string) =
                 onMouseEnter={() => setHighlight(i)}
                 onClick={() => choose(m.type)}
                 className={cn(
-                  'flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm',
+                  'flex w-full cursor-pointer select-none items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors',
                   i === highlight ? 'bg-[#262626] text-white' : 'text-neutral-300',
                 )}
               >
@@ -223,7 +227,7 @@ export function PaytoModal({
       <DialogContent className="max-h-[85vh] overflow-auto border-[#262626] bg-[#1c1c1c] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-neutral-100">
-            <Wallet className="h-5 w-5 text-purple-400" />
+            <HandCoins className="h-5 w-5 text-purple-400" />
             Payment targets
           </DialogTitle>
           <DialogDescription className="text-neutral-400">

@@ -4,7 +4,7 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { fetchEvents, fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { KINDS } from '@/lib/constants'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { User, Globe, TreePine, Wallet, MoreHorizontal, Eye, Pencil, ShieldBan, Loader2, AlertTriangle, RefreshCw, Flag, MessageSquare } from 'lucide-react'
+import { User, Globe, TreePine, HandCoins, MoreHorizontal, Eye, Pencil, ShieldBan, Loader2, AlertTriangle, RefreshCw, Flag, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
@@ -294,7 +294,7 @@ export function PublisherCard({ pubkey }: PublisherCardProps) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button onClick={() => setPaytoOpen(true)} className={iconBtn} aria-label="Payment targets">
-                  <Wallet className="h-4 w-4" />
+                  <HandCoins className="h-4 w-4" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>Payment targets</TooltipContent>
