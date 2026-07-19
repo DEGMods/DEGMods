@@ -181,6 +181,7 @@ export default function App() {
           <Route path="/blog" element={<BlogPage />} />
           <Route path="/blog/:naddr" element={<BlogPostPage />} />
           <Route path="/feed" element={<FeedPage />} />
+          <Route path="/feed/note/:address" element={<FeedPage />} />
           <Route path="/submit-blog" element={<WriteBlogPage />} />
           {/* legacy path — keep old links/bookmarks (and ?edit=…) working */}
           <Route path="/write" element={<LegacyRedirect to="/submit-blog" />} />

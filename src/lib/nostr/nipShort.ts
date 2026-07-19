@@ -204,6 +204,30 @@ export async function decodePostParam(
   }
 }
 
+/**
+ * Decode a note route param — a short address, or an `nevent1…`/`note1…`.
+ *
+ * Returns the event itself, since a note has no coordinate to look it up by
+ * later: unlike a mod or blog it's a regular event, identified only by its id.
+ */
+export async function decodeNoteParam(
+  param: string,
+  relays: string[],
+  fetchById: (id: string) => Promise<NostrEvent | null>,
+): Promise<NostrEvent | null> {
+  if (looksLikeShortAddress(param)) {
+    const res = await resolveShortAddress(relays, param)
+    return res.status === 'resolved' ? res.event : null
+  }
+  try {
+    const d = nip19.decode(param.replace(/^nostr:/i, ''))
+    const id = d.type === 'nevent' ? d.data.id : d.type === 'note' ? (d.data as string) : null
+    return id ? await fetchById(id) : null
+  } catch {
+    return null
+  }
+}
+
 // ─── Resolution ─────────────────────────────────────────────────────
 
 /** An event's `s` tag must match what its own fields hash to, and it must verify. */
@@ -238,14 +262,22 @@ export async function resolveShortAddress(
   if (!pubkey && resolveAuthority) pubkey = await resolveAuthority(parsed.authority)
   if (!pubkey) return { status: 'bad-address' }
 
-  let events: NostrEvent[] = []
-  try {
-    events = await fetchEvents(relays, { authors: [pubkey], '#s': [parsed.code] }, 6000)
-  } catch {
-    return { status: 'not-found' }
+  // Retried with a growing gap, because a miss here is usually contention rather
+  // than absence. Typically a single relay holds the event, and the pool counts a
+  // relay that closes or never connects as having answered — so while the app is
+  // opening its feed, profile and DM subscriptions at once, that relay can drop
+  // the request and the fetch returns empty. Backing off lets the load settle.
+  let verified: NostrEvent[] = []
+  for (const [delay, timeout] of [[0, 6000], [1500, 8000], [4000, 8000]] as const) {
+    if (delay) await new Promise((r) => setTimeout(r, delay))
+    try {
+      const events = await fetchEvents(relays, { authors: [pubkey], '#s': [parsed.code] }, timeout)
+      verified = events.filter(verifyShortCode)
+    } catch {
+      verified = []
+    }
+    if (verified.length > 0) break
   }
-
-  const verified = events.filter(verifyShortCode)
   if (verified.length === 0) return { status: 'not-found' }
 
   if (parsed.suffix) {

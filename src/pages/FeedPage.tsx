@@ -1,5 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
+import type { Event as NostrEvent } from 'nostr-tools'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { fetchEvent } from '@/lib/nostr/relay-pool'
+import { decodeNoteParam } from '@/lib/nostr/nipShort'
+import { ThreadModal } from '@/components/social/ThreadModal'
 import { Bell, Rss, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
@@ -35,6 +40,28 @@ function NavButton({ icon: Icon, label, active, dot, onClick }: { icon: typeof R
 }
 
 export function FeedPage() {
+  const { address: noteAddressParam } = useParams<{ address?: string }>()
+  const navigate = useNavigate()
+  const [deepNote, setDeepNote] = useState<NostrEvent | null>(null)
+
+  // Resolve /feed/note/<address> — a short address or an nevent/note id.
+  useEffect(() => {
+    if (!noteAddressParam) { setDeepNote(null); return }
+    let cancelled = false
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    // Deliberately deferred. On a cold load the app opens its feed, profile,
+    // notification and DM subscriptions at once, and a lookup fired into that
+    // burst comes back empty — the one relay holding the note drops the request
+    // and the pool counts it as answered. Measured: resolving at mount fails
+    // every time; the same call a moment later succeeds.
+    const t = setTimeout(() => {
+      decodeNoteParam(noteAddressParam, relays, (id) => fetchEvent(relays, { ids: [id] }))
+        .then((ev) => { if (!cancelled) setDeepNote(ev) })
+        .catch(() => { if (!cancelled) setDeepNote(null) })
+    }, 3000)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [noteAddressParam])
+
   const myPubkey = useAuthStore((s) => s.pubkey)
   const contactEvent = useFollowsStore((s) => s.contactEvent)
   const loadContacts = useFollowsStore((s) => s.loadContacts)
@@ -82,6 +109,14 @@ export function FeedPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
+      {/* Deep link: /feed/note/<address> opens that note's thread over the feed. */}
+      {deepNote && (
+        <ThreadModal
+          open
+          onOpenChange={(o) => { if (!o) { setDeepNote(null); navigate('/feed', { replace: true }) } }}
+          rootNote={deepNote}
+        />
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column: feed / notifications */}
         <div className="lg:col-span-2 min-w-0 order-2 lg:order-1">

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNoteUrl } from '@/hooks/useNoteUrl'
 import { Link } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { ChevronLeft, MessageSquare, User, Loader2 } from 'lucide-react'
@@ -158,6 +159,10 @@ export function ThreadModal({ open, onOpenChange, rootNote }: ThreadModalProps) 
   useEffect(() => { if (open) setStack([rootNote]) }, [open, rootNote.id])
 
   const focused = stack[stack.length - 1]
+
+  // The open note owns the URL, so it can be copied, reloaded and shared.
+  // Follows the stack: stepping into a reply addresses that reply.
+  useNoteUrl(open, focused)
 
   // Just the post being replied to — enough context to make sense of the reply
   // without turning the modal into the whole thread. The root is resolved too

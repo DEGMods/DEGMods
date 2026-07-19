@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
-import { MoreHorizontal, Copy, FileJson, Trash2 } from 'lucide-react'
+import { MoreHorizontal, Copy, FileJson, Trash2, Link2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/authStore'
+import { noteAddress } from '@/hooks/useNoteUrl'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
@@ -15,6 +16,7 @@ export function SocialPostMenu({ event, onDeleted }: { event: NostrEvent; onDele
   const isOwner = myPubkey === event.pubkey
   const [rawOpen, setRawOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [copying, setCopying] = useState(false)
 
   const copyAddress = () => {
     try {
@@ -22,6 +24,22 @@ export function SocialPostMenu({ event, onDeleted }: { event: NostrEvent; onDele
       toast.success('Event address copied')
     } catch {
       toast.error('Failed to copy')
+    }
+  }
+
+  // Resolving the address needs a relay round-trip to check for a colliding
+  // code, so this can't be synchronous like the nevent copy above.
+  const copyShortLink = async () => {
+    if (copying) return
+    setCopying(true)
+    try {
+      const address = await noteAddress(event)
+      await navigator.clipboard.writeText(`${window.location.origin}/feed/note/${address}`)
+      toast.success('Link copied')
+    } catch {
+      toast.error('Failed to copy')
+    } finally {
+      setCopying(false)
     }
   }
 
@@ -34,6 +52,9 @@ export function SocialPostMenu({ event, onDeleted }: { event: NostrEvent; onDele
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="bg-[#1c1c1c] border-[#262626]">
+          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void copyShortLink() }} className="cursor-pointer">
+            {copying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Link2 className="h-4 w-4 mr-2" />} Copy link
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={copyAddress} className="cursor-pointer">
             <Copy className="h-4 w-4 mr-2" /> Copy event address
           </DropdownMenuItem>
