@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { NoteContent } from './NoteContent'
+import { HubEventCard, HUB_KIND } from './HubEventCard'
 
 export interface EmbedRef {
   id?: string
@@ -20,7 +21,12 @@ export function EmbeddedNote({ embed }: { embed: EmbedRef }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // A hub isn't a post — it has its own card rather than being squeezed into the
+  // quoted-note layout, which would render it as an author and a blob of JSON.
+  const hub = embed.addr?.kind === HUB_KIND ? embed.addr : null
+
   useEffect(() => {
+    if (hub) { setLoading(false); return }
     let cancelled = false
     const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
     const filter = embed.id
@@ -35,7 +41,9 @@ export function EmbeddedNote({ embed }: { embed: EmbedRef }) {
       })
       .catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [embed.id, embed.addr?.kind, embed.addr?.pubkey, embed.addr?.identifier])
+  }, [hub, embed.id, embed.addr?.kind, embed.addr?.pubkey, embed.addr?.identifier])
+
+  if (hub) return <HubEventCard identifier={hub.identifier} pubkey={hub.pubkey} />
 
   if (loading) {
     return (

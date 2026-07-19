@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProfile } from '@/hooks/useProfile'
 import type { DMStoreHook, DMViewMessage } from './store'
+import { DmContent } from './DmContent'
 
 function shortTime(ts: number): string {
   return new Date(ts * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -28,7 +29,7 @@ function MessageBubble({ m, onDecrypt }: { m: DMViewMessage; onDecrypt: () => Pr
     <div className={cn('flex', m.mine ? 'justify-end' : 'justify-start')}>
       <div className={cn('max-w-[80%] rounded-2xl px-3 py-2 text-sm', m.mine ? 'bg-purple-600 text-white' : 'bg-[#262626] text-neutral-200')}>
         {decrypted ? (
-          <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.plaintext}</span>
+          <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]"><DmContent text={m.plaintext!} /></span>
         ) : (
           <button
             onClick={run}
