@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
-import { fetchEvents } from '@/lib/nostr/relay-pool'
+import { fetchEvents, fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { KINDS } from '@/lib/constants'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { User, Globe, TreePine, MoreHorizontal, Eye, Pencil, ShieldBan, Loader2, AlertTriangle, RefreshCw, Flag, MessageSquare } from 'lucide-react'
+import { User, Globe, TreePine, Wallet, MoreHorizontal, Eye, Pencil, ShieldBan, Loader2, AlertTriangle, RefreshCw, Flag, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
@@ -20,6 +21,8 @@ import { BlockTypeModal } from '@/components/social/BlockTypeModal'
 import { EditProfileDialog } from '@/components/social/EditProfileDialog'
 import { ReportDialog } from '@/components/shared/ReportDialog'
 import { LinksModal } from '@/components/social/LinksModal'
+import { PaytoModal } from '@/components/social/PaytoModal'
+import { extractPaymentTargets } from '@/lib/nostr/payto'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import {
@@ -57,12 +60,14 @@ export function PublisherCard({ pubkey }: PublisherCardProps) {
   const [editOpen, setEditOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [linksOpen, setLinksOpen] = useState(false)
+  const [paytoOpen, setPaytoOpen] = useState(false)
   const [blockTypeOpen, setBlockTypeOpen] = useState(false)
   const [warnOpen, setWarnOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pendingFromScratch, setPendingFromScratch] = useState(false)
   const [hasLinks, setHasLinks] = useState(false)
+  const [hasPayto, setHasPayto] = useState(false)
 
   // Fetch the publisher's profile + verify any DNN ID.
   useEffect(() => {
@@ -102,6 +107,18 @@ export function PublisherCard({ pubkey }: PublisherCardProps) {
         setHasLinks(Array.from(byD.values()).some((ev) => ev.tags.some((t) => t[0] === 'r' && t[1])))
       })
       .catch(() => { if (!cancelled) setHasLinks(false) })
+    return () => { cancelled = true }
+  }, [pubkey])
+
+  // Payment targets (NIP-A3, kind 10133). Same rule as links: the button only
+  // appears when there's something to show — except on your own card, where it's
+  // always there, since it's the only route to adding a first one.
+  useEffect(() => {
+    let cancelled = false
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    fetchLatestEvent(relays, { kinds: [KINDS.PAYTO], authors: [pubkey] })
+      .then((ev) => { if (!cancelled) setHasPayto(extractPaymentTargets(ev).length > 0) })
+      .catch(() => { if (!cancelled) setHasPayto(false) })
     return () => { cancelled = true }
   }, [pubkey])
 
@@ -273,6 +290,16 @@ export function PublisherCard({ pubkey }: PublisherCardProps) {
               <TooltipContent>Links</TooltipContent>
             </Tooltip>
           )}
+          {(hasPayto || isSelf) && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={() => setPaytoOpen(true)} className={iconBtn} aria-label="Payment targets">
+                  <Wallet className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Payment targets</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
@@ -294,6 +321,7 @@ export function PublisherCard({ pubkey }: PublisherCardProps) {
       <ReportDialog open={reportOpen} onOpenChange={setReportOpen} pubkey={pubkey} />
 
       <LinksModal open={linksOpen} onOpenChange={setLinksOpen} pubkey={pubkey} displayName={displayName} />
+      <PaytoModal open={paytoOpen} onOpenChange={setPaytoOpen} pubkey={pubkey} displayName={displayName} />
 
       {/* Block-list-not-loaded warning (mirrors the follow flow) */}
       <Dialog open={warnOpen} onOpenChange={setWarnOpen}>

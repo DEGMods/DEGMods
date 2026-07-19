@@ -92,6 +92,7 @@ export const KINDS = {
   JAM_BALLOT: 31243, // one voter's scores for one jam entry
   JAM_RESULT: 31343, // creator's published tally (paged)
   GAME_DB: 30078, // NIP-78 app-specific data (d tag: games-db)
+  PAYTO: 10133, // NIP-A3 payment targets (replaceable, one per author)
 } as const
 
 // ─── Types ──────────────────────────────────────────────────────────
