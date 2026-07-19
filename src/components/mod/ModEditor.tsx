@@ -816,7 +816,7 @@ export function ModEditor({
           <label className="flex items-center justify-between gap-3 rounded-lg border border-[#262626] bg-[#171717] p-3 cursor-pointer">
             <div className="min-w-0">
               <p className="text-sm text-neutral-200">Upload to blossom servers in parallel</p>
-              <p className="text-xs text-neutral-500">Up to 3 at once instead of one at a time — faster for large files. Synced with Settings → Network → Posting.</p>
+              <p className="text-xs text-neutral-500">Up to 3 at once instead of one at a time — faster for large files. Applies to every upload on the site, not just mod files. Synced with Settings → Network → Posting.</p>
             </div>
             <Switch checked={parallelUpload} onCheckedChange={setParallelUpload} className="shrink-0" />
           </label>

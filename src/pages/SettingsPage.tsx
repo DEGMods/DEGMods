@@ -438,7 +438,7 @@ function NetworkSettings() {
               <PostingToggle title="Post to custom local relays" description="Publish events to your custom local relays" checked={settings.postToCustomRelays} onChange={settings.setPostToCustomRelays} />
               <PostingToggle title="Limit to max 3 relays per list" description="Randomly pick up to 3 relays from each enabled list to reduce publish load" checked={settings.limitRelaysPerList} onChange={settings.setLimitRelaysPerList} />
               <PostingToggle title="Limit to max 3 blossoms per list" description="Upload media to at most 3 blossom servers from each list" checked={settings.limitBlossomsPerList} onChange={settings.setLimitBlossomsPerList} />
-              <PostingToggle title="Upload to blossom servers in parallel" description="Upload to up to 3 servers at once instead of one at a time — faster for large files on fast connections." checked={settings.parallelBlossomUpload} onChange={settings.setParallelBlossomUpload} />
+              <PostingToggle title="Upload to blossom servers in parallel" description="Upload to up to 3 servers at once instead of one at a time — faster for large files on fast connections. Applies to every upload: images, screenshots and mod files." checked={settings.parallelBlossomUpload} onChange={settings.setParallelBlossomUpload} />
             </div>
             {!settings.postToClientRelays && !settings.postToUserRelays && !settings.postToCustomRelays && (
               <p className="mt-3 flex items-start gap-1.5 text-xs text-yellow-500/90">
