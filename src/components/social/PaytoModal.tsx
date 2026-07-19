@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Wallet, Loader2, Plus, Pencil, Trash2, X, Save, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -44,26 +45,59 @@ function CopyAuthority({ value }: { value: string }) {
   )
 }
 
-/** Type field with type-ahead. The list is a convenience, never a constraint —
- *  any type is valid, so free text is always accepted. */
+const LIST_MAX_H = 224 // keep in sync with max-h-56 below
+
+/**
+ * Type field with type-ahead. The list is a convenience, never a constraint —
+ * any type is valid, so free text is always accepted.
+ *
+ * The list is portalled to the body and positioned fixed. The dialog it lives in
+ * both clips (`overflow-auto`) and establishes a containing block (it's centred
+ * with a transform), so an absolutely-positioned child can't escape it by any
+ * combination of z-index or positioning — it has to leave the subtree.
+ */
 function TypeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
+  const [rect, setRect] = useState<{ left: number; top: number; width: number; drop: 'down' | 'up' } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
   const matches = suggestPaymentTypes(value)
 
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDocClick)
-    return () => document.removeEventListener('mousedown', onDocClick)
+  const place = useCallback(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    // Flip above when there isn't room below — near the bottom of a tall dialog
+    // the list would otherwise open off-screen.
+    const below = window.innerHeight - r.bottom
+    const drop: 'down' | 'up' = below < LIST_MAX_H && r.top > below ? 'up' : 'down'
+    setRect({ left: r.left, top: drop === 'down' ? r.bottom + 4 : r.top - 4, width: r.width, drop })
   }, [])
+
+  useEffect(() => {
+    if (!open) return
+    place()
+    // Reposition rather than reopen: the dialog scrolls under the list.
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (wrapRef.current?.contains(t) || listRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+      document.removeEventListener('mousedown', onDown)
+    }
+  }, [open, place])
 
   const choose = (type: string) => { onChange(type); setOpen(false) }
 
   return (
-    <div ref={wrapRef} className="relative w-full sm:w-44">
+    <div ref={wrapRef} className="w-full sm:w-44">
       <Input
         value={value}
         onChange={(e) => { onChange(e.target.value); setOpen(true); setHighlight(0) }}
@@ -79,8 +113,21 @@ function TypeField({ value, onChange }: { value: string; onChange: (v: string) =
         maxLength={LIMITS.type}
         className="border-[#262626] bg-[#212121] text-white placeholder:text-neutral-500"
       />
-      {open && matches.length > 0 && (
-        <ul className="absolute z-50 mt-1 max-h-56 w-full min-w-[15rem] overflow-y-auto rounded-lg border border-[#262626] bg-[#1a1a1a] py-1 shadow-xl">
+      {open && matches.length > 0 && rect && createPortal(
+        <ul
+          ref={listRef}
+          // The dialog dismisses on outside pointer events; this list *is*
+          // outside it now, so keep its events to itself.
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            position: 'fixed',
+            left: rect.left,
+            width: Math.max(rect.width, 240),
+            ...(rect.drop === 'down' ? { top: rect.top } : { bottom: window.innerHeight - rect.top }),
+          }}
+          className="z-[60] max-h-56 overflow-y-auto rounded-lg border border-[#262626] bg-[#1a1a1a] py-1 shadow-xl"
+        >
           {matches.map((m, i) => (
             <li key={m.type}>
               <button
@@ -97,7 +144,8 @@ function TypeField({ value, onChange }: { value: string; onChange: (v: string) =
               </button>
             </li>
           ))}
-        </ul>
+        </ul>,
+        document.body,
       )}
     </div>
   )
