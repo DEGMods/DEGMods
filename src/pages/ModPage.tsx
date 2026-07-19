@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { useShortUrl } from '@/hooks/useShortUrl'
-import { decodePostParam } from '@/lib/nostr/nipShort'
+import { decodePostParam, selectorFor } from '@/lib/nostr/nipShort'
+import { ShortAddressChooser, postPreview } from '@/components/social/ShortAddressChooser'
 import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
@@ -104,6 +105,7 @@ export default function ModPage() {
   const [rawEvent, setRawEvent] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [choices, setChoices] = useState<NostrEvent[]>([])
   const [deleted, setDeleted] = useState(false)
   const [cwRevealed, setCwRevealed] = useState(false)
   const [heroLoaded, setHeroLoaded] = useState(false)
@@ -154,6 +156,8 @@ export default function ModPage() {
       const decoded = await decodePostParam(naddr!, relaysForDecode)
       if (cancelled) return
       if (!decoded) { setNotFound(true); setLoading(false); return }
+      // Ambiguous short address — the reader picks, then load resumes below.
+      if ('candidates' in decoded) { setChoices(decoded.candidates); setLoading(false); return }
       const { pubkey: author, identifier, kind, event: resolved } = decoded
       const coord = `${kind}:${author}:${identifier}`
       // A short address already fetched the event; show it rather than waiting
@@ -246,6 +250,24 @@ export default function ModPage() {
     image: mod.featuredImageUrl,
     type: 'article',
   } : null)
+
+  // An ambiguous short address: nothing to show until the reader picks.
+  if (choices.length > 0) {
+    return (
+      <ShortAddressChooser
+        open
+        onOpenChange={(o) => { if (!o) { setChoices([]); setNotFound(true) } }}
+        candidates={choices}
+        renderPreview={postPreview}
+        onChoose={(ev) => {
+          const suffix = selectorFor(ev, choices)
+          if (suffix && naddr) window.history.replaceState(null, '', `/mod/${naddr}-${suffix}`)
+          setChoices([])
+          applyEvent(ev)
+        }}
+      />
+    )
+  }
 
   // --- Loading state ---
   if (loading) {

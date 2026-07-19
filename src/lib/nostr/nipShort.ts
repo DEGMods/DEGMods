@@ -197,20 +197,29 @@ export async function shareableShortAddress(
  * resolved event is returned too, so the caller doesn't refetch what we just had
  * in hand.
  */
+export interface PostCoordinate { kind: number; pubkey: string; identifier: string; event?: NostrEvent }
+
+/** The coordinate of a resolved event, in the shape callers already use. */
+export function coordinateOf(ev: NostrEvent): PostCoordinate {
+  return {
+    kind: ev.kind,
+    pubkey: ev.pubkey,
+    identifier: ev.tags.find((t) => t[0] === 'd')?.[1] ?? '',
+    event: ev,
+  }
+}
+
 export async function decodePostParam(
   param: string,
   relays: string[],
-): Promise<{ kind: number; pubkey: string; identifier: string; event?: NostrEvent } | null> {
+): Promise<PostCoordinate | { candidates: NostrEvent[] } | null> {
   if (looksLikeShortAddress(param)) {
     const res = await resolveShortAddress(relays, param)
+    // Ambiguity is handed back rather than swallowed — the link points at
+    // something real, and only the reader can say which one.
+    if (res.status === 'ambiguous') return { candidates: res.candidates }
     if (res.status !== 'resolved') return null
-    const ev = res.event
-    return {
-      kind: ev.kind,
-      pubkey: ev.pubkey,
-      identifier: ev.tags.find((t) => t[0] === 'd')?.[1] ?? '',
-      event: ev,
-    }
+    return coordinateOf(res.event)
   }
   try {
     const d = nip19.decode(param)

@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useShortUrl } from '@/hooks/useShortUrl'
-import { decodePostParam } from '@/lib/nostr/nipShort'
+import { decodePostParam, selectorFor } from '@/lib/nostr/nipShort'
+import { ShortAddressChooser, postPreview } from '@/components/social/ShortAddressChooser'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown, Trash2, ChevronLeft } from 'lucide-react'
@@ -122,6 +123,7 @@ export function JamPage() {
   const [rawEvent, setRawEvent] = useState<NostrEvent | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [choices, setChoices] = useState<NostrEvent[]>([])
   const [deleted, setDeleted] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [revealed, setRevealed] = useState(false)
@@ -161,6 +163,7 @@ export function JamPage() {
       const relaysForDecode = useSettingsStore.getState().getAllEnabledRelayUrls('read')
       const decoded = await decodePostParam(naddr!, relaysForDecode)
       if (cancelled) return
+      if (decoded && 'candidates' in decoded) { setChoices(decoded.candidates); setLoading(false); return }
       if (!decoded || decoded.kind !== KINDS.JAM) { setNotFound(true); setLoading(false); return }
       const { pubkey, identifier, event: resolved } = decoded
       const coord = `${KINDS.JAM}:${pubkey}:${identifier}`
@@ -214,6 +217,24 @@ export function JamPage() {
       </div>
     )
   }
+  // An ambiguous short address: nothing to show until the reader picks.
+  if (choices.length > 0) {
+    return (
+      <ShortAddressChooser
+        open
+        onOpenChange={(o) => { if (!o) { setChoices([]); setNotFound(true) } }}
+        candidates={choices}
+        renderPreview={postPreview}
+        onChoose={(ev) => {
+          const suffix = selectorFor(ev, choices)
+          if (suffix && naddr) window.history.replaceState(null, '', `/mod-jam/${naddr}-${suffix}`)
+          setChoices([])
+          applyEvent(ev)
+        }}
+      />
+    )
+  }
+
   if (loading) return <div className="flex items-center justify-center py-24 text-neutral-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading jam…</div>
   if (notFound || !jam) return <div className="py-24 text-center text-neutral-400">Mod jam not found.</div>
 

@@ -13,13 +13,32 @@ import { NoteContent } from './NoteContent'
  * Choosing appends the distinguishing selector to the address, so the link the
  * reader ends up holding is exact and won't ask again.
  */
+/**
+ * Preview for an addressable post — its title and summary, which is what
+ * distinguishes two mods or blogs. Notes have neither, so they fall back to
+ * their content.
+ */
+export function postPreview(ev: NostrEvent) {
+  const tag = (k: string) => ev.tags.find((t) => t[0] === k)?.[1]
+  const title = tag('title') || tag('d') || `kind ${ev.kind}`
+  const summary = tag('summary') || ev.content.slice(0, 140)
+  return (
+    <>
+      <span className="block truncate text-sm font-medium text-neutral-100">{title}</span>
+      {summary && <span className="mt-0.5 line-clamp-2 block text-xs text-neutral-400">{summary}</span>}
+    </>
+  )
+}
+
 export function ShortAddressChooser({
-  open, onOpenChange, candidates, onChoose,
+  open, onOpenChange, candidates, onChoose, renderPreview,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   candidates: NostrEvent[]
   onChoose: (event: NostrEvent) => void
+  /** Defaults to note content; addressable posts pass `postPreview`. */
+  renderPreview?: (event: NostrEvent) => React.ReactNode
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,7 +64,7 @@ export function ShortAddressChooser({
               </span>
               {/* noEmbed: a preview shouldn't pull in quoted posts or galleries. */}
               <span className="pointer-events-none block text-sm text-neutral-200">
-                <NoteContent event={ev} noEmbed />
+                {renderPreview ? renderPreview(ev) : <NoteContent event={ev} noEmbed />}
               </span>
             </button>
           ))}
