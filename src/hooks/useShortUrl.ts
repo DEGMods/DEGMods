@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useDnnStore } from '@/stores/dnnStore'
-import { shareableShortAddress, shortCodeOf } from '@/lib/nostr/nipShort'
+import { shareableShortAddress, shortCodeOf, verifiedShortAddress } from '@/lib/nostr/nipShort'
 
 /**
  * Swap a post's naddr URL for its NIP-SHORT address once one is known.
@@ -28,21 +28,29 @@ export function useShortUrl(event: NostrEvent | null | undefined, basePath: stri
     if (!event || !shortCodeOf(event)) return
     let cancelled = false
 
+    const authority = dnnId || nip19.npubEncode(event.pubkey)
+    // Stays on the page's own path — /mod/<short>, not a separate resolver route
+    // — so the URL keeps saying what it points at and a reload lands here.
+    const set = (address: string) => {
+      const next = `${basePath}/${address}`
+      if (window.location.pathname !== next) {
+        window.history.replaceState(null, '', next + window.location.search)
+      }
+    }
+
+    // Verifying the code needs no network, so switch immediately rather than
+    // holding a 100-character naddr in the bar while a relay confirms the code
+    // is unique. The rare collision appends its selector when the check returns.
+    const optimistic = verifiedShortAddress(event, authority)
+    if (optimistic) set(optimistic)
+
     ;(async () => {
       try {
-        const authority = dnnId || nip19.npubEncode(event.pubkey)
         const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
         const address = await shareableShortAddress(relays, event, authority)
-        if (cancelled || !address) return
-        // Stays on the page's own path — /mod/<short>, not a separate resolver
-        // route — so the URL keeps saying what it points at and a reload lands
-        // straight back here.
-        const next = `${basePath}/${address}`
-        if (window.location.pathname !== next) {
-          window.history.replaceState(null, '', next + window.location.search)
-        }
+        if (!cancelled && address && address !== optimistic) set(address)
       } catch {
-        // Best-effort: the naddr URL already works.
+        // Best-effort: whatever is in the bar already works.
       }
     })()
 

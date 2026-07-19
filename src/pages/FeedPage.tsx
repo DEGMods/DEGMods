@@ -3,7 +3,8 @@ import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
-import { decodeNoteParam } from '@/lib/nostr/nipShort'
+import { decodeNoteParam, selectorFor } from '@/lib/nostr/nipShort'
+import { ShortAddressChooser } from '@/components/social/ShortAddressChooser'
 import { ThreadModal } from '@/components/social/ThreadModal'
 import { Bell, Rss, MessageSquare, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -45,12 +46,13 @@ export function FeedPage() {
   const navigate = useNavigate()
   const [deepNote, setDeepNote] = useState<NostrEvent | null>(null)
   const [deepState, setDeepState] = useState<'idle' | 'loading' | 'missing'>('idle')
+  const [deepChoices, setDeepChoices] = useState<NostrEvent[]>([])
 
   // Resolve /feed/note/<address> — a short address or an nevent/note id.
   useEffect(() => {
-    if (!noteAddressParam) { setDeepNote(null); setDeepState('idle'); return }
+    if (!noteAddressParam) { setDeepNote(null); setDeepChoices([]); setDeepState('idle'); return }
     let cancelled = false
-    setDeepNote(null); setDeepState('loading')
+    setDeepNote(null); setDeepChoices([]); setDeepState('loading')
     const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
     // Retried on a schedule rather than resolved once.
     //
@@ -64,10 +66,15 @@ export function FeedPage() {
     const timers: ReturnType<typeof setTimeout>[] = []
     const attempt = async () => {
       if (cancelled) return true
-      const ev = await decodeNoteParam(noteAddressParam, relays, (id) => fetchEvent(relays, { ids: [id] }))
+      const result = await decodeNoteParam(noteAddressParam, relays, (id) => fetchEvent(relays, { ids: [id] }))
         .catch(() => null)
-      if (cancelled || !ev) return false
-      setDeepNote(ev)
+      if (cancelled || !result) return false
+      if ('candidates' in result) {
+        setDeepChoices(result.candidates)
+        setDeepState('idle')
+        return true
+      }
+      setDeepNote(result.event)
       setDeepState('idle')
       return true
     }
@@ -136,6 +143,21 @@ export function FeedPage() {
           rootNote={deepNote}
         />
       )}
+
+      {/* Ambiguous short link: let the reader pick, then make their URL exact. */}
+      <ShortAddressChooser
+        open={deepChoices.length > 0}
+        onOpenChange={(o) => { if (!o) { setDeepChoices([]); navigate('/feed', { replace: true }) } }}
+        candidates={deepChoices}
+        onChoose={(ev) => {
+          const suffix = selectorFor(ev, deepChoices)
+          if (suffix && noteAddressParam) {
+            window.history.replaceState(null, '', `/feed/note/${noteAddressParam}-${suffix}`)
+          }
+          setDeepChoices([])
+          setDeepNote(ev)
+        }}
+      />
 
       {/* Resolving takes a relay round-trip, so say so rather than showing a
           feed that abruptly sprouts a modal seconds later. */}

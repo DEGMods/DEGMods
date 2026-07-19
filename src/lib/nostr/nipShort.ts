@@ -132,6 +132,23 @@ export function authorityToPubkey(authority: string): string | null {
 // ─── Sharing ────────────────────────────────────────────────────────
 
 /**
+ * The short address derivable with no network at all.
+ *
+ * The code is a signed field of the event, so it can be checked against what the
+ * event's own contents hash to — a purely local test. Only *uniqueness* needs
+ * relays, and a collision is rare enough that it's better to show the short
+ * address at once and append a selector in the unlikely case one is needed than
+ * to sit on a round trip every time.
+ *
+ * Null when the event carries no code, or carries one that doesn't verify.
+ */
+export function verifiedShortAddress(event: NostrEvent, authority?: string): string | null {
+  const stored = shortCodeOf(event)
+  if (!stored || stored !== computeShortCode(event)) return null
+  return formatShortAddress(authority || nip19.npubEncode(event.pubkey), stored)
+}
+
+/**
  * The address to share for an event, adding a collision selector only when the
  * author actually has another event on the same code.
  *
@@ -214,18 +231,38 @@ export async function decodeNoteParam(
   param: string,
   relays: string[],
   fetchById: (id: string) => Promise<NostrEvent | null>,
-): Promise<NostrEvent | null> {
+): Promise<{ event: NostrEvent } | { candidates: NostrEvent[] } | null> {
   if (looksLikeShortAddress(param)) {
     const res = await resolveShortAddress(relays, param)
-    return res.status === 'resolved' ? res.event : null
+    // Ambiguity is surfaced rather than swallowed: two of an author's events
+    // share a code and the address carried no selector, so only the reader can
+    // say which one was meant.
+    if (res.status === 'resolved') return { event: res.event }
+    if (res.status === 'ambiguous') return { candidates: res.candidates }
+    return null
   }
   try {
     const d = nip19.decode(param.replace(/^nostr:/i, ''))
     const id = d.type === 'nevent' ? d.data.id : d.type === 'note' ? (d.data as string) : null
-    return id ? await fetchById(id) : null
+    const ev = id ? await fetchById(id) : null
+    return ev ? { event: ev } : null
   } catch {
     return null
   }
+}
+
+/**
+ * The selector that distinguishes one candidate from the others — the next hex
+ * characters of its hash, appended to an ambiguous address to make it exact.
+ */
+export function selectorFor(chosen: NostrEvent, others: NostrEvent[]): string {
+  const mine = computeFullHash(chosen)
+  const theirs = others.filter((e) => e.id !== chosen.id).map(computeFullHash)
+  for (let n = SHORT_CODE_LENGTH + 1; n <= mine.length; n++) {
+    const prefix = mine.slice(0, n)
+    if (theirs.every((h) => !h.startsWith(prefix))) return mine.slice(SHORT_CODE_LENGTH, n)
+  }
+  return ''
 }
 
 // ─── Resolution ─────────────────────────────────────────────────────

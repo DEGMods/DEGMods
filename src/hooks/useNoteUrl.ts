@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useDnnStore } from '@/stores/dnnStore'
-import { shareableShortAddress, shortCodeOf } from '@/lib/nostr/nipShort'
+import { shareableShortAddress, shortCodeOf, verifiedShortAddress } from '@/lib/nostr/nipShort'
 
 /**
  * The best address for a note: its NIP-SHORT one if it has a code, else an
@@ -36,19 +36,23 @@ export function useNoteUrl(open: boolean, event: NostrEvent | null | undefined) 
     const previous = window.location.pathname + window.location.search
     let cancelled = false
 
-    // Address it immediately with what's already in hand — the nevent needs no
-    // network. Waiting on the short address first would leave the URL saying
-    // /feed for a second or two, which is exactly when someone copies it.
     const nevent = nip19.neventEncode({ id: event.id, author: event.pubkey })
     const set = (address: string) => {
       const next = `/feed/note/${address}`
       if (window.location.pathname !== next) window.history.replaceState(null, '', next)
     }
-    set(nevent)
 
-    // Then upgrade, once the short address is known to be collision-free.
+    // Show the short address straight away — verifying the code is local, and
+    // waiting on a relay to confirm uniqueness would leave the long form in the
+    // bar for seconds, which is exactly when someone copies it. A collision is
+    // rare; when there is one the background check appends the selector below.
+    const dnnId = useDnnStore.getState().getVerifiedDnnId(event.pubkey)
+    const authority = dnnId || nip19.npubEncode(event.pubkey)
+    const optimistic = verifiedShortAddress(event, authority)
+    set(optimistic ?? nevent)
+
     noteAddress(event).then((address) => {
-      if (!cancelled && address !== nevent) set(address)
+      if (!cancelled && address !== (optimistic ?? nevent)) set(address)
     })
 
     return () => {
