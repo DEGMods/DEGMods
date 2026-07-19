@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { requestDelete, signAndPublish, type DeleteStep } from '@/lib/nostr/publish'
 import { buildDeletionRequest } from '@/lib/nostr/events'
+import { forgetCachedEvent } from '@/lib/nostr/eventCache'
+import { purgeFromModCaches } from '@/hooks/useProgressiveMods'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -80,6 +82,15 @@ export function RequestDeleteDialog({ open, onOpenChange, event, title, noun, re
       })
 
     if (res.success) {
+      // Evict every cached copy. The tombstone is published, but the listing and
+      // event caches still hold the pre-delete event, and relays that honour the
+      // deletion stop returning the coordinate — so nothing would ever overwrite
+      // it and the deleted item keeps showing up in lists.
+      const dTag = event.tags.find((t) => t[0] === 'd')?.[1]
+      if (dTag !== undefined) {
+        forgetCachedEvent(`${event.kind}:${event.pubkey}:${dTag}`)
+        purgeFromModCaches(event.pubkey, dTag)
+      }
       toast.success(`Deletion requested for this ${noun}`)
       onDeleted()
     } else {

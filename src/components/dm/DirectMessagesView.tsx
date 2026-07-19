@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { MessageSquare, Lock, Info, Loader2, Eye, ShieldQuestion } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -102,10 +102,6 @@ export function DirectMessagesView() {
   const canDM = signerSupportsDM()
   const canDM17 = signerSupportsNip17()
 
-  // Opening this view is the user seeing that undecrypted wraps exist. Peeling
-  // them costs a signer prompt each, so they may reasonably never decrypt them —
-  // the dot must still clear, or it can never be cleared at all.
-  useEffect(() => { useDM17Store.getState().ackPending() })
 
   const run = (fn: () => Promise<void>, setter: (b: boolean) => void) => async () => {
     setter(true)

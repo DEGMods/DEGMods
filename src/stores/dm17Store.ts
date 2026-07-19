@@ -28,21 +28,6 @@ let cancelBatch = false
 const APP_DATA_KIND = 30078
 const SEEN_DTAG = 'notifications_seen_at_nip17_dms'
 const SEEN_KEY = 'degmods:dm-seen-nip17'
-// Gift wraps the user has already been told about. A wrap can't be dated (its
-// created_at is jittered) or read (the text is two layers down), so the only
-// honest way to stop nagging about one is to remember we showed it.
-const ACK_KEY = 'degmods:dm-ack-nip17'
-const MAX_ACK = 2000
-
-function loadAcked(): string[] {
-  try { const a = JSON.parse(localStorage.getItem(ACK_KEY) || '[]'); return Array.isArray(a) ? a.filter((x) => typeof x === 'string') : [] }
-  catch { return [] }
-}
-function persistAcked(ids: Set<string>) {
-  // Cap it: the list only exists to suppress repeat notifications, and an
-  // unbounded one would grow with every gift wrap the account ever receives.
-  try { localStorage.setItem(ACK_KEY, JSON.stringify([...ids].slice(-MAX_ACK))) } catch { /* ignore */ }
-}
 const MAX_PER_CONV = 1000
 
 function loadSeenCache(): { seenLatest: number; seenOldest: number } {
@@ -74,8 +59,6 @@ interface DM17State {
   seenLatest: number
   seenOldest: number
   seenLoaded: boolean
-  /** Wrap ids already surfaced to the user, so they stop counting as unread. */
-  ackedWraps: Set<string>
   active: string | null
   loadingHistory: boolean
   /** First-layer decrypt run in progress + progress + whether it stopped on a denial. */
@@ -88,8 +71,6 @@ interface DM17State {
   loadHistory: () => Promise<void>
   loadSeen: () => Promise<void>
   extendSeen: (ts: number) => void
-  /** Mark every currently-pending wrap as surfaced. */
-  ackPending: () => void
   /** Peel every pending wrap's first layer, one signer request at a time. Skips
    *  wraps that can't be unwrapped (not NIP-17 DMs) and keeps going; call
    *  cancelFirstLayer() to stop. */
@@ -113,13 +94,19 @@ interface DM17State {
  * days into the past, and only becomes the real (rumor) timestamp once the
  * second layer is decrypted. A running maximum would keep the stale wrapper
  * value forever.
+ *
+ * `lastTs` orders the conversation list, so it counts every message — an
+ * all-undecrypted conversation still has to appear. `lastIncomingTs` drives the
+ * unread dot, so it counts only *decrypted* incoming messages: those are the
+ * only ones whose timestamp means anything, and the only ones we can honestly
+ * call read or unread.
  */
 function timestamps(messages: DM17Message[]): { lastTs: number; lastIncomingTs: number } {
   let lastTs = 0
   let lastIncomingTs = 0
   for (const m of messages) {
     if (m.created_at > lastTs) lastTs = m.created_at
-    if (!m.mine && m.created_at > lastIncomingTs) lastIncomingTs = m.created_at
+    if (!m.mine && m.plaintext !== undefined && m.created_at > lastIncomingTs) lastIncomingTs = m.created_at
   }
   return { lastTs, lastIncomingTs }
 }
@@ -139,7 +126,6 @@ export const useDM17Store = create<DM17State>((set, get) => ({
   seenLatest: loadSeenCache().seenLatest,
   seenOldest: loadSeenCache().seenOldest,
   seenLoaded: false,
-  ackedWraps: new Set(loadAcked()),
   active: null,
   loadingHistory: false,
   peeling: false,
@@ -248,19 +234,12 @@ export const useDM17Store = create<DM17State>((set, get) => ({
   },
   cancelFirstLayer: () => { cancelPeel = true },
 
-  ackPending: () => {
-    const { pending, ackedWraps } = get()
-    const ids = Object.keys(pending)
-    if (ids.length === 0 || ids.every((id) => ackedWraps.has(id))) return
-    const next = new Set(ackedWraps)
-    for (const id of ids) next.add(id)
-    persistAcked(next)
-    set({ ackedWraps: next })
-  },
-
   openConversation: (pubkey) => {
     set({ active: pubkey })
-    get().extendSeen(get().conversations[pubkey]?.lastTs ?? 0)
+    // Advance past what's actually readable, not past `lastTs` — that includes
+    // undecrypted messages whose real timestamp we don't know yet, and skipping
+    // over them would silence their dot once they are decrypted.
+    get().extendSeen(get().conversations[pubkey]?.lastIncomingTs ?? 0)
   },
   closeConversation: () => set({ active: null }),
 
@@ -281,6 +260,9 @@ export const useDM17Store = create<DM17State>((set, get) => ({
     try {
       const rumor = await unseal(msg.sealPubkey, msg.sealContent)
       patch({ plaintext: rumor.content, created_at: rumor.created_at, error: false })
+      // Decrypting a message in the conversation you're looking at *is* reading
+      // it — otherwise it would surface as unread the moment it became readable.
+      if (get().active === pubkey) get().extendSeen(get().conversations[pubkey]?.lastIncomingTs ?? 0)
     } catch { patch({ error: true }) }
   },
 
@@ -324,19 +306,22 @@ export { dmDotState }
 
 /** NIP-17 badge: unread if seen is loaded AND (there are undecrypted wraps OR a
  *  non-blocked conversation has incoming activity newer than seenLatest). */
+/**
+ * Unread NIP-17 messages — decrypted ones only, exactly like NIP-04.
+ *
+ * Undecrypted gift wraps deliberately don't count. A wrap can't be dated (its
+ * created_at is jittered up to two days) or read (the text is two layers down
+ * and each peel costs a signer prompt), and it may not even be a DM — other
+ * apps use gift wraps too. Badging them meant a dot that reading could never
+ * clear, and scaled with every wrap the account had ever received. The DM view
+ * surfaces them as a count with a "decrypt all" action instead, which is the
+ * honest version of "there might be something here".
+ */
 export function useHasUnreadDM17(): boolean {
   const seenLoaded = useDM17Store((s) => s.seenLoaded)
-  // Only wraps the user hasn't been shown yet. A pending wraps is undated (its
-  // created_at is jittered) and unreadable until peeled, so it can't be compared
-  // against seenLatest — without the ack list a wrap the user has no intention of
-  // decrypting would light the dot permanently, with no way to clear it.
-  const hasNewWraps = useDM17Store((s) =>
-    Object.entries(s.pending).some(([id, p]) => !p.failed && !s.ackedWraps.has(id)),
-  )
   const conversations = useDM17Store((s) => s.conversations)
   const seenLatest = useDM17Store((s) => s.seenLatest)
   const blocked = useBlockStore((s) => s.blockedPubkeys)
   if (!seenLoaded) return false
-  if (hasNewWraps) return true
   return Object.values(conversations).some((c) => !blocked.has(c.pubkey) && c.lastIncomingTs > seenLatest)
 }

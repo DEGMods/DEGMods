@@ -79,3 +79,15 @@ export function cacheEvent(ev: NostrEvent): void {
 export function getCachedEvent(coord: string): NostrEvent | undefined {
   return cache.get(coord)
 }
+
+/**
+ * Forget an event entirely.
+ *
+ * Used when its own author deletes it: a tombstone is normally cached like any
+ * other revision (newer wins), but a relay that honours the deletion stops
+ * serving the coordinate at all, so anything reading the cache would keep
+ * resurrecting the pre-delete copy.
+ */
+export function forgetCachedEvent(coord: string): void {
+  if (cache.delete(coord)) schedulePersist()
+}

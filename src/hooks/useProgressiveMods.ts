@@ -52,6 +52,28 @@ function cacheSet(key: string, entry: ProgCacheEntry): void {
   schedulePersist()
 }
 
+/**
+ * Drop every copy of one addressable event from the listing caches.
+ *
+ * Deleting a mod publishes a tombstone, but these caches hold the *pre-delete*
+ * event and are only revalidated on a timer — and revalidation can't help here
+ * anyway, since a relay that honoured the deletion simply stops returning the
+ * coordinate at all, leaving the cached copy as the newest thing we ever saw.
+ * So the deleted event has to be evicted explicitly, or the mod keeps appearing
+ * in listings long after its own page reports it gone.
+ */
+export function purgeFromModCaches(pubkey: string, dTag: string): void {
+  let changed = false
+  for (const [key, entry] of progCache.entries()) {
+    const raw = entry.raw.filter((e) => !(e.pubkey === pubkey && (e.tags.find((t) => t[0] === 'd')?.[1] ?? '') === dTag))
+    if (raw.length !== entry.raw.length) {
+      progCache.set(key, { ...entry, raw })
+      changed = true
+    }
+  }
+  if (changed) schedulePersist()
+}
+
 // Hydrate the most-recent filters from IndexedDB. Read paths await this before
 // deciding cache-vs-skeleton so a cold reload doesn't miss the persisted copy.
 let progHydrated = false
