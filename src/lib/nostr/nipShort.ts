@@ -172,6 +172,38 @@ export async function shareableShortAddress(
   return formatShortAddress(auth, code)
 }
 
+/**
+ * Decode a post route param, which may be an `naddr1…` or a short address.
+ *
+ * A short address resolves to a real event, so the coordinate comes back the
+ * same shape either way and callers keep their existing cache/refresh flow. The
+ * resolved event is returned too, so the caller doesn't refetch what we just had
+ * in hand.
+ */
+export async function decodePostParam(
+  param: string,
+  relays: string[],
+): Promise<{ kind: number; pubkey: string; identifier: string; event?: NostrEvent } | null> {
+  if (looksLikeShortAddress(param)) {
+    const res = await resolveShortAddress(relays, param)
+    if (res.status !== 'resolved') return null
+    const ev = res.event
+    return {
+      kind: ev.kind,
+      pubkey: ev.pubkey,
+      identifier: ev.tags.find((t) => t[0] === 'd')?.[1] ?? '',
+      event: ev,
+    }
+  }
+  try {
+    const d = nip19.decode(param)
+    if (d.type !== 'naddr') return null
+    return { kind: d.data.kind, pubkey: d.data.pubkey, identifier: d.data.identifier }
+  } catch {
+    return null
+  }
+}
+
 // ─── Resolution ─────────────────────────────────────────────────────
 
 /** An event's `s` tag must match what its own fields hash to, and it must verify. */

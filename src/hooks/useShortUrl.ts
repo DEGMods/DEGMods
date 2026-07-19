@@ -20,7 +20,7 @@ import { shareableShortAddress, shortCodeOf } from '@/lib/nostr/nipShort'
  * Silent on every failure. A missing `s` tag, an unreachable relay during the
  * collision check, or no DNN ID all just leave the naddr in place.
  */
-export function useShortUrl(event: NostrEvent | null | undefined) {
+export function useShortUrl(event: NostrEvent | null | undefined, basePath: string) {
   // The DNN id may arrive after the profile verifies, so re-run when it lands.
   const dnnId = useDnnStore((s) => (event ? s.getVerifiedDnnId(event.pubkey) : null))
 
@@ -34,7 +34,10 @@ export function useShortUrl(event: NostrEvent | null | undefined) {
         const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
         const address = await shareableShortAddress(relays, event, authority)
         if (cancelled || !address) return
-        const next = `/s/${address}`
+        // Stays on the page's own path — /mod/<short>, not a separate resolver
+        // route — so the URL keeps saying what it points at and a reload lands
+        // straight back here.
+        const next = `${basePath}/${address}`
         if (window.location.pathname !== next) {
           window.history.replaceState(null, '', next + window.location.search)
         }
@@ -44,5 +47,5 @@ export function useShortUrl(event: NostrEvent | null | undefined) {
     })()
 
     return () => { cancelled = true }
-  }, [event, dnnId])
+  }, [event, dnnId, basePath])
 }

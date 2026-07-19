@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useShortUrl } from '@/hooks/useShortUrl'
+import { decodePostParam } from '@/lib/nostr/nipShort'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown, Trash2, ChevronLeft } from 'lucide-react'
@@ -130,7 +131,7 @@ export function JamPage() {
   const [newerEvent, setNewerEvent] = useState<NostrEvent | null>(null)
 
   // Show the short address in the URL bar once this jam has one.
-  useShortUrl(rawEvent)
+  useShortUrl(rawEvent, '/mod-jam')
 
   const rawJson = useMemo(
     () => (rawEvent ? (readableRaw ? readableEventJson(rawEvent as unknown as Record<string, unknown>) : JSON.stringify(rawEvent, null, 2)) : ''),
@@ -155,11 +156,15 @@ export function JamPage() {
 
     async function load() {
       setNotFound(false); setNewerEvent(null)
-      let decoded
-      try { decoded = nip19.decode(naddr!) } catch { setNotFound(true); setLoading(false); return }
-      if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) { setNotFound(true); setLoading(false); return }
-      const { pubkey, identifier } = decoded.data
+      // The param is an naddr, or a NIP-SHORT address once the URL has been
+      // rewritten — a reload lands here with the short form.
+      const relaysForDecode = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const decoded = await decodePostParam(naddr!, relaysForDecode)
+      if (cancelled) return
+      if (!decoded || decoded.kind !== KINDS.JAM) { setNotFound(true); setLoading(false); return }
+      const { pubkey, identifier, event: resolved } = decoded
       const coord = `${KINDS.JAM}:${pubkey}:${identifier}`
+      if (resolved) applyEvent(resolved)
 
       // 1. Instant render from the shared cache (a prior list fetch or session).
       await whenEventCacheReady

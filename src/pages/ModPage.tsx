@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { useShortUrl } from '@/hooks/useShortUrl'
+import { decodePostParam } from '@/lib/nostr/nipShort'
 import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
@@ -124,7 +125,7 @@ export default function ModPage() {
   const modStatus = useModStatus(mod?.aTag, mod?.pubkey)
 
   // Show the short address in the URL bar once this post has one.
-  useShortUrl(rawEvent as unknown as NostrEvent | null)
+  useShortUrl(rawEvent as unknown as NostrEvent | null, '/mod')
 
   const isOwner = rawEvent && pubkey ? (rawEvent as { pubkey?: string }).pubkey === pubkey : false
 
@@ -147,11 +148,17 @@ export default function ModPage() {
       setDeleted(false)
       setNewerEvent(null)
 
-      let decoded
-      try { decoded = nip19.decode(naddr!) } catch { setNotFound(true); setLoading(false); return }
-      if (decoded.type !== 'naddr') { setNotFound(true); setLoading(false); return }
-      const { pubkey: author, identifier, kind } = decoded.data
+      // The param is an naddr, or a NIP-SHORT address once the URL has been
+      // rewritten — a reload lands here with the short form.
+      const relaysForDecode = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const decoded = await decodePostParam(naddr!, relaysForDecode)
+      if (cancelled) return
+      if (!decoded) { setNotFound(true); setLoading(false); return }
+      const { pubkey: author, identifier, kind, event: resolved } = decoded
       const coord = `${kind}:${author}:${identifier}`
+      // A short address already fetched the event; show it rather than waiting
+      // on the cache lookup and refetch below.
+      if (resolved) applyEvent(resolved)
 
       // 1. Instant render from what a list already fetched (or a prior session,
       // via the persisted cache), if available. Await hydration so a cold reload

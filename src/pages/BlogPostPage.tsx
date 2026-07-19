@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { useShortUrl } from '@/hooks/useShortUrl'
+import { decodePostParam } from '@/lib/nostr/nipShort'
 import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
@@ -66,7 +67,7 @@ export default function BlogPostPage() {
   const isOwner = rawEvent && pubkey ? (rawEvent as { pubkey?: string }).pubkey === pubkey : false
 
   // Show the short address in the URL bar once this post has one.
-  useShortUrl(rawEvent as unknown as NostrEvent | null)
+  useShortUrl(rawEvent as unknown as NostrEvent | null, '/blog')
 
   // Render a fetched event into page state (initial + refresh), incl. author.
   const applyEvent = useCallback((event: NostrEvent) => {
@@ -89,11 +90,15 @@ export default function BlogPostPage() {
       setDeleted(false)
       setNewerEvent(null)
 
-      let decoded
-      try { decoded = nip19.decode(naddr!) } catch { setNotFound(true); setLoading(false); return }
-      if (decoded.type !== 'naddr') { setNotFound(true); setLoading(false); return }
-      const { pubkey: authorPk, identifier, kind } = decoded.data
+      // The param is an naddr, or a NIP-SHORT address once the URL has been
+      // rewritten — a reload lands here with the short form.
+      const relaysForDecode = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const decoded = await decodePostParam(naddr!, relaysForDecode)
+      if (cancelled) return
+      if (!decoded) { setNotFound(true); setLoading(false); return }
+      const { pubkey: authorPk, identifier, kind, event: resolved } = decoded
       const coord = `${kind}:${authorPk}:${identifier}`
+      if (resolved) applyEvent(resolved)
 
       // Await hydration so a cold reload doesn't miss the persisted cache.
       await whenEventCacheReady
