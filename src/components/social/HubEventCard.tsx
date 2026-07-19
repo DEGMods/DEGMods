@@ -4,10 +4,26 @@ import { Hash, Loader2, AlertTriangle, ShieldCheck, ExternalLink } from 'lucide-
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { SafeImage } from '@/components/shared/SafeImage'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
 /** DEN Chat hub (NIP-CHAT). Addressable, so one coordinate survives every edit. */
 export const HUB_KIND = 36942
+
+/** The hosted DEN Chat web client. */
+const DEFAULT_HUB_CLIENT = 'https://web.denchat.top/#hub/'
+/** Remembers a self-hosted client, so it's entered once rather than every time. */
+const CUSTOM_CLIENT_KEY = 'deg-mods:hub-client-url'
+
+/** Join a base URL to an address without doubling or dropping the separator. */
+function hubUrl(base: string, naddr: string): string {
+  const trimmed = base.trim()
+  if (!trimmed) return ''
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  return withProtocol.endsWith('/') ? `${withProtocol}${naddr}` : `${withProtocol}/${naddr}`
+}
 
 interface Hub {
   name: string
@@ -65,6 +81,7 @@ export function HubEventCard({
   const [hub, setHub] = useState<Hub | null>(null)
   const [loading, setLoading] = useState(true)
   const [revealed, setRevealed] = useState(false)
+  const [openOpen, setOpenOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -155,15 +172,95 @@ export function HubEventCard({
             </button>
           )}
           {naddr && (
-            <a
-              href={`nostr:${naddr}`}
+            <button
+              onClick={() => setOpenOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 px-2.5 py-1 text-[11px] text-purple-300 transition-colors hover:bg-purple-500/10"
             >
-              <ExternalLink className="h-3 w-3" /> Open in DEN Chat
-            </a>
+              <ExternalLink className="h-3 w-3" /> Open hub
+            </button>
           )}
         </div>
       </div>
+
+      {naddr && <OpenHubModal open={openOpen} onOpenChange={setOpenOpen} naddr={naddr} />}
     </div>
+  )
+}
+
+/**
+ * Where to open a hub.
+ *
+ * DEG Mods can't open one itself, and there's no single client that everyone
+ * uses — self-hosting is the norm here. So it offers the hosted client and
+ * remembers whatever base URL the reader gives instead.
+ */
+function OpenHubModal({
+  open, onOpenChange, naddr,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  naddr: string
+}) {
+  const [custom, setCustom] = useState(() => localStorage.getItem(CUSTOM_CLIENT_KEY) ?? '')
+
+  const go = (base: string, remember: boolean) => {
+    const url = hubUrl(base, naddr)
+    if (!url) return
+    if (remember) {
+      try { localStorage.setItem(CUSTOM_CLIENT_KEY, base.trim()) } catch { /* private mode */ }
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="border-[#262626] bg-[#1c1c1c] sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-neutral-100">Open this hub</DialogTitle>
+          <DialogDescription className="text-neutral-400">
+            Hubs open in a DEN Chat client, not here.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <button
+            onClick={() => go(DEFAULT_HUB_CLIENT, false)}
+            className="flex w-full items-center gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-3 text-left transition-colors hover:border-purple-500/40"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
+              <ExternalLink className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-neutral-100">web.denchat.top</span>
+              <span className="block truncate text-[11px] text-neutral-500">The hosted client</span>
+            </span>
+          </button>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-neutral-400">Your own client</label>
+            <div className="flex gap-2">
+              <Input
+                value={custom}
+                onChange={(e) => setCustom(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && custom.trim()) { e.preventDefault(); go(custom, true) } }}
+                placeholder="https://example.com/#hub/"
+                className="border-[#262626] bg-[#212121] font-mono text-xs text-white placeholder:text-neutral-500"
+              />
+              <Button
+                onClick={() => go(custom, true)}
+                disabled={!custom.trim()}
+                className="shrink-0 bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+              >
+                Open
+              </Button>
+            </div>
+            <p className="text-[11px] text-neutral-500">
+              The hub address is appended to this. Remembered for next time.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

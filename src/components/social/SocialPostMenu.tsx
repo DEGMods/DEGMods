@@ -53,7 +53,7 @@ export function SocialPostMenu({ event, onDeleted }: { event: NostrEvent; onDele
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="bg-[#1c1c1c] border-[#262626]">
           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void copyShortLink() }} className="cursor-pointer">
-            {copying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Link2 className="h-4 w-4 mr-2" />} Copy link
+            {copying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Link2 className="h-4 w-4 mr-2" />} Copy short link
           </DropdownMenuItem>
           <DropdownMenuItem onClick={copyAddress} className="cursor-pointer">
             <Copy className="h-4 w-4 mr-2" /> Copy event address

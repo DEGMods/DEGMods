@@ -22,7 +22,7 @@ const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?[^\s]*)?$/i
 const VIDEO_RE = /\.(mp4|webm|mov|m4v|ogv)(\?[^\s]*)?$/i
 const AUDIO_RE = /\.(mp3|ogg|wav|m4a|flac|aac)(\?[^\s]*)?$/i
 
-type MediaKind = 'image' | 'video' | 'audio' | 'link'
+export type MediaKind = 'image' | 'video' | 'audio' | 'link'
 type Block =
   | { type: 'text'; parts: ReactNode[] }
   | { type: 'images'; urls: string[] }
@@ -53,7 +53,7 @@ function lastSegment(url: string): string {
   try { return (new URL(url).pathname.split('/').pop() || '').toLowerCase() } catch { return '' }
 }
 
-function classify(url: string, mime?: string): MediaKind {
+export function classifyMediaUrl(url: string, mime?: string): MediaKind {
   if (mime) {
     if (mime.startsWith('image/')) return 'image'
     if (mime.startsWith('video/')) return 'video'
@@ -85,7 +85,7 @@ function buildBlocks(event: NostrEvent, noEmbed: boolean): { blocks: Block[]; ga
   const emitText = (s: string) => { if (!s) return; if (imageBuf.length && /^\s*$/.test(s)) return; addText(s) }
 
   const handleUrl = (url: string) => {
-    const kind = classify(url, imeta.get(url))
+    const kind = classifyMediaUrl(url, imeta.get(url))
     if (kind === 'image') { flushText(); imageBuf.push(url); gallery.push(url) }
     else if (kind === 'video') { flushImages(); flushText(); blocks.push({ type: 'video', url }) }
     else if (kind === 'audio') { flushImages(); flushText(); blocks.push({ type: 'audio', url }) }
@@ -146,7 +146,7 @@ function buildBlocks(event: NostrEvent, noEmbed: boolean): { blocks: Block[]; ga
   const extraImages: string[] = []
   for (const [url, mime] of imeta) {
     if (gallery.includes(url)) continue
-    const kind = classify(url, mime)
+    const kind = classifyMediaUrl(url, mime)
     if (kind === 'image') { extraImages.push(url); gallery.push(url) }
     else if (kind === 'video') blocks.push({ type: 'video', url })
     else if (kind === 'audio') blocks.push({ type: 'audio', url })
