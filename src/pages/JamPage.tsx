@@ -269,7 +269,7 @@ export function JamPage() {
                 <DropdownMenuContent align="end" className="border-[#262626] bg-[#1c1c1c]">
                   <DropdownMenuItem onClick={copyNaddr} className="cursor-pointer"><Copy className="mr-2 h-4 w-4" /> Copy Note ID</DropdownMenuItem>
                   <DropdownMenuItem onClick={copyNpub} className="cursor-pointer"><Copy className="mr-2 h-4 w-4" /> Copy Author npub</DropdownMenuItem>
-                  {rawEvent && <CopyShortLinkItem event={rawEvent} />}
+                  {rawEvent && <CopyShortLinkItem event={rawEvent} basePath="/mod-jam" />}
                   <DropdownMenuItem onClick={() => setShowRawDialog(true)} className="cursor-pointer"><FileJson className="mr-2 h-4 w-4" /> View Raw Event</DropdownMenuItem>
                   {isAuthor && (
                     <>

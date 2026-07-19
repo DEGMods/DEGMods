@@ -14,7 +14,7 @@ import { shareableShortAddress } from '@/lib/nostr/nipShort'
  * if a disambiguating suffix is needed. So the item shows a spinner rather than
  * copying instantly.
  */
-export function CopyShortLinkItem({ event }: { event: NostrEvent }) {
+export function CopyShortLinkItem({ event, basePath }: { event: NostrEvent; basePath: string }) {
   const [busy, setBusy] = useState(false)
 
   const copy = async (e: Event | React.SyntheticEvent) => {
@@ -25,7 +25,7 @@ export function CopyShortLinkItem({ event }: { event: NostrEvent }) {
       const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
       const address = await shareableShortAddress(relays, event)
       if (!address) { toast.error('This post has no short link yet'); return }
-      await navigator.clipboard.writeText(`${window.location.origin}/s/${address}`)
+      await navigator.clipboard.writeText(`${window.location.origin}${basePath}/${address}`)
       toast.success('Short link copied')
     } catch {
       toast.error('Couldn’t copy the short link')

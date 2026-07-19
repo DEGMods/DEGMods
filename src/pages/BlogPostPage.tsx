@@ -270,7 +270,7 @@ export default function BlogPostPage() {
                   <Copy className="h-4 w-4 mr-2" />
                   Copy Author npub
                 </DropdownMenuItem>
-                {rawEvent && <CopyShortLinkItem event={rawEvent as unknown as NostrEvent} />}
+                {rawEvent && <CopyShortLinkItem event={rawEvent as unknown as NostrEvent} basePath="/blog" />}
                 <DropdownMenuItem onClick={() => setShowRawDialog(true)} className="cursor-pointer">
                   <FileJson className="h-4 w-4 mr-2" />
                   View Raw Event
