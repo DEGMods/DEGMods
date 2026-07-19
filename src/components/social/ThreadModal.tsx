@@ -4,8 +4,9 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { ChevronLeft, MessageSquare, User, Loader2 } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
-import { fetchReplies, directReplies, type SocialRef } from '@/lib/nostr/socialThread'
+import { fetchReplies, directReplies, replyParentId, type SocialRef } from '@/lib/nostr/socialThread'
 import type { NostrTarget } from '@/lib/nostr/social'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
@@ -146,15 +147,59 @@ interface ThreadModalProps {
   rootNote: NostrEvent
 }
 
+/** How far up a thread to walk. Deep chains are rare and each hop is a fetch. */
+const MAX_ANCESTORS = 5
+
 export function ThreadModal({ open, onOpenChange, rootNote }: ThreadModalProps) {
   const [stack, setStack] = useState<NostrEvent[]>([rootNote])
   const [replies, setReplies] = useState<NostrEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const [ancestors, setAncestors] = useState<NostrEvent[]>([])
+  const [loadingAncestors, setLoadingAncestors] = useState(false)
 
   useEffect(() => { if (open) setStack([rootNote]) }, [open, rootNote.id])
 
   const focused = stack[stack.length - 1]
-  const rootRef: SocialRef = { id: rootNote.id, pubkey: rootNote.pubkey }
+
+  // Walk up from the focused note. Opening a reply — from notifications, say —
+  // otherwise shows it with no idea what it answers, and (worse) would treat the
+  // reply as its own thread root, mis-threading anything published from here.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setAncestors([])
+    ;(async () => {
+      if (!replyParentId(focused)) return
+      setLoadingAncestors(true)
+      const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const chain: NostrEvent[] = []
+      let cursor = focused
+      try {
+        for (let i = 0; i < MAX_ANCESTORS; i++) {
+          const parentId = replyParentId(cursor)
+          if (!parentId) break
+          const ev = await fetchEvent(relays, { ids: [parentId] })
+          if (cancelled) return
+          if (!ev) break
+          chain.unshift(ev)
+          cursor = ev
+        }
+        if (!cancelled) setAncestors(chain)
+      } catch {
+        /* keep whatever we resolved — a missing parent just isn't shown */
+      } finally {
+        if (!cancelled) setLoadingAncestors(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [open, focused])
+
+  // The topmost note we could resolve is the thread root. Falls back to the
+  // focused note when it has no parent (it *is* the root) or when the chain
+  // couldn't be fetched.
+  const rootRef: SocialRef = ancestors.length
+    ? { id: ancestors[0].id, pubkey: ancestors[0].pubkey }
+    : { id: focused.id, pubkey: focused.pubkey }
 
   const loadReplies = useCallback(async (eventId: string) => {
     setLoading(true)
@@ -189,6 +234,28 @@ export function ThreadModal({ open, onOpenChange, rootNote }: ThreadModalProps) 
         </DialogHeader>
 
         <div className="min-w-0 space-y-4 py-1">
+          {/* What the focused note is answering, oldest first. Muted and compact:
+              context, not the subject of the modal. */}
+          {loadingAncestors && ancestors.length === 0 && (
+            <div className="flex items-center gap-2 px-1 text-xs text-neutral-500">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading what this replies to…
+            </div>
+          )}
+          {ancestors.length > 0 && (
+            <div className="space-y-2">
+              {ancestors.map((a) => (
+                <ThreadItem
+                  key={a.id}
+                  event={a}
+                  rootRef={rootRef}
+                  onOpen={() => push(a)}
+                  onReplyPublished={() => loadReplies(focused.id)}
+                />
+              ))}
+              <div className="ml-5 h-3 w-px bg-[#333]" aria-hidden />
+            </div>
+          )}
+
           <ThreadItem event={focused} rootRef={rootRef} focused onReplyPublished={() => loadReplies(focused.id)} />
 
           <ReplyBox rootRef={rootRef} focused={focused} onReplyPublished={() => loadReplies(focused.id)} />
