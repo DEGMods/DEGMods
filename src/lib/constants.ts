@@ -121,6 +121,19 @@ export interface DnnNodeConfig {
   lastChecked?: number
 }
 
+// ─── Analytics ──────────────────────────────────────────────────────
+
+/**
+ * Self-hosted Umami. Cookieless and stores no personal data, but it's still a
+ * request to a server on every page, so it's behind a setting users can turn off.
+ *
+ * The website id is carried over from the previous DEG Mods site: most routes
+ * are unchanged, so keeping it preserves the history behind /ads' audience
+ * figures rather than restarting from zero.
+ */
+export const UMAMI_SCRIPT_URL = 'https://an.degmods.com/script.js'
+export const UMAMI_WEBSITE_ID = '5738aafa-e5ab-4e8a-b92b-41828ddd9c1b'
+
 // ─── Defaults ───────────────────────────────────────────────────────
 
 // Shared with the SEO sitemap script (scripts/generate-sitemap.mjs), which reads

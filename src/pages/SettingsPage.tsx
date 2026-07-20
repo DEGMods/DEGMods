@@ -27,7 +27,7 @@ import { toast } from 'sonner'
 import {
   Globe, Server, Database, Cpu, Shield, Plus, Trash2, RefreshCw, Save,
   Loader2, CheckCircle, XCircle, Circle, ArrowUpDown, LogOut, AlertTriangle, RotateCcw,
-  SlidersHorizontal, ShieldAlert, BadgeCheck, MessageSquare, Send, Search
+  SlidersHorizontal, ShieldAlert, BadgeCheck, MessageSquare, Send, Search, BarChart3
 } from 'lucide-react'
 import type { Event as NostrEvent } from 'nostr-tools'
 
@@ -761,7 +761,7 @@ function PreferencesSettings() {
     renderImages, renderVideos, renderAudio, renderHyperlinks,
     setRenderImages, setRenderVideos, setRenderAudio, setRenderHyperlinks,
   } = usePreferencesStore()
-  const { powDifficulty, setPowDifficulty, powFilterDifficulty, setPowFilterDifficulty } = useSettingsStore()
+  const { powDifficulty, setPowDifficulty, powFilterDifficulty, setPowFilterDifficulty, analyticsEnabled, setAnalyticsEnabled } = useSettingsStore()
   const [hashRate, setHashRate] = useState<number | null>(getCachedHashRate())
   const [benchmarking, setBenchmarking] = useState(false)
 
@@ -790,6 +790,21 @@ function PreferencesSettings() {
 
   return (
     <div className="space-y-6">
+      <SettingsCard
+        icon={BarChart3}
+        title="Analytics"
+        description="DEG Mods counts page visits with a self-hosted Umami instance. No cookies, no account or key is recorded, and nothing is shared with a third party — but it is still a request to a server, so you can turn it off."
+      >
+        <div className="divide-y divide-[#262626]">
+          <ToggleRow
+            label="Share anonymous usage data"
+            description="Turning this off stops the script loading at all, rather than just ignoring it."
+            checked={analyticsEnabled}
+            onCheckedChange={setAnalyticsEnabled}
+          />
+        </div>
+      </SettingsCard>
+
       <SettingsCard
         icon={MessageSquare}
         title="Comments"

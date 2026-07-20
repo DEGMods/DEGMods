@@ -82,6 +82,7 @@ export interface SettingsState {
   limitRelaysPerList: boolean    // randomly cap each write-relay list to 3
   limitBlossomsPerList: boolean  // cap each blossom list to 3
   parallelBlossomUpload: boolean // upload to up to 3 servers concurrently
+  analyticsEnabled: boolean      // load the self-hosted Umami script
 
   powDifficulty: number
   powFilterDifficulty: number
@@ -130,6 +131,7 @@ export interface SettingsState {
   setLimitRelaysPerList: (v: boolean) => void
   setLimitBlossomsPerList: (v: boolean) => void
   setParallelBlossomUpload: (v: boolean) => void
+  setAnalyticsEnabled: (v: boolean) => void
 
   setPowDifficulty: (difficulty: number) => void
   setPowFilterDifficulty: (difficulty: number) => void
@@ -162,6 +164,8 @@ const POSTING_DEFAULTS = {
   limitRelaysPerList: true,
   limitBlossomsPerList: true,
   parallelBlossomUpload: false,
+  // Cookieless and anonymous, but still a request per page — so it's a choice.
+  analyticsEnabled: true,
 }
 type PostingBehaviour = typeof POSTING_DEFAULTS
 
@@ -173,6 +177,7 @@ function savePosting(s: PostingBehaviour) {
     limitRelaysPerList: s.limitRelaysPerList,
     limitBlossomsPerList: s.limitBlossomsPerList,
     parallelBlossomUpload: s.parallelBlossomUpload,
+    analyticsEnabled: s.analyticsEnabled,
   }))
 }
 
@@ -374,6 +379,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setLimitRelaysPerList: (v) => { set({ limitRelaysPerList: v }); savePosting(get()) },
   setLimitBlossomsPerList: (v) => { set({ limitBlossomsPerList: v }); savePosting(get()) },
   setParallelBlossomUpload: (v) => { set({ parallelBlossomUpload: v }); savePosting(get()) },
+  setAnalyticsEnabled: (v) => { set({ analyticsEnabled: v }); savePosting(get()) },
 
   setPowDifficulty: (difficulty) => {
     set({ powDifficulty: difficulty })

@@ -2,8 +2,12 @@ import { Outlet } from 'react-router-dom'
 import { Header } from './Header'
 import { Footer } from './Footer'
 import { AnnouncementBanner } from './AnnouncementBanner'
+import { useAnalytics } from '@/hooks/useAnalytics'
 
 export function MainLayout() {
+  // Inside the router, so page views follow real navigation.
+  useAnalytics()
+
   return (
     <div className="flex min-h-screen flex-col bg-surface-background">
       <Header />
