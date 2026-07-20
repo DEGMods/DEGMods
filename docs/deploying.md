@@ -35,13 +35,33 @@ appears for whoever this is.
 ```ts
 export const UMAMI_SCRIPT_URL = 'https://an.degmods.com/script.js'
 export const UMAMI_WEBSITE_ID = '5738aafa-e5ab-4e8a-b92b-41828ddd9c1b'
+export const UMAMI_HOST = 'degmods.com'
 ```
 
-Left alone, your fork reports its traffic into DEG MODS' Umami instance,
-polluting both sets of numbers. Point them at your own instance, or delete the
-`useAnalytics()` call in
+Umami accepts any request carrying a valid website id — it has no domain
+allowlist, and the id is readable in any deployed bundle. So without a guard, a
+fork would file its traffic under DEG MODS' numbers.
+
+`UMAMI_HOST` is that guard: analytics only loads when the page is served from
+that domain or a subdomain of it. A fork on `bananamods.com` therefore reports
+nothing until it sets its own values — and local development doesn't report
+either, which is the other half of the point.
+
+Set all three to your own, or clear `UMAMI_HOST` to report from anywhere, or
+delete the `useAnalytics()` call in
 [`MainLayout`](../src/components/layout/MainLayout.tsx) to drop analytics
 entirely.
+
+> The guard is client-side, so it only stops honest mistakes. If you host Umami
+> yourself, also reject foreign origins at the web server — that's the boundary
+> that actually holds:
+>
+> ```nginx
+> location /api/send {
+>     if ($http_origin !~* ^https://([a-z0-9-]+\.)?example\.com$) { return 403; }
+>     proxy_pass http://127.0.0.1:3000;
+> }
+> ```
 
 ### Relays and media servers
 

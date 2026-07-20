@@ -1,9 +1,22 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { UMAMI_SCRIPT_URL, UMAMI_WEBSITE_ID } from '@/lib/constants'
+import { UMAMI_SCRIPT_URL, UMAMI_WEBSITE_ID, UMAMI_HOST } from '@/lib/constants'
 
 const SCRIPT_ID = 'umami-analytics'
+
+/**
+ * Is this page actually served from the domain analytics is configured for?
+ *
+ * Matched on a dot boundary rather than a plain suffix, so `degmods.com` and
+ * `temp.degmods.com` pass while `notdegmods.com` doesn't. An empty UMAMI_HOST
+ * means "report from anywhere", for forks that don't care.
+ */
+function onConfiguredHost(): boolean {
+  if (!UMAMI_HOST) return true
+  const host = window.location.hostname
+  return host === UMAMI_HOST || host.endsWith(`.${UMAMI_HOST}`)
+}
 
 declare global {
   interface Window {
@@ -26,7 +39,9 @@ declare global {
  * which only changes on real navigation.
  */
 export function useAnalytics() {
-  const enabled = useSettingsStore((s) => s.analyticsEnabled)
+  // Both must hold: the reader hasn't opted out, and this is our own domain
+  // rather than a fork or a dev server.
+  const enabled = useSettingsStore((s) => s.analyticsEnabled) && onConfiguredHost()
   const location = useLocation()
   const lastPath = useRef<string | null>(null)
 

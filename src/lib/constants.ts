@@ -134,6 +134,20 @@ export interface DnnNodeConfig {
 export const UMAMI_SCRIPT_URL = 'https://an.degmods.com/script.js'
 export const UMAMI_WEBSITE_ID = '5738aafa-e5ab-4e8a-b92b-41828ddd9c1b'
 
+/**
+ * Only report from this domain (and its subdomains).
+ *
+ * Umami has no domain allowlist — anything that posts a website id is counted,
+ * and the id is readable in any deployed bundle. So a fork that changes its
+ * domain but not these constants would file its traffic under ours, and local
+ * development would do the same. This keeps that from happening by accident.
+ *
+ * A fork should set this to its own domain, or clear it to report from anywhere.
+ * The server hosting Umami should also reject foreign origins — this guard is
+ * for honest mistakes, not for anyone determined.
+ */
+export const UMAMI_HOST = 'degmods.com'
+
 // ─── Defaults ───────────────────────────────────────────────────────
 
 // Shared with the SEO sitemap script (scripts/generate-sitemap.mjs), which reads
