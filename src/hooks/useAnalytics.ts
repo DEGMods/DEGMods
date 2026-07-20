@@ -18,6 +18,22 @@ const SCRIPT_ID = 'umami-analytics'
 const CANONICAL_ROUTES = ['/mod/', '/blog/', '/mod-jam/', '/feed/note/']
 const needsCanonical = (path: string) => CANONICAL_ROUTES.some((p) => path.startsWith(p))
 
+/**
+ * The address forms that already identify a post uniquely and never vary: naddr
+ * for addressable posts, nevent/note for notes. Recording one of these can't
+ * scatter a post across rows.
+ *
+ * A short address (`s…`) is the opposite — it's one of several spellings, and it
+ * can't be turned back into its naddr without the event it encodes. So when the
+ * backstop fires, we record a canonical URL but drop an unresolved short one
+ * rather than file the view under a per-spelling row.
+ */
+const CANONICAL_PREFIXES = ['naddr1', 'nevent1', 'note1']
+const isCanonicalAddress = (pathname: string): boolean => {
+  const last = pathname.split('/').filter(Boolean).pop() ?? ''
+  return CANONICAL_PREFIXES.some((p) => last.startsWith(p))
+}
+
 /** How long to wait for that report before giving up and sending what we have. */
 const CANONICAL_TIMEOUT = 4000
 
@@ -132,7 +148,16 @@ export function useAnalytics() {
     // we have rather than losing the view.
     pendingView = { path, send }
     const timer = setTimeout(() => {
-      if (pendingView?.path === path) { pendingView = null; send(path) }
+      if (pendingView?.path !== path) return
+      pendingView = null
+      // Nothing reported in time — the event didn't resolve (a flaky relay, a
+      // slow one, or an address that points at nothing). If the URL is already
+      // a canonical naddr/nevent, record it: it lands in the post's own row,
+      // same as a successful load would. But an unresolved short address can't
+      // be turned into its naddr here, so recording it would scatter the post
+      // across a per-spelling row. Drop it instead — a missing view beats a
+      // wrong one.
+      if (isCanonicalAddress(location.pathname)) send(path)
     }, CANONICAL_TIMEOUT)
 
     return () => {
