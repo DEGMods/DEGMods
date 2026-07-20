@@ -3,6 +3,7 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useDnnStore } from '@/stores/dnnStore'
 import { shareableShortAddress, shortCodeOf, verifiedShortAddress } from '@/lib/nostr/nipShort'
+import { reportCanonicalPath } from '@/hooks/useAnalytics'
 
 /**
  * The best address for a note: its NIP-SHORT one if it has a code, else an
@@ -37,6 +38,9 @@ export function useNoteUrl(open: boolean, event: NostrEvent | null | undefined) 
     let cancelled = false
 
     const nevent = nip19.neventEncode({ id: event.id, author: event.pubkey })
+    // A note has three possible spellings too (nevent, short, short+selector);
+    // the nevent is the one that never varies, so that's what's recorded.
+    reportCanonicalPath(`/feed/note/${nevent}`)
     const set = (address: string) => {
       const next = `/feed/note/${address}`
       if (window.location.pathname !== next) window.history.replaceState(null, '', next)

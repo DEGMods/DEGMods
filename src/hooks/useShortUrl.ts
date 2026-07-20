@@ -3,6 +3,7 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useDnnStore } from '@/stores/dnnStore'
 import { shareableShortAddress, shortCodeOf, verifiedShortAddress } from '@/lib/nostr/nipShort'
+import { reportCanonicalPath } from '@/hooks/useAnalytics'
 
 /**
  * Swap a post's naddr URL for its NIP-SHORT address once one is known.
@@ -23,6 +24,19 @@ import { shareableShortAddress, shortCodeOf, verifiedShortAddress } from '@/lib/
 export function useShortUrl(event: NostrEvent | null | undefined, basePath: string) {
   // The DNN id may arrive after the profile verifies, so re-run when it lands.
   const dnnId = useDnnStore((s) => (event ? s.getVerifiedDnnId(event.pubkey) : null))
+
+  // Tell analytics which address identifies this post, before anything below
+  // rewrites the bar to a short one. Derived from the event, so no network — and
+  // it runs even when there's no short code, since the page still needs to
+  // report *something* for the view to be sent.
+  useEffect(() => {
+    if (!event) return
+    const d = event.tags.find((t) => t[0] === 'd')?.[1] ?? ''
+    try {
+      const naddr = nip19.naddrEncode({ kind: event.kind, pubkey: event.pubkey, identifier: d })
+      reportCanonicalPath(`${basePath}/${naddr}`)
+    } catch { /* not addressable — the fallback path is recorded instead */ }
+  }, [event, basePath])
 
   useEffect(() => {
     if (!event || !shortCodeOf(event)) return

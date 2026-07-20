@@ -6,6 +6,37 @@ import { UMAMI_SCRIPT_URL, UMAMI_WEBSITE_ID, UMAMI_HOST } from '@/lib/constants'
 const SCRIPT_ID = 'umami-analytics'
 
 /**
+ * Routes whose URL identifies a post, and therefore has more than one spelling.
+ *
+ * The same mod is reachable as `/mod/<naddr>`, `/mod/snpub1…<code>`, or
+ * `/mod/sn<dnn-id><code>` — and the short form can gain a `-<selector>` suffix
+ * if the author ever has a colliding code. Recording whichever one the visitor
+ * happened to use would scatter a single post across several dashboard rows.
+ * So these wait for the page to report a canonical address (always the
+ * naddr/nevent, which never varies) before the view is sent.
+ */
+const CANONICAL_ROUTES = ['/mod/', '/blog/', '/mod-jam/', '/feed/note/']
+const needsCanonical = (path: string) => CANONICAL_ROUTES.some((p) => path.startsWith(p))
+
+/** How long to wait for that report before giving up and sending what we have. */
+const CANONICAL_TIMEOUT = 4000
+
+/** The view waiting on a canonical address. Only one page is open at a time. */
+let pendingView: { path: string; send: (url: string) => void } | null = null
+
+/**
+ * Called by the pages once they've resolved the event, with the address that
+ * should be recorded. Derived from the event itself, so it needs no network and
+ * normally lands well before the timeout.
+ */
+export function reportCanonicalPath(canonical: string): void {
+  const pending = pendingView
+  if (!pending) return
+  pendingView = null
+  pending.send(canonical)
+}
+
+/**
  * Is this page actually served from the domain analytics is configured for?
  *
  * Matched on a dot boundary rather than a plain suffix, so `degmods.com` and
@@ -67,15 +98,46 @@ export function useAnalytics() {
   useEffect(() => {
     if (!enabled) return
     const path = location.pathname + location.search
+    // Guards on what was *sent*, not on what was started. Guarding on the start
+    // would break the deferred path: React re-runs this effect (StrictMode does
+    // it on every mount), the re-run would see the path as already handled and
+    // return, while the first run's pending timer was cleared by its own
+    // cleanup — so the view would never be sent at all.
     if (lastPath.current === path) return
-    lastPath.current = path
 
     // The script loads async, so the first view can land before it's ready.
+    let sent = false
     let tries = 0
-    const send = () => {
-      if (window.umami) { window.umami.track(); return }
-      if (tries++ < 20) setTimeout(send, 250)
+    const send = (url: string) => {
+      if (sent || lastPath.current === path) return
+      if (window.umami) {
+        sent = true
+        lastPath.current = path
+        // An explicit url, rather than letting the tracker read the address
+        // bar — by the time this fires the bar may hold a short address.
+        window.umami.track({ url })
+        return
+      }
+      if (tries++ < 20) setTimeout(() => send(url), 250)
     }
-    send()
+
+    if (!needsCanonical(path)) {
+      send(path)
+      return
+    }
+
+    // Hold the view until the page reports the post's canonical address, so one
+    // post is one row however the visitor spelled the URL. The timeout is a
+    // backstop: if nothing reports (an unresolvable address, say), record what
+    // we have rather than losing the view.
+    pendingView = { path, send }
+    const timer = setTimeout(() => {
+      if (pendingView?.path === path) { pendingView = null; send(path) }
+    }, CANONICAL_TIMEOUT)
+
+    return () => {
+      clearTimeout(timer)
+      if (pendingView?.path === path) pendingView = null
+    }
   }, [enabled, location.pathname, location.search])
 }
