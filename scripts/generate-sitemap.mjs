@@ -10,11 +10,18 @@
  * Config via env (all optional):
  *   SITE_URL     canonical base URL         (default https://degmods.com)
  *   SEO_RELAYS   comma-separated relay list
- *   SEO_MAX      max coordinates per kind   (default 5000)
+ *   SEO_MAX      max coordinates per kind   (default 1000000)
  *   SEO_OUT      output directory           (default dist)
  *   SEO_DISALLOW when truthy, emit a Disallow-all robots.txt and skip the
  *                sitemap entirely — for staging/temp deploys that must stay out
  *                of search. Set it to `false` on the real domain to enable SEO.
+ *
+ * NOTE for self-hosted deploys: robots.txt is written *here*, and there is no
+ * public/robots.txt fallback. A deploy that builds and serves dist/ without
+ * running this script therefore ships no robots.txt at all — which crawlers
+ * read as permission. That's the opposite of the GitHub Pages path, where the
+ * workflow defaults SEO_DISALLOW to "true" and absent config means disallow.
+ * Run this with SEO_DISALLOW=true on any staging box. See docs/deploying.md.
  */
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
