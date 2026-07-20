@@ -12,30 +12,17 @@ const SCRIPT_ID = 'umami-analytics'
  * `/mod/sn<dnn-id><code>` — and the short form can gain a `-<selector>` suffix
  * if the author ever has a colliding code. Recording whichever one the visitor
  * happened to use would scatter a single post across several dashboard rows.
- * So these wait for the page to report a canonical address (always the
- * naddr/nevent, which never varies) before the view is sent.
+ *
+ * So these count on *render*: nothing is sent until the page resolves its event
+ * and reports the canonical address (always the naddr/nevent, which never
+ * varies). A post that never resolves — a dead relay, an address pointing at
+ * nothing — is never counted, which is the honest reading: a spinner that
+ * never became a post wasn't a view. This also means the short and naddr
+ * spellings of one post are measured by the same rule, since neither can report
+ * until the event is in hand.
  */
 const CANONICAL_ROUTES = ['/mod/', '/blog/', '/mod-jam/', '/feed/note/']
 const needsCanonical = (path: string) => CANONICAL_ROUTES.some((p) => path.startsWith(p))
-
-/**
- * The address forms that already identify a post uniquely and never vary: naddr
- * for addressable posts, nevent/note for notes. Recording one of these can't
- * scatter a post across rows.
- *
- * A short address (`s…`) is the opposite — it's one of several spellings, and it
- * can't be turned back into its naddr without the event it encodes. So when the
- * backstop fires, we record a canonical URL but drop an unresolved short one
- * rather than file the view under a per-spelling row.
- */
-const CANONICAL_PREFIXES = ['naddr1', 'nevent1', 'note1']
-const isCanonicalAddress = (pathname: string): boolean => {
-  const last = pathname.split('/').filter(Boolean).pop() ?? ''
-  return CANONICAL_PREFIXES.some((p) => last.startsWith(p))
-}
-
-/** How long to wait for that report before giving up and sending what we have. */
-const CANONICAL_TIMEOUT = 4000
 
 /** The view waiting on a canonical address. Only one page is open at a time. */
 let pendingView: { path: string; send: (url: string) => void } | null = null
@@ -43,7 +30,9 @@ let pendingView: { path: string; send: (url: string) => void } | null = null
 /**
  * Called by the pages once they've resolved the event, with the address that
  * should be recorded. Derived from the event itself, so it needs no network and
- * normally lands well before the timeout.
+ * fires the moment the post renders — whenever that is. There's no deadline: a
+ * post that takes ten seconds to resolve is counted at ten seconds, and one
+ * that never resolves is never counted.
  */
 export function reportCanonicalPath(canonical: string): void {
   const pending = pendingView
@@ -117,8 +106,8 @@ export function useAnalytics() {
     // Guards on what was *sent*, not on what was started. Guarding on the start
     // would break the deferred path: React re-runs this effect (StrictMode does
     // it on every mount), the re-run would see the path as already handled and
-    // return, while the first run's pending timer was cleared by its own
-    // cleanup — so the view would never be sent at all.
+    // return, while the first run's pending slot was already cleared by its own
+    // cleanup — so nothing would be listening and the view would never be sent.
     if (lastPath.current === path) return
 
     // The script loads async, so the first view can land before it's ready.
@@ -143,25 +132,12 @@ export function useAnalytics() {
     }
 
     // Hold the view until the page reports the post's canonical address, so one
-    // post is one row however the visitor spelled the URL. The timeout is a
-    // backstop: if nothing reports (an unresolvable address, say), record what
-    // we have rather than losing the view.
+    // post is one row however the visitor spelled the URL. No deadline: the
+    // report fires when the event renders, however long that takes, and if it
+    // never renders the view is simply never sent. Cleanup clears the slot on
+    // navigation, so leaving before the post resolves drops it too.
     pendingView = { path, send }
-    const timer = setTimeout(() => {
-      if (pendingView?.path !== path) return
-      pendingView = null
-      // Nothing reported in time — the event didn't resolve (a flaky relay, a
-      // slow one, or an address that points at nothing). If the URL is already
-      // a canonical naddr/nevent, record it: it lands in the post's own row,
-      // same as a successful load would. But an unresolved short address can't
-      // be turned into its naddr here, so recording it would scatter the post
-      // across a per-spelling row. Drop it instead — a missing view beats a
-      // wrong one.
-      if (isCanonicalAddress(location.pathname)) send(path)
-    }, CANONICAL_TIMEOUT)
-
     return () => {
-      clearTimeout(timer)
       if (pendingView?.path === path) pendingView = null
     }
   }, [enabled, location.pathname, location.search])
