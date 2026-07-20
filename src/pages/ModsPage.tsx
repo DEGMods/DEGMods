@@ -12,8 +12,7 @@ import { useModFiltersStore } from '@/stores/modFiltersStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useProgressiveMods } from '@/hooks/useProgressiveMods'
 import { useLegacyModsStore } from '@/stores/legacyModsStore' // LEGACY
-import { withLegacyMods, LEGACY_MOD_KIND, LEGACY_GAMEMOD_TAG } from '@/lib/mods/legacy' // LEGACY
-import { countEvents } from '@/lib/nostr/relay-pool'
+import { withLegacyMods } from '@/lib/mods/legacy' // LEGACY
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
 import { useWotModFilter, useWotHiddenCount } from '@/hooks/useWot'
@@ -46,16 +45,6 @@ export function ModsPage() {
   // (and reflow the grid) after the current-mod fetch alone finishes. Skip the
   // wait when legacy is hidden, since none would be shown anyway.
   const showSkeleton = loading || (legacyMode !== 'hide' && legacyLoading)
-
-  // Relay-reported totals (NIP-45) — the true counts, not just what's loaded.
-  const [counts, setCounts] = useState<{ current: number; legacy: number } | null>(null)
-  useEffect(() => {
-    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-    Promise.all([
-      countEvents(relays, { kinds: [KINDS.MOD] }),
-      countEvents(relays, { kinds: [LEGACY_MOD_KIND], '#t': [LEGACY_GAMEMOD_TAG] }),
-    ]).then(([current, legacy]) => setCounts({ current, legacy })).catch(() => { /* NIP-45 unsupported */ })
-  }, [])
 
   const moderate = useModerationFilter()
   const blockFilter = useBlockFilter()
@@ -98,6 +87,15 @@ export function ModsPage() {
 
   const filtered = useMemo(() => wotFilter(preWot), [wotFilter, preWot])
   const wotHiddenCount = useWotHiddenCount(preWot)
+
+  // Header count, split current vs legacy. Derived from what's actually shown —
+  // `filtered` is deduped (one row per coordinate) and drops kind-5-deleted
+  // mods (constructModListFromEvents). A NIP-45 relay COUNT can't be used: it
+  // tallies raw events, so tombstoned mods and every replaceable revision
+  // inflate it, and relays don't reliably drop deletions. "At least", because
+  // progressive loading may not have every current mod yet; legacy loads whole.
+  const legacyCount = useMemo(() => filtered.reduce((n, m) => n + (m.legacy ? 1 : 0), 0), [filtered])
+  const currentCount = filtered.length - legacyCount
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / MODS_PER_PAGE))
   const currentPage = Math.min(page, totalPages)
@@ -200,8 +198,8 @@ export function ModsPage() {
       <ModFiltersBar
         availableClients={availableClients}
         resultCount={filtered.length}
-        currentCount={counts?.current}
-        legacyCount={counts?.legacy}
+        currentCount={currentCount}
+        legacyCount={legacyCount}
         wotHiddenCount={wotHiddenCount}
       />
 
