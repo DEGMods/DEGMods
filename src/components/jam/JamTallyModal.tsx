@@ -215,9 +215,22 @@ export function JamTallyModal({
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-neutral-300">
                 <Loader2 className="h-4 w-4 animate-spin text-[#fc4462]" />
-                {progress.total ? <>Counting votes… <span className="tabular-nums text-neutral-400">{progress.done.toLocaleString()}/{progress.total.toLocaleString()}</span></> : 'Fetching entries and judges&apos; ballots…'}
+                {progress.total
+                  ? <>Counting community votes… <span className="tabular-nums text-neutral-400">{progress.done.toLocaleString()}/{progress.total.toLocaleString()} checks</span></>
+                  : <>Fetching entries and judges&rsquo; ballots…</>}
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-[#262626]"><div className="h-full bg-[#fc4462] transition-[width]" style={{ width: `${pct}%` }} /></div>
+              {/* The big number is queries, not ballots: the community track is
+                  built by asking the relays how many votes gave each criterion
+                  each possible score — entries × criteria × (score_max + 1) of
+                  them. Two voters can sit behind six hundred checks, so say so
+                  rather than let it read as a vote count. */}
+              {progress.total > 0 && (
+                <p className="text-[11px] leading-relaxed text-neutral-500">
+                  One check per score value per criterion — not a vote count. A jam scored out of
+                  {' '}{jam.scoreMax || 10} needs {(jam.scoreMax || 10) + 1} of them per criterion, per entry.
+                </p>
+              )}
               <p className="flex items-start gap-1.5 text-[11px] text-amber-400/90"><AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> Keep this window open until the tally finishes.</p>
             </div>
           )}
