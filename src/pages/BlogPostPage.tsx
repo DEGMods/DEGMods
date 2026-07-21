@@ -303,7 +303,13 @@ export default function BlogPostPage() {
                 {isOwner ? (
                   <>
                     <DropdownMenuItem
-                      onClick={() => navigate(`/submit-blog?edit=${naddr}`)}
+                      // Rebuilt from the post, not the URL param — by now the bar
+                      // holds a short address, which the editor can't decode.
+                      onClick={() => navigate(`/submit-blog?edit=${nip19.naddrEncode({
+                        kind: KINDS.BLOG,
+                        pubkey: blog.pubkey,
+                        identifier: blog.dTag,
+                      })}`)}
                       className="cursor-pointer"
                     >
                       <Edit className="h-4 w-4 mr-2" />

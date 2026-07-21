@@ -296,7 +296,9 @@ export function JamPage() {
                   {isAuthor && (
                     <>
                       <DropdownMenuSeparator className="bg-[#262626]" />
-                      <DropdownMenuItem onClick={() => navigate(`/mod-jam/${naddr}/edit`)} className="cursor-pointer"><Pencil className="mr-2 h-4 w-4" /> Edit jam</DropdownMenuItem>
+                      {/* The jam's own naddr, not the URL param — by now the bar
+                          holds a short address, which the editor can't decode. */}
+                      <DropdownMenuItem onClick={() => navigate(`/mod-jam/${jam.naddr}/edit`)} className="cursor-pointer"><Pencil className="mr-2 h-4 w-4" /> Edit jam</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setShowDeleteDialog(true)} className="cursor-pointer text-red-400 focus:text-red-400"><Trash2 className="mr-2 h-4 w-4" /> Request Delete</DropdownMenuItem>
                     </>
                   )}
@@ -457,7 +459,7 @@ export function JamPage() {
               </Tooltip>
               {/* Always available: entries are public on relays anyway, so gating
                   this in the UI would only inconvenience honest visitors. */}
-              <Button variant="outline" onClick={() => navigate(`/mod-jam/${naddr}/submissions`)} className="w-full gap-2 border-[#262626]">
+              <Button variant="outline" onClick={() => navigate(`/mod-jam/${jam.naddr}/submissions`)} className="w-full gap-2 border-[#262626]">
                 <ListOrdered className="h-4 w-4" /> Show submissions
               </Button>
             </div>

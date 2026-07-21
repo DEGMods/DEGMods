@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { nip19, type Filter } from 'nostr-tools'
+import { type Filter } from 'nostr-tools'
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Loader2, ArrowLeft, Plus, Medal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,6 +9,7 @@ import { ModCard } from '@/components/mod/ModCard'
 import { SearchBar } from '@/components/search/SearchBar'
 import { AdvancedSearch } from '@/components/search/AdvancedSearch'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { decodePostParam } from '@/lib/nostr/nipShort'
 import { fetchAllEvents, fetchEvents, fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractModData } from '@/lib/nostr/events'
@@ -81,12 +82,12 @@ export function JamSubmissionsPage() {
   useEffect(() => {
     let cancelled = false
     setLoading(true); setNotFound(false); setJam(null); setMods([])
-    let decoded
-    try { decoded = nip19.decode(naddr!) } catch { setNotFound(true); setLoading(false); return }
-    if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) { setNotFound(true); setLoading(false); return }
-    const { pubkey, identifier } = decoded.data
-    const coordinate = `${KINDS.JAM}:${pubkey}:${identifier}`
     const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    // Resolved below before anything that reads them — the address may be a
+    // NIP-SHORT one, which only resolves asynchronously.
+    let coordinate = ''
+    let pubkey = ''
+    let identifier = ''
 
     /** Entries, bounded at the relay to the window a valid submission must fall in. */
     const loadEntries = async (jamData: JamDetails) => {
@@ -122,6 +123,17 @@ export function JamSubmissionsPage() {
     }
 
     ;(async () => {
+      // Tolerates a NIP-SHORT address as well as an naddr, so a link saved back
+      // when the jam page handed its short URL straight on still opens.
+      const decoded = await decodePostParam(naddr!, relays)
+      if (cancelled) return
+      if (!decoded || 'candidates' in decoded || decoded.kind !== KINDS.JAM) {
+        setNotFound(true); setLoading(false); return
+      }
+      pubkey = decoded.pubkey
+      identifier = decoded.identifier
+      coordinate = `${KINDS.JAM}:${pubkey}:${identifier}`
+
       // 1. The jam is usually already cached (the user just came from its post),
       // so its window is on hand and entries can load without a round trip first.
       await whenEventCacheReady
@@ -152,14 +164,13 @@ export function JamSubmissionsPage() {
     return () => { cancelled = true }
   }, [naddr])
 
-  /** The jam's coordinate, for pinning an advanced query to this jam's entries. */
-  const jamCoordinate = useMemo(() => {
-    try {
-      const d = nip19.decode(naddr!)
-      if (d.type !== 'naddr' || d.data.kind !== KINDS.JAM) return null
-      return `${KINDS.JAM}:${d.data.pubkey}:${d.data.identifier}`
-    } catch { return null }
-  }, [naddr])
+  /**
+   * The jam's coordinate, for pinning an advanced query to this jam's entries.
+   * Taken from the loaded jam rather than re-decoded from the URL — the address
+   * may be a NIP-SHORT one, which can't be decoded synchronously, and the jam
+   * already carries the coordinate anyway.
+   */
+  const jamCoordinate = useMemo(() => jam?.aTag ?? null, [jam])
 
   // An advanced query replaces the listing, but stays inside this jam: the filter
   // carries the jam's `a` tag, and results are still validated as submissions.

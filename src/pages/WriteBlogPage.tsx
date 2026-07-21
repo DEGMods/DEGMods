@@ -6,6 +6,7 @@ import { buildBlogEvent, extractBlogData } from '@/lib/nostr/events'
 import { signAndPublish } from '@/lib/nostr/publish'
 import { cacheEvent } from '@/lib/nostr/eventCache'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { decodePostParam } from '@/lib/nostr/nipShort'
 import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { KINDS, IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
@@ -104,14 +105,17 @@ export default function WriteBlogPage() {
       const relayUrls = useSettingsStore.getState().getAllEnabledRelayUrls('read')
       setLoadingEdit(true)
       try {
-        const decoded = nip19.decode(editNaddr!)
-        if (decoded.type !== 'naddr') {
+        // Tolerates a NIP-SHORT address as well as an naddr — a link saved back
+        // when the blog post handed its short URL straight to the editor would
+        // otherwise be a dead end forever.
+        const decoded = await decodePostParam(editNaddr!, relayUrls)
+        if (!decoded || 'candidates' in decoded) {
           toast.error('Invalid blog address')
           setLoadingEdit(false)
           return
         }
 
-        const { pubkey: authorPk, identifier, kind } = decoded.data
+        const { pubkey: authorPk, identifier, kind } = decoded
         const event = await fetchEvent(
           relayUrls,
           { kinds: [kind], authors: [authorPk], '#d': [identifier] }

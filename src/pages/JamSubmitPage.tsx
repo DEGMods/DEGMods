@@ -8,6 +8,7 @@ import { buildJamEvent, extractJam, type JamFormState, type JamDetails } from '@
 import { signAndPublish } from '@/lib/nostr/publish'
 import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady, cacheEvent } from '@/lib/nostr/eventCache'
+import { decodePostParam } from '@/lib/nostr/nipShort'
 import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
@@ -32,10 +33,14 @@ export function JamSubmitPage() {
     setLoadError(null)
 
     async function load() {
-      let decoded
-      try { decoded = nip19.decode(naddr!) } catch { setLoadError('Invalid jam link.'); setLoading(false); return }
-      if (decoded.type !== 'naddr' || decoded.data.kind !== KINDS.JAM) { setLoadError('That link is not a mod jam.'); setLoading(false); return }
-      const { pubkey: author, identifier } = decoded.data
+      // Tolerates a NIP-SHORT address as well as an naddr — a link saved back
+      // when the jam page handed its short URL straight to the editor would
+      // otherwise be a dead end forever.
+      const decodeRelays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const decoded = await decodePostParam(naddr!, decodeRelays)
+      if (!decoded || 'candidates' in decoded) { setLoadError('Invalid jam link.'); setLoading(false); return }
+      if (decoded.kind !== KINDS.JAM) { setLoadError('That link is not a mod jam.'); setLoading(false); return }
+      const { pubkey: author, identifier } = decoded
       const coord = `${KINDS.JAM}:${author}:${identifier}`
 
       // 1. Instant: seed the editor from the shared cache (e.g. the jam post the
