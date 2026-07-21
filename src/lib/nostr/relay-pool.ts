@@ -2,7 +2,7 @@
  * Relay Pool: wraps nostr-tools SimplePool for DEG MODS
  */
 
-import { SimplePool, type Filter, type Event as NostrEvent } from 'nostr-tools'
+import { SimplePool, matchFilter, type Filter, type Event as NostrEvent } from 'nostr-tools'
 
 const pool = new SimplePool()
 
@@ -173,6 +173,183 @@ function readKey(relayUrls: string[], filter: Filter, extra = ''): string {
   return JSON.stringify([[...relayUrls].sort(), filter, extra])
 }
 
+// ─── Subscription pooling ───────────────────────────────────────────
+//
+// De-duplication (above) only helps when two callers want the *same* thing. The
+// commoner case is many callers wanting different things at once — a listing,
+// the profiles for its authors, the moderation overlays, the reaction counts —
+// each of which used to open its own REQ. That is what exhausts a relay's
+// subscription limit.
+//
+// A REQ can carry several filters, so reads aimed at the same relay set within a
+// short window are collected and sent as ONE subscription per relay. Events come
+// back on that single subscription and are handed to whichever callers' filters
+// actually match, so nobody sees anything they didn't ask for.
+//
+// The read slot is taken by the *batch*, not the caller: a slot stands for a
+// subscription, and a batch is one subscription per relay however many filters
+// it carries. Otherwise the concurrency cap would throttle the very thing that
+// makes batching worthwhile.
+
+/** How long to gather reads before sending them as one subscription. */
+const BATCH_WINDOW_MS = 25
+/**
+ * Filters per REQ. Relays commonly cap this (NIP-11 `max_filters`, often 10) and
+ * a refused REQ would fail the whole batch, so this stays well under the usual
+ * limit rather than chasing the largest possible saving.
+ */
+const MAX_FILTERS_PER_REQ = 8
+
+interface BatchRequest {
+  filter: Filter
+  timeoutMs: number
+  maxWait?: number
+  events: NostrEvent[]
+  seen: Set<string>
+  settled: boolean
+  timer?: ReturnType<typeof setTimeout>
+  resolve: (events: NostrEvent[]) => void
+}
+
+interface Batch {
+  relayUrls: string[]
+  requests: BatchRequest[]
+  timer: ReturnType<typeof setTimeout>
+}
+
+const batches = new Map<string, Batch>()
+
+/** Queue a read; it leaves as part of the next batch for this relay set. */
+function enqueueRead(
+  relayUrls: string[],
+  filter: Filter,
+  timeoutMs: number,
+  maxWait?: number,
+): Promise<NostrEvent[]> {
+  const key = JSON.stringify([...relayUrls].sort())
+  return new Promise((resolve) => {
+    const request: BatchRequest = {
+      filter, timeoutMs, maxWait, events: [], seen: new Set(), settled: false, resolve,
+    }
+    let batch = batches.get(key)
+    if (!batch) {
+      batch = {
+        relayUrls,
+        requests: [],
+        timer: setTimeout(() => flushBatch(key), BATCH_WINDOW_MS),
+      }
+      batches.set(key, batch)
+    }
+    batch.requests.push(request)
+    // Send early once it's as full as a REQ should get.
+    if (batch.requests.length >= MAX_FILTERS_PER_REQ) flushBatch(key)
+  })
+}
+
+function flushBatch(key: string): void {
+  const batch = batches.get(key)
+  if (!batch) return
+  batches.delete(key)
+  clearTimeout(batch.timer)
+  void runBatch(batch)
+}
+
+async function runBatch(batch: Batch): Promise<void> {
+  await acquireRead()
+  try {
+    // A batch of one is the old path exactly — no reason to take the merged
+    // route for it, and it keeps the common case on well-travelled code.
+    if (batch.requests.length === 1) {
+      const req = batch.requests[0]
+      const events = await fetchEventsUnthrottled(batch.relayUrls, req.filter, req.timeoutMs, req.maxWait)
+      if (!req.settled) { req.settled = true; req.resolve(events) }
+      return
+    }
+    await runMergedBatch(batch)
+  } finally {
+    releaseRead()
+  }
+}
+
+/**
+ * One REQ per relay carrying every filter in the batch.
+ *
+ * Falls back to running the reads separately if no relay managed an EOSE — a
+ * relay that refuses a multi-filter REQ closes the subscription instead, and
+ * that must not turn into "everyone got zero results", which is precisely the
+ * silent-empty failure this file exists to prevent.
+ */
+function runMergedBatch(batch: Batch): Promise<void> {
+  return new Promise((done) => {
+    const filters = batch.requests.map((r) => r.filter)
+    const subs: Array<{ close: () => void }> = []
+    let pending = batch.requests.length
+    let relaysLeft = batch.relayUrls.length
+    let anyEose = false
+    let finished = false
+
+    const cleanup = () => {
+      if (finished) return
+      finished = true
+      for (const s of subs) { try { s.close() } catch { /* already closed */ } }
+      done()
+    }
+
+    const settle = (req: BatchRequest) => {
+      if (req.settled) return
+      req.settled = true
+      clearTimeout(req.timer)
+      req.resolve(req.events)
+      if (--pending === 0) cleanup()
+    }
+
+    const settleAll = () => { for (const r of batch.requests) settle(r) }
+
+    // A relay is "done" on EOSE, on close, or on failing to connect. Counted
+    // once each way — oneose and onclose can both fire for the same relay.
+    const relayDone = (eose: boolean) => {
+      if (eose) anyEose = true
+      if (--relaysLeft > 0) return
+      if (anyEose) { settleAll(); return }
+      // Nobody EOSE'd: assume the merged REQ was refused and retry separately.
+      cleanup()
+      void Promise.all(batch.requests.map(async (req) => {
+        if (req.settled) return
+        const events = await fetchEventsUnthrottled(batch.relayUrls, req.filter, req.timeoutMs, req.maxWait)
+        if (!req.settled) { req.settled = true; req.resolve(events) }
+      })).then(() => done())
+    }
+
+    for (const req of batch.requests) {
+      // maxWait is a deadline for relays that never EOSE; as a settle deadline it
+      // behaves the same, since an early all-relays-EOSE settles sooner anyway.
+      const deadline = Math.min(req.timeoutMs, req.maxWait ?? req.timeoutMs)
+      req.timer = setTimeout(() => settle(req), deadline)
+    }
+
+    for (const url of batch.relayUrls) {
+      let counted = false
+      const once = (eose: boolean) => { if (!counted) { counted = true; relayDone(eose) } }
+      pool.ensureRelay(url, { connectionTimeout: 5000 }).then((relay) => {
+        const sub = relay.subscribe(filters, {
+          onevent: (event: NostrEvent) => {
+            for (const req of batch.requests) {
+              if (req.settled || req.seen.has(event.id)) continue
+              if (matchFilter(req.filter, event)) {
+                req.seen.add(event.id)
+                req.events.push(event)
+              }
+            }
+          },
+          oneose: () => once(true),
+          onclose: () => once(false),
+        })
+        subs.push(sub)
+      }).catch(() => once(false))
+    }
+  })
+}
+
 export async function fetchEvents(
   relayUrls: string[],
   filter: Filter,
@@ -185,14 +362,8 @@ export async function fetchEvents(
   const existing = inFlight.get(key)
   if (existing) return existing
 
-  const run = (async () => {
-    await acquireRead()
-    try {
-      return await fetchEventsUnthrottled(relayUrls, filter, timeoutMs, maxWait)
-    } finally {
-      releaseRead()
-    }
-  })()
+  // The read slot is taken by the batch this joins, not here.
+  const run = enqueueRead(relayUrls, filter, timeoutMs, maxWait)
 
   inFlight.set(key, run)
   run.finally(() => { if (inFlight.get(key) === run) inFlight.delete(key) })
@@ -254,49 +425,23 @@ export async function fetchEvent(
   const existing = inFlight.get(key)
   if (existing) return existing.then((evs) => evs[0] ?? null)
 
-  const run = (async () => {
-    await acquireRead()
-    try {
-      const ev = await fetchEventUnthrottled(relayUrls, filter, timeoutMs)
-      return ev ? [ev] : []
-    } finally {
-      releaseRead()
-    }
-  })()
+  // Batched alongside fetchEvents: `limit: 1` keeps each relay to one event per
+  // filter, and the newest-wins reduce below is what made this its own function.
+  const run = enqueueRead(
+    relayUrls,
+    { ...filter, limit: 1 },
+    timeoutMs,
+    Math.min(timeoutMs, 3000),
+  ).then((evs) => {
+    let best: NostrEvent | null = null
+    for (const ev of evs) if (!best || ev.created_at > best.created_at) best = ev
+    return best ? [best] : []
+  })
 
   inFlight.set(key, run)
   run.finally(() => { if (inFlight.get(key) === run) inFlight.delete(key) })
   return run.then((evs) => evs[0] ?? null)
 }
-
-function fetchEventUnthrottled(
-  relayUrls: string[],
-  filter: Filter,
-  timeoutMs: number
-): Promise<NostrEvent | null> {
-  return new Promise((resolve) => {
-    let best: NostrEvent | null = null
-    let settled = false
-    const finish = () => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeout)
-      try { sub.close() } catch { /* already closed */ }
-      resolve(best)
-    }
-    const timeout = setTimeout(finish, timeoutMs)
-
-    const sub = pool.subscribeMany(relayUrls, { ...filter, limit: 1 }, {
-      maxWait: Math.min(timeoutMs, 3000),
-      onevent: (event: NostrEvent) => {
-        if (!best || event.created_at > best.created_at) best = event
-      },
-      // Fires once every relay has EOSE'd (real or via maxWait auto-close).
-      oneose: finish,
-    })
-  })
-}
-
 /**
  * High-assurance fetch of the NEWEST revision of an addressable/replaceable
  * event. Like `fetchEvent`, but makes several passes and keeps the highest
