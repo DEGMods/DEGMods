@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { useShortUrl } from '@/hooks/useShortUrl'
+import { useModerationOverlay } from '@/hooks/useModerationTags'
 import { decodePostParam, selectorFor } from '@/lib/nostr/nipShort'
 import { ShortAddressChooser, postPreview } from '@/components/social/ShortAddressChooser'
 import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
@@ -125,6 +126,9 @@ export default function ModPage() {
   const [newerEvent, setNewerEvent] = useState<NostrEvent | null>(null)
 
   const modStatus = useModStatus(mod?.aTag, mod?.pubkey)
+
+  // Tags the admin applied on top of this post's own (kind 30985 overlay).
+  const { overlay: tagOverlay, checked: tagsChecked } = useModerationOverlay(mod?.aTag)
 
   // Show the short address in the URL bar once this post has one.
   useShortUrl(rawEvent as unknown as NostrEvent | null, '/mod')
@@ -317,8 +321,17 @@ export default function ModPage() {
     )
   }
 
-  const hasCW = !!mod.contentWarning
-  const heroBlurred = hasCW && !cwRevealed
+  // Author's own tags plus the admin's overlay — additive, so the overlay only
+  // ever adds a warning the author left off.
+  const contentWarning = mod.contentWarning || tagOverlay?.contentWarning
+  const isRepost = mod.isRepost || !!tagOverlay?.isRepost
+  const originalAuthor = mod.originalAuthor || tagOverlay?.originalAuthor
+
+  const hasCW = !!contentWarning
+  // Keep the hero covered until the overlay settles, so a mod the admin marked
+  // NSFW can't flash before we know. Skipped when the author already tagged it
+  // (already covered) or when the check has resolved, including fail-open.
+  const heroBlurred = (hasCW && !cwRevealed) || (!tagsChecked && !mod.contentWarning)
 
   const modTarget: NostrTarget = {
     id: mod.id,
@@ -397,14 +410,14 @@ export default function ModPage() {
           )}
         />
       )}
-      {heroBlurred && (
+      {hasCW && !cwRevealed && (
         <div
           className="absolute inset-0 z-[3] flex flex-col items-center justify-center bg-black/40 cursor-pointer"
           onClick={() => setCwRevealed(true)}
         >
           <Eye className="h-8 w-8 text-neutral-300 mb-2" />
           <span className="text-sm text-neutral-300 font-medium">
-            Content Warning: {mod.contentWarning}
+            Content Warning: {contentWarning}
           </span>
           <span className="text-xs text-neutral-500 mt-1">Click to reveal</span>
         </div>
@@ -585,7 +598,7 @@ export default function ModPage() {
           </div>
 
           {/* Repost */}
-          {mod.isRepost && (
+          {isRepost && (
             <section className="space-y-2">
               <h2 className="flex items-center gap-1.5 text-lg font-semibold text-neutral-200">
                 <Repeat2 className="h-4 w-4 text-purple-400" />
@@ -595,8 +608,8 @@ export default function ModPage() {
                 <p className="text-sm text-neutral-400">
                   This is a repost of another creator's mod.
                 </p>
-                {mod.originalAuthor && (() => {
-                  const v = mod.originalAuthor.trim()
+                {originalAuthor && (() => {
+                  const v = originalAuthor.trim()
                   if (/^https?:\/\//i.test(v)) {
                     return (
                       <a

@@ -10,6 +10,7 @@ import { KINDS } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useModStatus } from '@/hooks/useModeration'
+import { useEffectiveModFlags } from '@/hooks/useModerationTags'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import type { ModDetails } from '@/types/mod'
 
@@ -20,8 +21,16 @@ interface ModCardProps {
 export function ModCard({ mod }: ModCardProps) {
   const [revealed, setRevealed] = useState(false)
   const [author, setAuthor] = useState<UserProfile | null>(null)
-  const hasWarning = !!mod.contentWarning && !revealed
   const { moderated } = useModStatus(mod.aTag, mod.pubkey)
+
+  // The author's own tags, plus anything the admin tagged on top.
+  const flags = useEffectiveModFlags(mod)
+  const hasWarning = !!flags.contentWarning && !revealed
+  // Hold the image until the overlay has settled, so a mod the admin marked
+  // NSFW can't paint before we know. This races the image download rather than
+  // the user — the check is one small query and normally wins, so it isn't
+  // seen. Only the image waits; the title, author and layout render at once.
+  const holdImage = !flags.checked && !mod.contentWarning
 
   const naddr = nip19.naddrEncode({
     kind: mod.legacy ? LEGACY_MOD_KIND : KINDS.MOD, // LEGACY
@@ -56,7 +65,7 @@ export function ModCard({ mod }: ModCardProps) {
                 alt={mod.title}
                 className={cn(
                   'absolute inset-0 w-full h-full object-cover',
-                  hasWarning && 'blur-xl'
+                  (hasWarning || holdImage) && 'blur-xl'
                 )}
               />
             )}
@@ -78,13 +87,13 @@ export function ModCard({ mod }: ModCardProps) {
               >
                 <AlertTriangle className="w-6 h-6 text-yellow-500" />
                 <span className="text-xs font-medium px-3 text-center">
-                  {mod.contentWarning}
+                  {flags.contentWarning}
                 </span>
                 <span className="text-[10px] text-neutral-500">Click to reveal</span>
               </button>
             )}
 
-            {mod.isRepost && (
+            {flags.isRepost && (
               <span className="absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-neutral-200 backdrop-blur-sm">
                 <Repeat2 className="h-3 w-3" /> Repost
               </span>

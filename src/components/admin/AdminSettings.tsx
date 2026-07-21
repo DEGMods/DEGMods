@@ -34,6 +34,11 @@ import CsvEditor from '@/components/admin/CsvEditor'
 import { getNodeAds, saveNodeAds, getAdStats, MANAGED_BLOSSOMS, type AdStats } from '@/lib/blossom/adminApi'
 import { parseCsvLine } from '@/lib/csv'
 import { LEGACY_MOD_KIND, normalizeModCoord } from '@/lib/mods/legacy'
+import { useModerationTagsStore } from '@/stores/moderationTagsStore'
+import {
+  buildModerationTagEvent, parseOverlayTarget, isEmptyOverlay, targetAddress, isModTarget,
+  type ModerationOverlay,
+} from '@/lib/nostr/moderationTags'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -52,7 +57,7 @@ import {
   Upload, Trash2, FileText, Plus, Save, Pencil, SkipForward,
   AlertTriangle, X, Link2, Eye, GripVertical, ShieldAlert, EyeOff,
   Image as ImageIcon, HelpCircle, BookOpen, Joystick, Flag, Copy, ExternalLink, ChevronDown, Lightbulb,
-  HardDrive, Radio, BarChart3, ScrollText,
+  HardDrive, Radio, BarChart3, ScrollText, Tag, Repeat2,
 } from 'lucide-react'
 import { BlossomsTab } from './BlossomsTab'
 import { RelaysTab } from './RelaysTab'
@@ -2222,7 +2227,279 @@ function ModerationTab() {
 
       <BlockedUsersSection />
 
+      <ModerationTagsSection />
+
       <ReportsSection />
+    </div>
+  )
+}
+
+// ── Moderation tags (kind 30985 overlays on other people's posts) ──
+
+interface TaggedItem {
+  key: string
+  overlay: ModerationOverlay
+  title?: string
+  resolving?: boolean
+}
+
+/**
+ * Apply tags to a post whose author left them off — NSFW, or "this is a repost".
+ *
+ * Publishes a kind 30985 overlay keyed by the target's address, so re-tagging
+ * replaces and clearing is just an overlay with no tags left on it. Never uses
+ * kind 5: relays don't reliably drop deletions, so a cleared overlay that still
+ * exists beats one that was asked to disappear.
+ */
+function ModerationTagsSection() {
+  const [input, setInput] = useState('')
+  const [nsfw, setNsfw] = useState(false)
+  const [nsfwReason, setNsfwReason] = useState('nsfw')
+  const [repost, setRepost] = useState(false)
+  const [repostSource, setRepostSource] = useState('')
+  const [publishing, setPublishing] = useState(false)
+  const [items, setItems] = useState<TaggedItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const resolveTitle = useCallback(async (key: string): Promise<string | undefined> => {
+    const m = /^(\d+):([0-9a-f]{64}):(.*)$/i.exec(key)
+    if (!m) return undefined
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    const ev = await fetchEvent(relays, { kinds: [Number(m[1])], authors: [m[2]], '#d': [m[3]] })
+    return ev?.tags.find(t => t[0] === 'title')?.[1] || undefined
+  }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const map = await useModerationTagsStore.getState().fetchAll()
+      // A cleared overlay still exists as an event; it just carries no tags.
+      const list: TaggedItem[] = [...map.entries()]
+        .filter(([, o]) => !isEmptyOverlay(o))
+        .map(([key, overlay]) => ({ key, overlay, resolving: true }))
+        .sort((a, b) => b.overlay.updatedAt - a.overlay.updatedAt)
+      setItems(list)
+      list.forEach(async ({ key }) => {
+        const title = await resolveTitle(key).catch(() => undefined)
+        setItems(prev => prev.map(it => it.key === key ? { ...it, title, resolving: false } : it))
+      })
+    } catch {
+      toast.error('Failed to load moderation tags')
+    } finally {
+      setLoading(false)
+    }
+  }, [resolveTitle])
+
+  useEffect(() => { load() }, [load])
+
+  const reset = () => {
+    setInput(''); setNsfw(false); setNsfwReason('nsfw'); setRepost(false); setRepostSource('')
+  }
+
+  const publishOverlay = async (
+    address: string,
+    overlay: { contentWarning?: string; isRepost?: boolean; originalAuthor?: string },
+    message: string,
+  ) => {
+    const target = parseOverlayTarget(address)
+    if ('error' in target) { toast.error(target.error); return false }
+    setPublishing(true)
+    try {
+      const result = await signAndPublish(buildModerationTagEvent(target, overlay), (s) => {
+        if (s === 'mining') toast.loading('Processing proof of work…', { id: 'mod-tag' })
+        if (s === 'publishing') toast.loading('Publishing…', { id: 'mod-tag' })
+      })
+      if (!result.success) {
+        toast.error(result.error || 'Publish failed', { id: 'mod-tag' })
+        return false
+      }
+      toast.success(message, { id: 'mod-tag' })
+      // Drop the cached answer so listings re-check this post rather than
+      // rendering the state it had a moment ago.
+      useModerationTagsStore.getState().invalidate(target.key)
+      await load()
+      return true
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Publish failed', { id: 'mod-tag' })
+      return false
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const submit = async () => {
+    if (!nsfw && !repost) { toast.error('Pick at least one tag to apply'); return }
+    const ok = await publishOverlay(input, {
+      contentWarning: nsfw ? (nsfwReason.trim() || 'nsfw') : undefined,
+      isRepost: repost,
+      originalAuthor: repost ? repostSource.trim() || undefined : undefined,
+    }, 'Tags published')
+    if (ok) reset()
+  }
+
+  const editItem = (it: TaggedItem) => {
+    setInput(it.key)
+    setNsfw(!!it.overlay.contentWarning)
+    setNsfwReason(it.overlay.contentWarning || 'nsfw')
+    setRepost(!!it.overlay.isRepost)
+    setRepostSource(it.overlay.originalAuthor || '')
+  }
+
+  const clearItem = (it: TaggedItem) =>
+    publishOverlay(it.key, {}, 'Tags cleared')
+
+  const targetLink = (key: string): string | null => {
+    const address = targetAddress(key)
+    if (!address) return null
+    return isModTarget(key) ? `/mod/${address}` : `/feed/note/${address}`
+  }
+
+  return (
+    <div className="p-4 rounded-lg border border-[#262626] bg-[#1c1c1c] space-y-3">
+      <div className="flex items-center gap-2">
+        <Tag size={14} className="text-purple-400" />
+        <h4 className="text-sm font-medium text-white">Moderation Tags</h4>
+        <code className="ml-auto text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">kind:{KINDS.MODERATION_TAG}</code>
+      </div>
+      <p className="text-[11px] text-neutral-500">
+        Apply tags to a post whose author left them off. Paste its <strong>naddr</strong> or
+        {' '}<strong>nevent</strong>, pick the tags, and publish. Tags are <strong>added</strong> to
+        the post's own — this never removes a tag the author set themselves.
+      </p>
+
+      <Input
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        placeholder="naddr1… / nevent1… (or a raw coordinate)"
+        className="bg-[#212121] border-[#262626] text-white text-xs font-mono"
+      />
+
+      <div className="space-y-2 rounded-md border border-[#262626] bg-[#212121] p-3">
+        <div className="flex items-center gap-2">
+          <Switch checked={nsfw} onCheckedChange={setNsfw} />
+          <AlertTriangle size={13} className="text-yellow-500" />
+          <span className="text-xs text-neutral-300">Content warning (NSFW)</span>
+        </div>
+        {nsfw && (
+          <Input
+            value={nsfwReason}
+            onChange={e => setNsfwReason(e.target.value)}
+            placeholder="Reason shown to readers (e.g. nsfw, gore)"
+            className="bg-[#1c1c1c] border-[#262626] text-white text-xs"
+          />
+        )}
+
+        <div className="flex items-center gap-2 pt-1">
+          <Switch checked={repost} onCheckedChange={setRepost} />
+          <Repeat2 size={13} className="text-neutral-400" />
+          <span className="text-xs text-neutral-300">Repost</span>
+        </div>
+        {repost && (
+          <Input
+            value={repostSource}
+            onChange={e => setRepostSource(e.target.value)}
+            placeholder="Original author — npub, name, or link (optional)"
+            className="bg-[#1c1c1c] border-[#262626] text-white text-xs"
+          />
+        )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          onClick={submit}
+          disabled={publishing || !input.trim() || (!nsfw && !repost)}
+          className="bg-purple-600 hover:bg-purple-700 text-xs"
+        >
+          {publishing ? <Loader2 size={12} className="mr-1.5 animate-spin" /> : <Save size={12} className="mr-1.5" />}
+          Publish tags
+        </Button>
+        {input && (
+          <Button size="sm" variant="ghost" onClick={reset} className="text-xs text-neutral-400">
+            Cancel
+          </Button>
+        )}
+      </div>
+
+      <Separator className="bg-[#262626]" />
+
+      <div className="flex items-center gap-2">
+        <h5 className="text-xs font-medium text-neutral-300">Published tags</h5>
+        <span className="text-[10px] text-neutral-600">({items.length})</span>
+        <Button
+          size="sm" variant="ghost" onClick={load} disabled={loading}
+          className="ml-auto h-7 text-[11px] text-neutral-400"
+        >
+          <RefreshCw size={11} className={cn('mr-1', loading && 'animate-spin')} /> Refresh
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500 py-2">
+          <Loader2 size={14} className="animate-spin" /> Loading…
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-neutral-600 py-2">Nothing tagged yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map(it => {
+            const href = targetLink(it.key)
+            return (
+              <li
+                key={it.key}
+                className="flex items-center gap-2 rounded-md border border-[#262626] bg-[#212121] px-2.5 py-1.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    {it.resolving ? (
+                      <span className="text-xs text-neutral-600">Resolving…</span>
+                    ) : (
+                      <span className="truncate text-xs text-neutral-200">
+                        {it.title || <span className="font-mono text-neutral-500">{it.key.slice(0, 28)}…</span>}
+                      </span>
+                    )}
+                    {href && (
+                      <a
+                        href={href} target="_blank" rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="text-neutral-500 hover:text-purple-400 shrink-0"
+                      >
+                        <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                    {it.overlay.contentWarning && (
+                      <span className="inline-flex items-center gap-1 rounded bg-yellow-500/10 px-1.5 py-0.5 text-[10px] text-yellow-500">
+                        <AlertTriangle size={9} /> {it.overlay.contentWarning}
+                      </span>
+                    )}
+                    {it.overlay.isRepost && (
+                      <span className="inline-flex items-center gap-1 rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] text-purple-400">
+                        <Repeat2 size={9} /> repost{it.overlay.originalAuthor ? ` · ${it.overlay.originalAuthor}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => editItem(it)} disabled={publishing}
+                  className="shrink-0 rounded p-1 text-neutral-500 hover:text-purple-400"
+                  title="Edit these tags"
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  onClick={() => clearItem(it)} disabled={publishing}
+                  className="shrink-0 rounded p-1 text-neutral-500 hover:text-red-400"
+                  title="Clear all tags from this post"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }
