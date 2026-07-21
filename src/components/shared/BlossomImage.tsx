@@ -110,7 +110,7 @@ export function useResolvedImageSrc(src: string | undefined): string | undefined
     const servers = useSettingsStore.getState().getAllEnabledBlossomUrls()
     const ext = resolved.match(/(\.[a-zA-Z0-9]+)(?:[?#]|$)/)?.[1] || ''
     const candidates = blossomFirst(resolved, hash, ext, servers)
-    loadVerifiedImage(candidates, hash)
+    loadVerifiedImage(candidates, hash, resolved)
       .then(res => { if (!cancelled) setUrl(res.url || resolved) })
       .catch(() => { if (!cancelled) setUrl(resolved) })
     return () => { cancelled = true }
@@ -236,7 +236,7 @@ function VerifiedImage({ alt, className, fallback, loading = 'lazy', onLoad, onE
     const servers = useSettingsStore.getState().getAllEnabledBlossomUrls()
     const ext = resolvedSrc.match(/(\.[a-zA-Z0-9]+)(?:[?#]|$)/)?.[1] || ''
     const candidates = blossomFirst(resolvedSrc, hash, ext, servers)
-    loadVerifiedImage(candidates, hash)
+    loadVerifiedImage(candidates, hash, resolvedSrc)
       .then(res => {
         if (cancelled) return
         if (!res.url) retry()

@@ -475,6 +475,7 @@ const inflightImageLoads = new Map<string, Promise<VerifiedImageResult>>()
 export function loadVerifiedImage(
   candidates: string[],
   expectedHash: string,
+  originalUrl: string,
   stallTimeoutMs = 60000,
   attempts = 2,
 ): Promise<VerifiedImageResult> {
@@ -484,7 +485,7 @@ export function loadVerifiedImage(
   const inflight = inflightImageLoads.get(expectedHash)
   if (inflight) return inflight
 
-  const load = loadVerifiedImageUncached(candidates, expectedHash, stallTimeoutMs, attempts)
+  const load = loadVerifiedImageUncached(candidates, expectedHash, originalUrl, stallTimeoutMs, attempts)
   inflightImageLoads.set(expectedHash, load)
   return load.finally(() => inflightImageLoads.delete(expectedHash))
 }
@@ -492,6 +493,7 @@ export function loadVerifiedImage(
 async function loadVerifiedImageUncached(
   candidates: string[],
   expectedHash: string,
+  originalUrl: string,
   stallTimeoutMs: number,
   attempts: number,
 ): Promise<VerifiedImageResult> {
@@ -539,9 +541,13 @@ async function loadVerifiedImageUncached(
     return result
   }
 
-  // Everything failed (likely transient). Don't cache, so a later call retries;
-  // hand back the original URL so the browser's own <img> load can still try.
-  return { url: candidates[0] ?? '', status: 'unverified' }
+  // Nothing could even be fetched. Often not transient and not an outage: plenty
+  // of hosts serve images without CORS headers, so `fetch` can never read them
+  // while a plain <img> displays them perfectly well. Hand back the *original*
+  // URL — not candidates[0], which is now a Blossom mirror that evidently
+  // doesn't have the file — so the browser can load it the way it always could.
+  // Left uncached, so a later call re-checks.
+  return { url: originalUrl, status: 'unverified' }
 }
 
 // ─── Hash Verification ──────────────────────────────────────────────
