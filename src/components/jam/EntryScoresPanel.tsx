@@ -11,10 +11,12 @@ import { cn } from '@/lib/utils'
  * This entry's scores, computed on demand.
  *
  * Only the top 100 of each track is published, so for most entries this is the
- * only way to see a result — and during voting, before any tally exists, it's the
- * only way for anyone. Deliberately behind a button: judges cost one fetch but
- * the community track costs criteria × (max+1) count queries, which shouldn't run
- * on every page view.
+ * only way to see a result. Deliberately behind a button: judges cost one fetch
+ * but the community track costs criteria × (max+1) count queries, which
+ * shouldn't run on every page view.
+ *
+ * The caller only mounts this once voting has closed — a running average shown
+ * mid-vote anchors people who haven't voted yet. Don't render it earlier.
  *
  * This is a live view, not a record. It reads whatever relays hold right now,
  * nothing signs it, and two people may see different numbers.

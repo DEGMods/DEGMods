@@ -254,9 +254,13 @@ export function ModJamBanner({
           </div>
         )}
 
-        {/* Only the top 100 of each track is published, and nothing at all before
-            the tally runs — so every entry keeps a route to its own numbers. */}
-        {(jam.votingEnabled || jam.userVotingEnabled) && now >= jam.end && (
+        {/* Only the top 100 of each track is published, so every entry keeps a
+            route to its own numbers — but not until voting is over. A running
+            average shown to people who haven't voted yet anchors them, lets
+            entrants see who to rally against, and nudges later judges toward
+            earlier ones. The ballots are public either way, so this isn't a
+            secret; it just stops the client handing out the bias for free. */}
+        {(jam.votingEnabled || jam.userVotingEnabled) && status === 'ended' && (
           <EntryScoresPanel jam={jam} entryCoordinate={submissionCoordinate} />
         )}
 
