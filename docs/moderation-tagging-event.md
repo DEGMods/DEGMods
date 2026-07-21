@@ -196,8 +196,10 @@ content is unaffected, so what's at risk is only the *correction* layer.
    works too.
 2. Paste it into the address field.
 3. Toggle the tags to apply:
-   - **Content warning (NSFW)** — with the reason readers will see (defaults to
-     `nsfw`).
+   - **Content warning (NSFW)** — publishes `["content-warning", "nsfw"]`. The
+     reason isn't editable here; readers see `nsfw`. (A post's *own* author can
+     still set any reason they like on their own event — this is only the
+     correction path.)
    - **Repost** — optionally with the original author as an npub, a name, or a
      link.
 4. **Publish tags.**

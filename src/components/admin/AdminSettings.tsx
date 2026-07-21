@@ -2254,7 +2254,6 @@ interface TaggedItem {
 function ModerationTagsSection() {
   const [input, setInput] = useState('')
   const [nsfw, setNsfw] = useState(false)
-  const [nsfwReason, setNsfwReason] = useState('nsfw')
   const [repost, setRepost] = useState(false)
   const [repostSource, setRepostSource] = useState('')
   const [publishing, setPublishing] = useState(false)
@@ -2293,7 +2292,7 @@ function ModerationTagsSection() {
   useEffect(() => { load() }, [load])
 
   const reset = () => {
-    setInput(''); setNsfw(false); setNsfwReason('nsfw'); setRepost(false); setRepostSource('')
+    setInput(''); setNsfw(false); setRepost(false); setRepostSource('')
   }
 
   const publishOverlay = async (
@@ -2330,7 +2329,7 @@ function ModerationTagsSection() {
   const submit = async () => {
     if (!nsfw && !repost) { toast.error('Pick at least one tag to apply'); return }
     const ok = await publishOverlay(input, {
-      contentWarning: nsfw ? (nsfwReason.trim() || 'nsfw') : undefined,
+      contentWarning: nsfw ? 'nsfw' : undefined,
       isRepost: repost,
       originalAuthor: repost ? repostSource.trim() || undefined : undefined,
     }, 'Tags published')
@@ -2340,7 +2339,6 @@ function ModerationTagsSection() {
   const editItem = (it: TaggedItem) => {
     setInput(it.key)
     setNsfw(!!it.overlay.contentWarning)
-    setNsfwReason(it.overlay.contentWarning || 'nsfw')
     setRepost(!!it.overlay.isRepost)
     setRepostSource(it.overlay.originalAuthor || '')
   }
@@ -2380,14 +2378,6 @@ function ModerationTagsSection() {
           <AlertTriangle size={13} className="text-yellow-500" />
           <span className="text-xs text-neutral-300">Content warning (NSFW)</span>
         </div>
-        {nsfw && (
-          <Input
-            value={nsfwReason}
-            onChange={e => setNsfwReason(e.target.value)}
-            placeholder="Reason shown to readers (e.g. nsfw, gore)"
-            className="bg-[#1c1c1c] border-[#262626] text-white text-xs"
-          />
-        )}
 
         <div className="flex items-center gap-2 pt-1">
           <Switch checked={repost} onCheckedChange={setRepost} />
