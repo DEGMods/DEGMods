@@ -23,6 +23,8 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .idea/
+# Claude Code: local tool permissions and dev-server paths, both machine-specific
+.claude/
 .DS_Store
 Thumbs.db
 *.sw?
