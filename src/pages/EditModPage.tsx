@@ -6,6 +6,7 @@ import { jamNaddrFromCoordinate } from '@/lib/nostr/jam'
 import { signAndPublish } from '@/lib/nostr/publish'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { cacheEvent } from '@/lib/nostr/eventCache'
+import { decodePostParam } from '@/lib/nostr/nipShort'
 import { nip19 } from 'nostr-tools'
 import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
@@ -31,9 +32,17 @@ export function EditModPage() {
     const loadMod = async () => {
       const relayUrls = useSettingsStore.getState().getAllEnabledRelayUrls('read')
       try {
-        const decoded = nip19.decode(naddr)
-        if (decoded.type !== 'naddr') throw new Error('Invalid naddr')
-        const { identifier, pubkey: eventPubkey, kind } = decoded.data as { identifier: string; pubkey: string; kind: number }
+        // The address here is whatever the mod page's URL held, which is a
+        // NIP-SHORT address once one resolves — decoding it as bech32 fails on
+        // the letters bech32 doesn't have ("Unknown letter: b"). Resolve it the
+        // same way the mod page does so short links, reloads and bookmarks all
+        // reach the editor.
+        const decoded = await decodePostParam(naddr, relayUrls)
+        if (!decoded) throw new Error('Mod not found')
+        // An ambiguous short address can't be edited blind — send them to the
+        // mod page, which offers the chooser, and they can edit from there.
+        if ('candidates' in decoded) { navigate(`/mod/${naddr}`, { replace: true }); return }
+        const { identifier, pubkey: eventPubkey, kind } = decoded
 
         // LEGACY: old mods can't be edited — send them back to the mod post.
         if (kind === LEGACY_MOD_KIND) { navigate(`/mod/${naddr}`, { replace: true }); return }

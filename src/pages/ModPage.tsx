@@ -491,7 +491,14 @@ export default function ModPage() {
                 {/* LEGACY: legacy mods can't be edited — migrate first. */}
                 {!mod.legacy && (
                   <DropdownMenuItem
-                    onClick={() => navigate(`/mod/${naddr}/edit`)}
+                    // The naddr built from the loaded event, not the URL param —
+                    // by now the bar may hold a short address, and handing that
+                    // on makes the editor resolve it all over again.
+                    onClick={() => navigate(`/mod/${nip19.naddrEncode({
+                      kind: mod.legacy ? LEGACY_MOD_KIND : KINDS.MOD,
+                      pubkey: mod.pubkey,
+                      identifier: mod.dTag,
+                    })}/edit`)}
                     className="cursor-pointer"
                   >
                     <Edit className="h-4 w-4 mr-2" />
