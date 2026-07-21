@@ -742,6 +742,13 @@ on its own, cheaply, without the published result. Clients surface this as an
 explicit action on the entry (DEG Mods: a button on the mod post), not as an
 automatic fetch on every page view.
 
+**Not before `voting_end`.** A running average shown while ballots are still
+being cast anchors voters who haven't scored yet toward the current number, lets
+entrants see who to rally against, and nudges later judges toward earlier ones.
+The ballots are public events, so this is not a secrecy claim — a determined
+reader can always count them. It only stops a client handing out the bias by
+default. DEG Mods gates the button on the jam being `ended`.
+
 - **Judges:** one events fetch — `{ "kinds":[31243], "#a":["31142:<mod-pk>:<mod-d>"], "authors":[<judges>], "since":<end>, "until":<voting_end> }`. Bounded by the judge count; validated and averaged exactly like the main tally.
 - **Community:** the same COUNT histogram as the main tally, for this entry only — *criteria × (score_max + 1)* tiny queries.
 

@@ -139,6 +139,17 @@ export function JamVoteModal({
   const setScore = (label: string, v: number) => setScores((p) => ({ ...p, [label]: v }))
   const allScored = criteria.every((c) => scores[c.label] != null)
 
+  /**
+   * What this ballot is worth overall — a plain mean, matching how the tally
+   * aggregates a track (jamVoting.trackAggregate). Computed here rather than
+   * fetched: it's this voter's own scores, so it needs no relay and can't
+   * disagree with anyone else's view.
+   */
+  const overall = useMemo(
+    () => (allScored ? criteria.reduce((sum, c) => sum + (scores[c.label] ?? 0), 0) / criteria.length : null),
+    [allScored, criteria, scores],
+  )
+
   const publish = async () => {
     if (!allScored) return
     setPublishing(true)
@@ -209,6 +220,26 @@ export function JamVoteModal({
               </div>
             )
           })}
+
+          {/* What this ballot actually gives the entry. Worth showing because the
+              weighting isn't guessable: the tally takes a plain mean of the
+              criteria (jamVoting.trackAggregate), so a 100 in one category
+              doesn't carry a category it's paired with. Shown once every
+              criterion has a score, since a partial mean would mislead. */}
+          {!isSingle && allScored && (
+            <div className="flex items-baseline justify-between rounded-md border border-[#262626] bg-[#212121] px-2.5 py-2">
+              <span className="text-sm text-neutral-300">Overall</span>
+              <span className="tabular-nums text-sm font-semibold text-[#fc4462]">
+                {overall!.toFixed(1)}
+                <span className="text-neutral-600"> / {Math.min(criteria[0].max, MAX_RENDERED_SCORE)}</span>
+              </span>
+            </div>
+          )}
+          {!isSingle && allScored && (
+            <p className="-mt-3 text-[11px] text-neutral-500">
+              The average of your {criteria.length} scores — every criterion counts the same.
+            </p>
+          )}
 
           {clamped && !readOnly && (
             <p className="text-[11px] text-amber-400/90">
