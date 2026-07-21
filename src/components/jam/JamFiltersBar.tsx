@@ -14,6 +14,7 @@ import {
 import { TagEditor, SourcesEditor } from '@/components/search/ModFiltersBar'
 import { MonthPicker } from '@/components/jam/MonthPicker'
 import { useJamFiltersStore, type JamStatusFilter, type FiltersStore } from '@/stores/jamFiltersStore'
+import { requestAdult } from '@/stores/ageGateStore'
 import { DEFAULT_MIN_POW, type NsfwMode } from '@/stores/modFiltersStore'
 import { MAX_SPAN, addMonths, effectiveRange } from '@/lib/jams/monthRange'
 import { monthLabel } from '@/lib/nostr/jam'
@@ -129,7 +130,10 @@ export function JamFiltersBar({
             {NSFW_OPTIONS.map((o) => (
               <DropdownMenuItem
                 key={o.value}
-                onClick={() => setNsfwMode(o.value)}
+                // 'hide' needs no check; asking to see NSFW does.
+                onClick={() => o.value === 'hide'
+                  ? setNsfwMode(o.value)
+                  : requestAdult(() => setNsfwMode(o.value))}
                 className="cursor-pointer justify-between gap-6 text-neutral-200"
               >
                 {o.label}

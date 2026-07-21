@@ -8,6 +8,7 @@ import {
   type NsfwMode, type RepostMode, type EmulationMode, type LegacyMode, type SourceEntry,
 } from '@/stores/modFiltersStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { requestAdult } from '@/stores/ageGateStore'
 import { useModerationStore } from '@/stores/moderationStore'
 import { useWotStore } from '@/stores/wotStore'
 import { Button } from '@/components/ui/button'
@@ -321,7 +322,10 @@ export function ModFiltersBar({ availableClients, resultCount, currentCount, leg
             {NSFW_OPTIONS.map((o) => (
               <DropdownMenuItem
                 key={o.value}
-                onClick={() => setNsfwMode(o.value)}
+                // 'hide' needs no check; asking to see NSFW does.
+                onClick={() => o.value === 'hide'
+                  ? setNsfwMode(o.value)
+                  : requestAdult(() => setNsfwMode(o.value))}
                 className="cursor-pointer justify-between gap-6 text-neutral-200"
               >
                 {o.label}

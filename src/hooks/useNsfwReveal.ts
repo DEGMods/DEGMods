@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { usePreferencesStore } from '@/stores/preferencesStore'
+import { requestAdult } from '@/stores/ageGateStore'
 
 /**
  * Whether content-warned media on this post should be shown uncovered.
@@ -10,13 +11,14 @@ import { usePreferencesStore } from '@/stores/preferencesStore'
  * places and not others.
  *
  * `reveal()` is per-post and deliberately one-way — nothing re-covers media the
- * reader chose to look at.
+ * reader chose to look at. It goes through the adult check first, so declining
+ * leaves the media covered rather than uncovering it anyway.
  */
 export function useNsfwReveal(): { revealed: boolean; reveal: () => void } {
   const showNsfwMedia = usePreferencesStore((s) => s.showNsfwMedia)
   const [clicked, setClicked] = useState(false)
   return {
     revealed: showNsfwMedia || clicked,
-    reveal: () => setClicked(true),
+    reveal: () => requestAdult(() => setClicked(true)),
   }
 }

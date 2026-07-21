@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { Header } from './Header'
 import { Footer } from './Footer'
 import { AnnouncementBanner } from './AnnouncementBanner'
+import { AgeGateDialog } from '@/components/shared/AgeGateDialog'
 import { useAnalytics } from '@/hooks/useAnalytics'
 
 export function MainLayout() {
@@ -18,6 +19,8 @@ export function MainLayout() {
         </div>
       </main>
       <Footer />
+      {/* One prompt for every route into sensitive media. */}
+      <AgeGateDialog />
     </div>
   )
 }

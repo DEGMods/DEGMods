@@ -4,6 +4,7 @@ import AdminSettings from '@/components/admin/AdminSettings'
 import { cn } from '@/lib/utils'
 import { useSettingsStore, relayListSignature, blossomListSignature } from '@/stores/settingsStore'
 import { usePreferencesStore } from '@/stores/preferencesStore'
+import { requestAdult } from '@/stores/ageGateStore'
 import { useWotStore } from '@/stores/wotStore'
 import { useDnnStore } from '@/stores/dnnStore'
 import { dnnService, type DnnNodeInfo } from '@/lib/dnn/dnnService'
@@ -816,7 +817,12 @@ function PreferencesSettings() {
             label="Show NSFW media without asking"
             description="Only removes the cover. Which posts appear in listings is still controlled by the NSFW filter on each page."
             checked={showNsfwMedia}
-            onCheckedChange={setShowNsfwMedia}
+            onCheckedChange={(v) => {
+              // Only turning it ON needs the check; switching it back off is
+              // always allowed, and clears the confirmation with it.
+              if (!v) { setShowNsfwMedia(false); return }
+              requestAdult(() => setShowNsfwMedia(true))
+            }}
           />
         </div>
       </SettingsCard>
