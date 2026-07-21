@@ -274,24 +274,37 @@ async function runBatch(batch: Batch): Promise<void> {
 /**
  * One REQ per relay carrying every filter in the batch.
  *
- * Falls back to running the reads separately if no relay managed an EOSE — a
- * relay that refuses a multi-filter REQ closes the subscription instead, and
- * that must not turn into "everyone got zero results", which is precisely the
- * silent-empty failure this file exists to prevent.
+ * Any relay whose subscription closes WITHOUT an EOSE has its share of the batch
+ * re-run as separate single-filter reads. A relay that doesn't accept
+ * multi-filter REQs closes instead of answering, and since the other relays
+ * still EOSE the batch would otherwise settle happily without it — that relay
+ * silently dropping out of the read set, which reads as "the data isn't there"
+ * rather than as a bug.
+ *
+ * A relay we couldn't *connect* to is not retried: it's down, not fussy, and
+ * re-asking would add a full timeout to every batch for as long as it stays down.
  */
+type RelayOutcome = 'eose' | 'closed' | 'unreachable'
+
 function runMergedBatch(batch: Batch): Promise<void> {
   return new Promise((done) => {
     const filters = batch.requests.map((r) => r.filter)
     const subs: Array<{ close: () => void }> = []
     let pending = batch.requests.length
     let relaysLeft = batch.relayUrls.length
-    let anyEose = false
+    const refused: string[] = []
+    let closed = false
     let finished = false
 
-    const cleanup = () => {
+    const closeSubs = () => {
+      if (closed) return
+      closed = true
+      for (const s of subs) { try { s.close() } catch { /* already closed */ } }
+    }
+    const finish = () => {
       if (finished) return
       finished = true
-      for (const s of subs) { try { s.close() } catch { /* already closed */ } }
+      closeSubs()
       done()
     }
 
@@ -300,24 +313,29 @@ function runMergedBatch(batch: Batch): Promise<void> {
       req.settled = true
       clearTimeout(req.timer)
       req.resolve(req.events)
-      if (--pending === 0) cleanup()
+      if (--pending === 0) finish()
     }
 
     const settleAll = () => { for (const r of batch.requests) settle(r) }
 
-    // A relay is "done" on EOSE, on close, or on failing to connect. Counted
-    // once each way — oneose and onclose can both fire for the same relay.
-    const relayDone = (eose: boolean) => {
-      if (eose) anyEose = true
+    // Every relay reports exactly once — oneose and onclose can both fire.
+    const relayDone = (url: string, outcome: RelayOutcome) => {
+      if (outcome === 'closed') refused.push(url)
       if (--relaysLeft > 0) return
-      if (anyEose) { settleAll(); return }
-      // Nobody EOSE'd: assume the merged REQ was refused and retry separately.
-      cleanup()
+      if (refused.length === 0) { settleAll(); return }
+
+      // Re-ask the relays that closed on us, one filter at a time. Results merge
+      // into what the other relays already gave, so this only ever adds.
+      closeSubs()
       void Promise.all(batch.requests.map(async (req) => {
         if (req.settled) return
-        const events = await fetchEventsUnthrottled(batch.relayUrls, req.filter, req.timeoutMs, req.maxWait)
-        if (!req.settled) { req.settled = true; req.resolve(events) }
-      })).then(() => done())
+        const events = await fetchEventsUnthrottled(refused, req.filter, req.timeoutMs, req.maxWait)
+        for (const ev of events) {
+          if (req.seen.has(ev.id)) continue
+          req.seen.add(ev.id)
+          req.events.push(ev)
+        }
+      })).finally(() => { settleAll(); finish() })
     }
 
     for (const req of batch.requests) {
@@ -329,7 +347,11 @@ function runMergedBatch(batch: Batch): Promise<void> {
 
     for (const url of batch.relayUrls) {
       let counted = false
-      const once = (eose: boolean) => { if (!counted) { counted = true; relayDone(eose) } }
+      const once = (outcome: RelayOutcome) => {
+        if (counted) return
+        counted = true
+        relayDone(url, outcome)
+      }
       pool.ensureRelay(url, { connectionTimeout: 5000 }).then((relay) => {
         const sub = relay.subscribe(filters, {
           onevent: (event: NostrEvent) => {
@@ -341,11 +363,12 @@ function runMergedBatch(batch: Batch): Promise<void> {
               }
             }
           },
-          oneose: () => once(true),
-          onclose: () => once(false),
+          oneose: () => once('eose'),
+          onclose: () => once('closed'),
         })
         subs.push(sub)
-      }).catch(() => once(false))
+        // Couldn't connect — down, not fussy. Not worth re-asking.
+      }).catch(() => once('unreachable'))
     }
   })
 }
