@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useShortUrl } from '@/hooks/useShortUrl'
 import { decodePostParam, selectorFor } from '@/lib/nostr/nipShort'
@@ -126,7 +127,7 @@ export function JamPage() {
   const [choices, setChoices] = useState<NostrEvent[]>([])
   const [deleted, setDeleted] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [revealed, setRevealed] = useState(false)
+  const { revealed, reveal } = useNsfwReveal()
   const [tallyOpen, setTallyOpen] = useState(false)
   const [showRawDialog, setShowRawDialog] = useState(false)
   const [readableRaw, setReadableRaw] = useState(false)
@@ -266,7 +267,7 @@ export function JamPage() {
               <div className="flex h-full w-full items-center justify-center bg-[#212121] text-neutral-600">No image</div>
             )}
             {hasWarning && (
-              <button onClick={() => setRevealed(true)} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/60 text-neutral-300">
+              <button onClick={() => reveal()} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/60 text-neutral-300">
                 <AlertTriangle className="h-7 w-7 text-yellow-500" />
                 <span className="text-sm font-medium">{jam.contentWarning}</span>
                 <span className="text-xs text-neutral-500">Click to reveal</span>
@@ -339,7 +340,7 @@ export function JamPage() {
           {jam.content && <CollapsibleMarkdown content={jam.content} />}
 
           {jam.screenshots.length > 0 && (
-            <Section title="Gallery"><ModScreenshots screenshots={jam.screenshots} blurred={hasWarning} onReveal={() => setRevealed(true)} /></Section>
+            <Section title="Gallery"><ModScreenshots screenshots={jam.screenshots} blurred={hasWarning} onReveal={() => reveal()} /></Section>
           )}
 
           {/* Schedule */}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { Hash, Loader2, AlertTriangle, ShieldCheck, ExternalLink } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -80,7 +81,7 @@ export function HubEventCard({
 }) {
   const [hub, setHub] = useState<Hub | null>(null)
   const [loading, setLoading] = useState(true)
-  const [revealed, setRevealed] = useState(false)
+  const { revealed, reveal } = useNsfwReveal()
   const [openOpen, setOpenOpen] = useState(false)
 
   useEffect(() => {
@@ -165,7 +166,7 @@ export function HubEventCard({
         <div className="flex items-center gap-2 pt-0.5">
           {hideMedia && (
             <button
-              onClick={() => setRevealed(true)}
+              onClick={() => reveal()}
               className="rounded-lg border border-[#262626] px-2.5 py-1 text-[11px] text-neutral-300 transition-colors hover:border-[#404040]"
             >
               Show content

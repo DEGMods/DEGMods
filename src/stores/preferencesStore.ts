@@ -21,12 +21,22 @@ interface PreferencesState {
   softModeration: boolean
   hardModeration: boolean
 
+  /**
+   * Show content-warned media without the click-to-reveal step.
+   *
+   * Off by default: someone who hasn't asked for it shouldn't get explicit
+   * media rendered at them. This only removes the *cover* — it doesn't change
+   * which posts are listed, which is the separate NSFW filter on each listing.
+   */
+  showNsfwMedia: boolean
+
   setRenderImages: (v: boolean) => void
   setRenderVideos: (v: boolean) => void
   setRenderAudio: (v: boolean) => void
   setRenderHyperlinks: (v: boolean) => void
   setSoftModeration: (v: boolean) => void
   setHardModeration: (v: boolean) => void
+  setShowNsfwMedia: (v: boolean) => void
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -39,6 +49,7 @@ export const usePreferencesStore = create<PreferencesState>()(
 
       softModeration: true,
       hardModeration: true,
+      showNsfwMedia: false,
 
       setRenderImages: (renderImages) => set({ renderImages }),
       setRenderVideos: (renderVideos) => set({ renderVideos }),
@@ -46,6 +57,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       setRenderHyperlinks: (renderHyperlinks) => set({ renderHyperlinks }),
       setSoftModeration: (softModeration) => set({ softModeration }),
       setHardModeration: (hardModeration) => set({ hardModeration }),
+      setShowNsfwMedia: (showNsfwMedia) => set({ showNsfwMedia }),
     }),
     { name: 'deg-mods:preferences' },
   ),

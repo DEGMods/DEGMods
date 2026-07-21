@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { Link } from 'react-router-dom'
 import { Vote, Eye, Medal, Loader2, AlertCircle, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -50,7 +51,7 @@ export function ModJamBanner({
   const [checkedKey, setCheckedKey] = useState<string | null>(null)
   const [rank, setRank] = useState<{ judge: JamResultRow | null; community: JamResultRow | null } | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
-  const [revealed, setRevealed] = useState(false)
+  const { revealed, reveal } = useNsfwReveal()
   const [jamDeleted, setJamDeleted] = useState(false)
 
   // Load the jam (window, criteria, judges, relays).
@@ -218,7 +219,7 @@ export function ModJamBanner({
               // First click reveals (doesn't navigate), like a mod card — otherwise
               // opening the jam would show the image you chose not to see yet.
               <button
-                onClick={() => setRevealed(true)}
+                onClick={() => reveal()}
                 className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-neutral-300"
               >
                 <AlertTriangle className="h-5 w-5 text-yellow-500" />

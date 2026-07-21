@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
@@ -18,7 +19,7 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 export function JamCard({ jam }: { jam: JamDetails }) {
-  const [revealed, setRevealed] = useState(false)
+  const { revealed, reveal } = useNsfwReveal()
   const [author, setAuthor] = useState<UserProfile | null>(null)
   const now = useNow()
   const hasWarning = !!jam.contentWarning && !revealed
@@ -49,7 +50,7 @@ export function JamCard({ jam }: { jam: JamDetails }) {
 
             {hasWarning && (
               <button
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRevealed(true) }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); reveal() }}
                 className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/60 text-neutral-300"
               >
                 <AlertTriangle className="h-6 w-6 text-yellow-500" />

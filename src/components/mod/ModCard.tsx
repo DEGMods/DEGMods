@@ -11,6 +11,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useModStatus } from '@/hooks/useModeration'
 import { useEffectiveModFlags } from '@/hooks/useModerationTags'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import type { ModDetails } from '@/types/mod'
 
@@ -19,7 +20,7 @@ interface ModCardProps {
 }
 
 export function ModCard({ mod }: ModCardProps) {
-  const [revealed, setRevealed] = useState(false)
+  const { revealed, reveal } = useNsfwReveal()
   const [author, setAuthor] = useState<UserProfile | null>(null)
   const { moderated } = useModStatus(mod.aTag, mod.pubkey)
 
@@ -81,7 +82,7 @@ export function ModCard({ mod }: ModCardProps) {
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  setRevealed(true)
+                  reveal()
                 }}
                 className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-neutral-300 z-10"
               >

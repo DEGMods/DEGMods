@@ -27,7 +27,7 @@ import { toast } from 'sonner'
 import {
   Globe, Server, Database, Cpu, Shield, Plus, Trash2, RefreshCw, Save,
   Loader2, CheckCircle, XCircle, Circle, ArrowUpDown, LogOut, AlertTriangle, RotateCcw,
-  SlidersHorizontal, ShieldAlert, BadgeCheck, MessageSquare, Send, Search, BarChart3
+  SlidersHorizontal, ShieldAlert, BadgeCheck, MessageSquare, Send, Search, BarChart3, Eye
 } from 'lucide-react'
 import type { Event as NostrEvent } from 'nostr-tools'
 
@@ -760,6 +760,7 @@ function PreferencesSettings() {
   const {
     renderImages, renderVideos, renderAudio, renderHyperlinks,
     setRenderImages, setRenderVideos, setRenderAudio, setRenderHyperlinks,
+    showNsfwMedia, setShowNsfwMedia,
   } = usePreferencesStore()
   const { powDifficulty, setPowDifficulty, powFilterDifficulty, setPowFilterDifficulty, analyticsEnabled, setAnalyticsEnabled } = useSettingsStore()
   const [hashRate, setHashRate] = useState<number | null>(getCachedHashRate())
@@ -801,6 +802,21 @@ function PreferencesSettings() {
             description="Turning this off stops the script loading at all, rather than just ignoring it."
             checked={analyticsEnabled}
             onCheckedChange={setAnalyticsEnabled}
+          />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        icon={Eye}
+        title="Sensitive media"
+        description="Media on posts marked with a content warning is covered until you click to reveal it. Turn this on to show it straight away, everywhere."
+      >
+        <div className="divide-y divide-[#262626]">
+          <ToggleRow
+            label="Show NSFW media without asking"
+            description="Only removes the cover. Which posts appear in listings is still controlled by the NSFW filter on each page."
+            checked={showNsfwMedia}
+            onCheckedChange={setShowNsfwMedia}
           />
         </div>
       </SettingsCard>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { useShortUrl } from '@/hooks/useShortUrl'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { useModerationOverlay } from '@/hooks/useModerationTags'
 import { decodePostParam, selectorFor } from '@/lib/nostr/nipShort'
 import { ShortAddressChooser, postPreview } from '@/components/social/ShortAddressChooser'
@@ -108,7 +109,7 @@ export default function ModPage() {
   const [notFound, setNotFound] = useState(false)
   const [choices, setChoices] = useState<NostrEvent[]>([])
   const [deleted, setDeleted] = useState(false)
-  const [cwRevealed, setCwRevealed] = useState(false)
+  const { revealed: cwRevealed, reveal: revealCw } = useNsfwReveal()
   const [heroLoaded, setHeroLoaded] = useState(false)
   const [heroShowImage, setHeroShowImage] = useState(false) // toggle featured video ⇄ image
   const [permsOpen, setPermsOpen] = useState(false)
@@ -395,7 +396,7 @@ export default function ModPage() {
             muted
             playsInline
             onLoadedData={() => setHeroLoaded(true)}
-            onClick={() => hasCW && setCwRevealed(true)}
+            onClick={() => hasCW && revealCw()}
           />
         </>
       ) : (
@@ -413,7 +414,7 @@ export default function ModPage() {
       {hasCW && !cwRevealed && (
         <div
           className="absolute inset-0 z-[3] flex flex-col items-center justify-center bg-black/40 cursor-pointer"
-          onClick={() => setCwRevealed(true)}
+          onClick={() => revealCw()}
         >
           <Eye className="h-8 w-8 text-neutral-300 mb-2" />
           <span className="text-sm text-neutral-300 font-medium">
@@ -555,7 +556,7 @@ export default function ModPage() {
               <ModScreenshots
                 screenshots={mod.screenshots}
                 blurred={heroBlurred}
-                onReveal={() => setCwRevealed(true)}
+                onReveal={() => revealCw()}
               />
             </section>
           )}
