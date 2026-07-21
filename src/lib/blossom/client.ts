@@ -299,9 +299,11 @@ export async function downloadFileWithProgress(
     stallTimeoutMs?: number
     signal?: AbortSignal
     resolveGate?: GateResolver
+    /** Override the HTTP cache mode. Defaults to 'no-store' — see below. */
+    cache?: RequestCache
   } = {},
 ): Promise<Blob> {
-  const { expectedHash, onProgress, stallTimeoutMs = 30000, signal, resolveGate } = opts
+  const { expectedHash, onProgress, stallTimeoutMs = 30000, signal, resolveGate, cache = 'no-store' } = opts
   const controller = new AbortController()
   if (signal) signal.addEventListener('abort', () => controller.abort(), { once: true })
 
@@ -313,12 +315,17 @@ export async function downloadFileWithProgress(
   arm()
 
   try {
-    // `no-store`: never keep the (often hundreds-of-MB) file in the browser's HTTP
-    // cache — the user already gets the saved file; an invisible second copy would
-    // just eat disk. It also guarantees the download gate is re-evaluated instead
-    // of a cached 200 slipping past it. Hash verification is unaffected (it hashes
-    // whatever bytes come back).
-    let response = await fetch(url, { signal: controller.signal, cache: 'no-store' })
+    // Defaults to `no-store`: never keep the (often hundreds-of-MB) mod file in
+    // the browser's HTTP cache — the user already gets the saved file; an
+    // invisible second copy would just eat disk. It also guarantees the download
+    // gate is re-evaluated instead of a cached 200 slipping past it. Hash
+    // verification is unaffected (it hashes whatever bytes come back).
+    //
+    // Image verification overrides this: those files are small and get fetched
+    // again on every visit purely to re-hash them, so letting the HTTP cache do
+    // its job turns a repeat page load from "download every image again" into
+    // almost nothing.
+    let response = await fetch(url, { signal: controller.signal, cache })
 
     // Download gate (BUD-POW / BUD-Ads): a 428 carries challenge headers. Satisfy
     // them (mine PoW, show ad) and retry the identical GET once with the proofs.
@@ -330,7 +337,7 @@ export async function downloadFileWithProgress(
         clearTimeout(timer)
         const proofHeaders = await resolveGate(challenge, url)
         arm()
-        response = await fetch(url, { signal: controller.signal, headers: proofHeaders, cache: 'no-store' })
+        response = await fetch(url, { signal: controller.signal, headers: proofHeaders, cache })
       }
     }
 
@@ -452,15 +459,23 @@ const verifiedImageCache = new LRUCache<string, VerifiedImageResult>({
 const inflightImageLoads = new Map<string, Promise<VerifiedImageResult>>()
 
 /**
- * Fetch and SHA-256-verify an image across candidate URLs (original + other
- * Blossom servers). Returns an object URL for the verified bytes; if no
+ * Fetch and SHA-256-verify an image across candidate URLs (Blossom servers
+ * first, then the original). Returns an object URL for the verified bytes; if no
  * candidate matches the expected hash it returns the first fetched bytes
- * flagged `mismatch`. Cached per hash, and de-duped while in flight.
+ * flagged `mismatch`. De-duped while in flight; only *verified* results and
+ * conclusive mismatches are cached (see below).
+ *
+ * The stall timeout is deliberately generous. It exists to abandon a dead
+ * connection, not a slow one — and it measures silence, so a request merely
+ * queued behind others (a grid of images all verifying at once, against the
+ * browser's per-host connection limit) looks identical to a stall. At 15s a
+ * whole listing's worth of contention was enough to abort perfectly good
+ * fetches, and each abort turned into a bogus "mismatch" on screen.
  */
 export function loadVerifiedImage(
   candidates: string[],
   expectedHash: string,
-  stallTimeoutMs = 15000,
+  stallTimeoutMs = 60000,
   attempts = 2,
 ): Promise<VerifiedImageResult> {
   const cached = verifiedImageCache.get(expectedHash)
@@ -481,12 +496,20 @@ async function loadVerifiedImageUncached(
   attempts: number,
 ): Promise<VerifiedImageResult> {
   let firstUrl: string | null = null
+  // Whether any candidate failed to answer at all this pass. A mismatch reached
+  // with errors in the mix isn't a verdict — the server holding the right bytes
+  // may simply be the one that didn't reply.
+  let hadError = false
   // Retry the whole candidate set a few times: a transient disruption (network
   // blip, backgrounded tab aborting the fetch) shouldn't permanently fail it.
   for (let attempt = 0; attempt < attempts; attempt++) {
+    hadError = false
     for (const url of candidates) {
       try {
-        const blob = await downloadFileWithProgress(url, { stallTimeoutMs })
+        // 'default' rather than the no-store used for mod files: an image is
+        // re-fetched on every visit only to re-hash it, so the HTTP cache is
+        // exactly what should answer the second time.
+        const blob = await downloadFileWithProgress(url, { stallTimeoutMs, cache: 'default' })
         const actual = await computeFileHash(blob)
         if (actual === expectedHash) {
           const result: VerifiedImageResult = { url: URL.createObjectURL(blob), status: 'verified' }
@@ -496,11 +519,12 @@ async function loadVerifiedImageUncached(
         }
         if (!firstUrl) firstUrl = URL.createObjectURL(blob)
       } catch {
-        // try the next candidate
+        hadError = true
       }
     }
-    // Got bytes (just a hash mismatch) — retrying won't change that.
-    if (firstUrl) break
+    // Every candidate answered and none matched — retrying can't change that.
+    // If some errored, it can, so fall through to another pass.
+    if (firstUrl && !hadError) break
     if (attempt < attempts - 1) {
       await new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
     }
@@ -508,7 +532,10 @@ async function loadVerifiedImageUncached(
 
   if (firstUrl) {
     const result: VerifiedImageResult = { url: firstUrl, status: 'mismatch' }
-    verifiedImageCache.set(expectedHash, result)
+    // Only remember a mismatch that every server agreed on. Caching one reached
+    // through errors would let a single bad moment mark an image "modified" for
+    // the rest of the session, with no way to re-check it.
+    if (!hadError) verifiedImageCache.set(expectedHash, result)
     return result
   }
 

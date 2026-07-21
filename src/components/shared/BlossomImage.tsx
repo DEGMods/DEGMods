@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { loadVerifiedImage } from '@/lib/blossom/client'
+import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useImageSizeGate, ImageTooLarge } from '@/components/shared/SafeImage'
 
@@ -53,6 +54,27 @@ export function resolveImageUrl(url: string | undefined): string | undefined {
 }
 
 /**
+ * Candidate URLs to verify against, **Blossom servers before the original**.
+ *
+ * The order matters more than it looks. Plenty of hosts name files after a
+ * hash without being content-addressed — image.nostr.build serves a re-encoded
+ * copy under the original's hash, so it can never match its own filename.
+ * Trying it first meant every such image downloaded the full mismatching file,
+ * kept those bytes as the fallback, and only then went looking for the real
+ * one. Asking the Blossom servers first usually finds the matching copy
+ * immediately and never fetches the bad one at all.
+ *
+ * The original stays in the list, last, so an image held nowhere else still
+ * loads — at the cost of a few quick 404s ahead of it.
+ */
+function blossomFirst(originalUrl: string, hash: string, ext: string, servers: string[]): string[] {
+  return [...new Set([
+    ...servers.map((s) => `${s.replace(/\/$/, '')}/${hash}${ext}`),
+    originalUrl,
+  ])]
+}
+
+/**
  * Build alternative Blossom URLs from a hash.
  */
 function buildAlternativeUrls(originalUrl: string, hash: string): string[] {
@@ -87,7 +109,7 @@ export function useResolvedImageSrc(src: string | undefined): string | undefined
     let cancelled = false
     const servers = useSettingsStore.getState().getAllEnabledBlossomUrls()
     const ext = resolved.match(/(\.[a-zA-Z0-9]+)(?:[?#]|$)/)?.[1] || ''
-    const candidates = [...new Set([resolved, ...servers.map(s => `${s.replace(/\/$/, '')}/${hash}${ext}`)])]
+    const candidates = blossomFirst(resolved, hash, ext, servers)
     loadVerifiedImage(candidates, hash)
       .then(res => { if (!cancelled) setUrl(res.url || resolved) })
       .catch(() => { if (!cancelled) setUrl(resolved) })
@@ -213,7 +235,7 @@ function VerifiedImage({ alt, className, fallback, loading = 'lazy', onLoad, onE
     let cancelled = false
     const servers = useSettingsStore.getState().getAllEnabledBlossomUrls()
     const ext = resolvedSrc.match(/(\.[a-zA-Z0-9]+)(?:[?#]|$)/)?.[1] || ''
-    const candidates = [...new Set([resolvedSrc, ...servers.map(s => `${s.replace(/\/$/, '')}/${hash}${ext}`)])]
+    const candidates = blossomFirst(resolvedSrc, hash, ext, servers)
     loadVerifiedImage(candidates, hash)
       .then(res => {
         if (cancelled) return
@@ -226,7 +248,13 @@ function VerifiedImage({ alt, className, fallback, loading = 'lazy', onLoad, onE
   }, [inView, hash, resolvedSrc, attempt])
 
   if (failed) return <>{fallback}</>
-  if (!result) return <div ref={placeholderRef} className={className} aria-hidden />
+  // Verification can take a few seconds (it downloads the file to hash it), so
+  // the placeholder pulses — a blank box reads as broken, a pulsing one as
+  // loading. SkeletonImage layers its own skeleton over this; on its own,
+  // BlossomImage still needs to look busy rather than empty.
+  if (!result) {
+    return <div ref={placeholderRef} className={cn(className, 'animate-pulse bg-[#262626]')} aria-hidden />
+  }
 
   return (
     <>
@@ -241,11 +269,16 @@ function VerifiedImage({ alt, className, fallback, loading = 'lazy', onLoad, onE
       {result.mismatch && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="absolute left-1 top-1 z-20 inline-flex items-center justify-center rounded bg-yellow-500/90 p-1 text-black shadow">
-              <AlertTriangle className="h-3.5 w-3.5" />
+            {/* Usually not tampering — image hosts routinely re-encode uploads,
+                which changes the bytes and so the hash. Worth surfacing, not
+                worth alarming about, so it reads as a note rather than a fault. */}
+            <span className="absolute left-1 top-1 z-20 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-neutral-200 backdrop-blur-sm">
+              <AlertTriangle className="h-3 w-3 text-yellow-500" /> modified
             </span>
           </TooltipTrigger>
-          <TooltipContent>Hash mismatch</TooltipContent>
+          <TooltipContent>
+            The file served doesn't match its hash — the image host has modified it.
+          </TooltipContent>
         </Tooltip>
       )}
     </>
