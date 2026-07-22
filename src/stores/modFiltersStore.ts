@@ -60,7 +60,17 @@ interface ModFiltersState {
   applyExcludedTagsDefaults: (defaults: string[]) => void
 }
 
-export const useModFiltersStore = create<ModFiltersState>()(
+/**
+ * One independent set of mod filters, persisted under its own key.
+ *
+ * Separate instances rather than one shared store so narrowing a profile's mods
+ * doesn't reshape /mods — the same reason jam submissions have their own
+ * (see jamFiltersStore). The cost is that a preference like "show NSFW" has to
+ * be set per listing; that's deliberate, since the alternative is a filter
+ * silently following you between pages that show different things.
+ */
+function createModFiltersStore(persistKey: string) {
+  return create<ModFiltersState>()(
   persist(
     (set, get) => ({
       nsfwMode: 'hide',
@@ -86,6 +96,19 @@ export const useModFiltersStore = create<ModFiltersState>()(
         if (!get().excludedTagsTouched) set({ excludedTags: defaults })
       },
     }),
-    { name: 'deg-mods:mod-filters' },
+    { name: persistKey },
   ),
-)
+  )
+}
+
+export const useModFiltersStore = createModFiltersStore('deg-mods:mod-filters')
+
+/** Filters for the mods on one author's profile (`/profile/:npub?tab=mods`). */
+export const useProfileModFiltersStore = createModFiltersStore('deg-mods:profile-mod-filters')
+
+/**
+ * A filter store as consumed by the shared bar. A plain callable rather than
+ * `typeof useModFiltersStore` — the bound-store type's overloads defeat
+ * inference when it arrives as a prop, leaving the destructured state `any`.
+ */
+export type ModFiltersStore = () => ModFiltersState

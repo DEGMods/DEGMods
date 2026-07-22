@@ -6,6 +6,7 @@ import { CATEGORY_MAX_DEPTH, CATEGORY_SEGMENT_MAXLEN } from '@/lib/constants'
 import {
   useModFiltersStore, UNTAGGED, BUILTIN_SOURCES, DEFAULT_MIN_POW,
   type NsfwMode, type RepostMode, type EmulationMode, type LegacyMode, type SourceEntry,
+  type ModFiltersStore,
 } from '@/stores/modFiltersStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { requestAdult } from '@/stores/ageGateStore'
@@ -57,6 +58,13 @@ interface ModFiltersBarProps {
   legacyCount?: number
   /** How many mods in this listing are hidden by the user's Web of Trust. */
   wotHiddenCount?: number
+  /**
+   * Which filter store to drive. Defaults to the /mods one; a profile passes its
+   * own so narrowing one author's mods doesn't reshape the main listing.
+   */
+  store?: ModFiltersStore
+  /** What the result count is counting. */
+  noun?: [singular: string, plural: string]
 }
 
 function FilterButton({ icon: Icon, label, count, active, onClick }: {
@@ -277,14 +285,17 @@ export function CategoryChainsEditor({ chains, onChange }: { chains: string[]; o
   )
 }
 
-export function ModFiltersBar({ availableClients, resultCount, currentCount, legacyCount, wotHiddenCount = 0 }: ModFiltersBarProps) {
+export function ModFiltersBar({
+  availableClients, resultCount, currentCount, legacyCount, wotHiddenCount = 0,
+  store = useModFiltersStore, noun = ['mod', 'mods'],
+}: ModFiltersBarProps) {
   const {
     nsfwMode, setNsfwMode, sources, setSources,
     searchTags, setSearchTags, excludedTags, setExcludedTags, resetExcludedTags,
     categoryFilters, setCategoryFilters, repostMode, setRepostMode,
     emulationMode, setEmulationMode,
     legacyMode, setLegacyMode, // LEGACY
-  } = useModFiltersStore()
+  } = store()
   // Viewing-PoW is shared with Settings (single source of truth).
   const minPow = useSettingsStore((s) => s.powFilterDifficulty)
   const setMinPow = useSettingsStore((s) => s.setPowFilterDifficulty)
@@ -348,9 +359,9 @@ export function ModFiltersBar({ availableClients, resultCount, currentCount, leg
 
         <span className="ml-auto text-sm text-neutral-500">
           {currentCount !== undefined ? (
-            <>at least {currentCount} {currentCount === 1 ? 'mod' : 'mods'}{legacyCount ? `, ${legacyCount} legacy mods` : ''}</>
+            <>at least {currentCount} {currentCount === 1 ? noun[0] : noun[1]}{legacyCount ? `, ${legacyCount} legacy ${noun[1]}` : ''}</>
           ) : (
-            <>at least {resultCount} {resultCount === 1 ? 'mod' : 'mods'}</>
+            <>at least {resultCount} {resultCount === 1 ? noun[0] : noun[1]}</>
           )}
         </span>
       </div>

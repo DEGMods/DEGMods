@@ -13,11 +13,18 @@ import { formatDnnId } from '@/lib/dnn/formatDnnId'
 import { KINDS } from '@/lib/constants'
 import { extractBlogData } from '@/lib/nostr/events'
 import { useProgressiveMods } from '@/hooks/useProgressiveMods'
-import { useModFiltersStore } from '@/stores/modFiltersStore' // LEGACY
+import { useProfileModFiltersStore } from '@/stores/modFiltersStore'
 import { useLegacyModsStore } from '@/stores/legacyModsStore' // LEGACY
 import { withLegacyMods } from '@/lib/mods/legacy' // LEGACY
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
 import { useModerationFilter } from '@/hooks/useModeration'
+import { useBlockFilter } from '@/hooks/useBlock'
+import { useWotModFilter, useWotHiddenCount } from '@/hooks/useWot'
+import { useFollowedSet } from '@/hooks/useFollowedSet'
+import { applyModFilters } from '@/lib/mods/filterMods'
+import { ModFiltersBar, TagEditor } from '@/components/search/ModFiltersBar'
+import { SearchBar } from '@/components/search/SearchBar'
+import { cn } from '@/lib/utils'
 import type { BlogDetails } from '@/types/blog'
 import { ModCard } from '@/components/mod/ModCard'
 import { BlogPostCard } from '@/components/blog/BlogPostCard'
@@ -26,8 +33,9 @@ import { SocialPost } from '@/components/social/SocialPost'
 import { Pagination } from '@/components/shared/Pagination'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Loader2, User } from 'lucide-react'
+import { Loader2, User, Tag as TagIcon, ArrowUpDown } from 'lucide-react'
 
 const tabTrigger = 'py-1.5 data-[state=active]:bg-[#262626] data-[state=active]:text-purple-400'
 const hideInactive = 'mt-4 data-[state=inactive]:hidden'
@@ -194,27 +202,62 @@ function ModsTab({ pubkey }: { pubkey: string }) {
   const filter = useMemo<Filter>(() => ({ kinds: [KINDS.MOD], authors: [pubkey] }), [pubkey])
   const { mods: newMods, loading, loadingMore, reachedEnd, loadMore } = useProgressiveMods(filter)
   const moderate = useModerationFilter()
+  const blockFilter = useBlockFilter()
+  const wotFilter = useWotModFilter()
+  const powExempt = useFollowedSet()
   const myPubkey = useAuthStore((s) => s.pubkey)
   const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
 
-  // LEGACY: merge in this author's old kind-30402 mods, respecting the global
-  // legacy visibility setting (no filter bar on the profile page).
-  const legacyMode = useModFiltersStore((s) => s.legacyMode)
+  // Profile-scoped filters, so narrowing this author's mods doesn't reshape /mods.
+  const {
+    nsfwMode, sources, searchTags, excludedTags, categoryFilters,
+    repostMode, emulationMode, legacyMode,
+  } = useProfileModFiltersStore()
+  const minPow = useSettingsStore((s) => s.powFilterDifficulty)
+
+  // LEGACY: merge in this author's old kind-30402 mods.
   const legacyMods = useLegacyModsStore((s) => s.mods)
   const legacyLoading = useLegacyModsStore((s) => s.loading)
   useEffect(() => { useLegacyModsStore.getState().load() }, [])
-  const mods = useMemo(() => {
-    const authorLegacy = legacyMode === 'hide' ? [] : legacyMods.filter((m) => m.pubkey === pubkey)
-    const base = legacyMode === 'only' ? [] : newMods
-    return withLegacyMods(base, authorLegacy)
-  }, [newMods, legacyMods, legacyMode, pubkey])
+  const mods = useMemo(
+    () => withLegacyMods(newMods, legacyMods.filter((m) => m.pubkey === pubkey)),
+    [newMods, legacyMods, pubkey],
+  )
 
   useEffect(() => { setPage(1) }, [pubkey])
+
+  const availableClients = useMemo(
+    () => [...new Set(mods.map((m) => m.client).filter((c): c is string => !!c))].sort(),
+    [mods],
+  )
 
   // Hide admin-moderated mods from discovery — but the author always sees their
   // own (with the "Moderated" badge that ModCard renders).
   const isOwn = myPubkey === pubkey
-  const visible = useMemo(() => (isOwn ? mods : moderate(mods)), [isOwn, moderate, mods])
+  const preWot = useMemo(() => {
+    const filtered = applyModFilters(mods, {
+      nsfwMode, minPow, sources, searchTags, excludedTags, categoryFilters,
+      repostMode, emulationMode, legacyMode, powExempt,
+    })
+    const moderated = isOwn ? filtered : moderate(filtered)
+    const unblocked = blockFilter(moderated)
+    if (!search.trim()) return unblocked
+    const q = search.toLowerCase()
+    return unblocked.filter((m) =>
+      m.title.toLowerCase().includes(q) ||
+      m.game.toLowerCase().includes(q) ||
+      m.tags.some((t) => t.toLowerCase().includes(q)),
+    )
+  }, [mods, isOwn, moderate, blockFilter, search, nsfwMode, minPow, sources, searchTags,
+      excludedTags, categoryFilters, repostMode, emulationMode, legacyMode, powExempt])
+
+  const visible = useMemo(() => wotFilter(preWot), [wotFilter, preWot])
+  const wotHiddenCount = useWotHiddenCount(preWot)
+
+  // Filters change what's on screen, so an out-of-range page would look empty.
+  useEffect(() => { setPage(1) }, [search, nsfwMode, minPow, sources, searchTags,
+    excludedTags, categoryFilters, repostMode, emulationMode, legacyMode])
 
   const totalPages = Math.max(1, Math.ceil(visible.length / MODS_PER_PAGE))
   const current = Math.min(page, totalPages)
@@ -229,22 +272,47 @@ function ModsTab({ pubkey }: { pubkey: string }) {
   // legacy is hidden, since none would be shown.
   const showSkeleton = loading || (legacyMode !== 'hide' && legacyLoading)
 
+  // The filters stay mounted through loading and empty states — they're how you
+  // get out of an empty state you filtered yourself into.
+  const controls = (
+    <div className="space-y-3">
+      <SearchBar value={search} onChange={setSearch} placeholder="Search this author's mods by title, game, or tags…" />
+      <ModFiltersBar
+        availableClients={availableClients}
+        resultCount={visible.length}
+        wotHiddenCount={wotHiddenCount}
+        store={useProfileModFiltersStore}
+      />
+    </div>
+  )
+
   if (showSkeleton) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-lg bg-[#212121]" />)}
+      <div className="space-y-4">
+        {controls}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-lg bg-[#212121]" />)}
+        </div>
       </div>
     )
   }
-  if (paged.length === 0) return <p className="text-neutral-500 text-sm text-center py-12">No mods published yet.</p>
 
   return (
-    <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {paged.map((mod) => <ModCard key={mod.aTag} mod={mod} />)}
-      </div>
-      <Pagination page={current} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />
-    </>
+    <div className="space-y-4">
+      {controls}
+      {paged.length === 0 ? (
+        <p className="py-12 text-center text-sm text-neutral-500">
+          {mods.length === 0 ? 'No mods published yet.' : 'No mods match your filters.'}
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {paged.map((mod) => <ModCard key={mod.aTag} mod={mod} />)}
+          </div>
+          <Pagination page={current} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />
+        </>
+      )}
+    </div>
   )
 }
 
@@ -254,8 +322,16 @@ function BlogsTab({ pubkey, profile }: { pubkey: string; profile: UserProfile | 
   const filter = useMemo<Filter>(() => ({ kinds: [KINDS.BLOG], authors: [pubkey] }), [pubkey])
   const { events, loading, loadingMore, reachedEnd, loadMore } = useProgressiveEvents(filter)
   const [page, setPage] = useState(1)
+  // Blog filtering is deliberately lighter than mods': a blog has no NSFW flag,
+  // categories, reposts or legacy variant, so those controls would be inert.
+  // Search + tags + order is everything a blog actually carries.
+  const [search, setSearch] = useState('')
+  const [tagFilter, setTagFilter] = useState<string[]>([])
+  const [tagsOpen, setTagsOpen] = useState(false)
+  const [oldestFirst, setOldestFirst] = useState(false)
 
   useEffect(() => { setPage(1) }, [pubkey])
+  useEffect(() => { setPage(1) }, [search, tagFilter, oldestFirst])
 
   const blogs = useMemo<BlogDetails[]>(() => {
     const byKey = new Map<string, typeof events[number]>()
@@ -271,30 +347,96 @@ function BlogsTab({ pubkey, profile }: { pubkey: string; profile: UserProfile | 
       .sort((a, b) => b.publishedAt - a.publishedAt)
   }, [events])
 
-  const totalPages = Math.max(1, Math.ceil(blogs.length / BLOGS_PER_PAGE))
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const wanted = tagFilter.map((t) => t.toLowerCase())
+    const out = blogs.filter((b) => {
+      if (wanted.length && !b.tags.some((t) => wanted.includes(t.toLowerCase()))) return false
+      if (!q) return true
+      return b.title.toLowerCase().includes(q) ||
+        b.summary.toLowerCase().includes(q) ||
+        b.tags.some((t) => t.toLowerCase().includes(q))
+    })
+    // `blogs` is newest-first already, so oldest-first is just a reversal.
+    return oldestFirst ? [...out].reverse() : out
+  }, [blogs, search, tagFilter, oldestFirst])
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / BLOGS_PER_PAGE))
   const current = Math.min(page, totalPages)
-  const paged = blogs.slice((current - 1) * BLOGS_PER_PAGE, current * BLOGS_PER_PAGE)
+  const paged = visible.slice((current - 1) * BLOGS_PER_PAGE, current * BLOGS_PER_PAGE)
 
   useEffect(() => {
     if (!loading && !reachedEnd && current >= totalPages - 1) loadMore()
   }, [current, totalPages, reachedEnd, loading, loadMore])
 
+  const controls = (
+    <div className="space-y-3">
+      <SearchBar value={search} onChange={setSearch} placeholder="Search this author's posts by title, summary, or tags…" />
+      <div className="rounded-lg border border-[#262626] bg-[#1c1c1c] p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setTagsOpen(true)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors',
+              tagFilter.length
+                ? 'border-purple-500/40 bg-purple-500/10 text-purple-300'
+                : 'border-[#262626] text-neutral-300 hover:border-[#404040]',
+            )}
+          >
+            <TagIcon className="h-4 w-4" /> Tags
+            {tagFilter.length > 0 && <span className="text-xs tabular-nums opacity-70">{tagFilter.length}</span>}
+          </button>
+          <button
+            onClick={() => setOldestFirst((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040]"
+          >
+            <ArrowUpDown className="h-4 w-4" /> {oldestFirst ? 'Oldest first' : 'Newest first'}
+          </button>
+          <span className="ml-auto text-sm text-neutral-500">
+            {visible.length} {visible.length === 1 ? 'post' : 'posts'}
+          </span>
+        </div>
+      </div>
+
+      <Dialog open={tagsOpen} onOpenChange={setTagsOpen}>
+        <DialogContent className="border-[#262626] bg-[#1c1c1c]">
+          <DialogHeader>
+            <DialogTitle className="text-neutral-100">Filter by tags</DialogTitle>
+            <DialogDescription className="text-neutral-400">
+              Show only posts carrying at least one of these tags.
+            </DialogDescription>
+          </DialogHeader>
+          <TagEditor tags={tagFilter} onChange={setTagFilter} placeholder="Add a tag…" />
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+
   if (loading) {
     return (
       <div className="space-y-4">
+        {controls}
         {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg bg-[#212121]" />)}
       </div>
     )
   }
-  if (paged.length === 0) return <p className="text-neutral-500 text-sm text-center py-12">No blog posts published yet.</p>
 
   return (
-    <>
-      <div className="grid grid-cols-1 gap-4">
-        {paged.map((blog) => <BlogPostCard key={blog.id} blog={blog} author={profile ?? undefined} />)}
-      </div>
-      <Pagination page={current} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />
-    </>
+    <div className="space-y-4">
+      {controls}
+      {paged.length === 0 ? (
+        <p className="py-12 text-center text-sm text-neutral-500">
+          {blogs.length === 0 ? 'No blog posts published yet.' : 'No posts match your filters.'}
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4">
+            {paged.map((blog) => <BlogPostCard key={blog.id} blog={blog} author={profile ?? undefined} />)}
+          </div>
+          <Pagination page={current} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />
+        </>
+      )}
+    </div>
   )
 }
 
