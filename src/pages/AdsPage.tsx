@@ -47,11 +47,23 @@ const placements = [
   },
 ]
 
+/**
+ * Stated as minimums, and lower than the raw dashboard numbers on purpose.
+ *
+ * The previous figures came from the old site, which counted a fresh page view
+ * every time a filter changed the URL — the excluded-tags toggle alone was ~20%
+ * of all views. Those are the same person on the same page, so they're removed
+ * here. Visitor counts are untouched: a repeat view can't invent a session.
+ *
+ * They're minimums because several real readers are never counted at all —
+ * ad-blockers, scripts disabled, the site's own analytics opt-out, and mod pages
+ * whose event doesn't resolve from relays in time.
+ */
 const stats = [
-  { value: '23K', label: 'Avg. monthly unique visitors' },
-  { value: '203K', label: 'Avg. monthly page views' },
-  { value: '276K', label: 'Total unique visitors (12 mo)' },
-  { value: '2.5M', label: 'Total page views (12 mo)' },
+  { value: '≥23K', label: 'Avg. monthly visitors' },
+  { value: '≥160K', label: 'Avg. monthly page views' },
+  { value: '≥340K', label: 'Total visitors (since launch)' },
+  { value: '≥2.3M', label: 'Total page views (since launch)' },
 ]
 
 const tiers = [
@@ -167,8 +179,12 @@ export function AdsPage() {
           <BarChart3 size={22} className="text-purple-400" />
           <h2 className="text-2xl font-semibold">Audience &amp; Reach</h2>
         </div>
-        <p className="text-sm text-neutral-500">
-          Site-wide traffic over the last 12 months (May 2025 to April 2026), measured with Umami. Last updated May 2026.
+        <p className="text-sm leading-relaxed text-neutral-500">
+          Site-wide traffic since launch (May 2025 to July 2026), measured with self-hosted Umami.
+          Visitors are counted once per day, so a reader who returns on ten days counts ten times —
+          these are visits by unique readers, not ten thousand separate people. Figures are stated as
+          minimums: readers using ad-blockers, browsers with scripts disabled, or the site&rsquo;s own
+          analytics opt-out are never counted. Last updated July 2026.
         </p>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {stats.map((s) => (
