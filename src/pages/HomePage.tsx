@@ -33,15 +33,19 @@ const HOME_TTL = 2 * 60 * 1000
 const HOME_CACHE_KEY = 'home-cache-v2'
 
 /**
- * Deadline for relays that are slow or never EOSE, on a first (uncached) visit.
+ * There is deliberately no short `maxWait` on the first visit.
  *
- * Without one, a fetch settles only when every relay has answered or the hard
- * timeout expires — so a single stalled relay held the landing page at skeletons
- * for the full ten seconds, which is exactly the state a first-time visitor
- * arrives in. Results that land after this still merge in on the next visit via
- * the cache; nothing is lost, it just isn't waited for.
+ * An earlier attempt capped it at 3.5s to stop one stalled relay holding the
+ * page. But relay connections are established with a 5s timeout, so on a
+ * genuinely cold visit — no warm sockets, which is exactly the case this was
+ * meant to help — the deadline expired while relays were still connecting and
+ * the query settled with nothing. The page then rendered its empty states, and
+ * filled in a second later once connections came up.
+ *
+ * Painting "No mods found yet" at a first-time visitor is worse than making
+ * them wait, so latency is now bought by letting each section resolve on its
+ * own instead of by cutting queries short.
  */
-const HOME_MAX_WAIT = 3500
 
 // Home data survives navigation AND full reloads (persisted to localStorage) so
 // returning is instant instead of re-fetching everything and flashing skeletons.
@@ -98,29 +102,37 @@ export function HomePage() {
   const [blogAuthors, setBlogAuthors] = useState<Map<string, UserProfile>>(() => cached0?.blogAuthors ?? new Map())
   const [banner, setBanner] = useState<BannerData | null>(() => cached0?.banner ?? null)
   const [ads, setAds] = useState<AdEntry[]>(() => cached0?.ads ?? [])
-  const [loading, setLoading] = useState(() => !cached0)
+  // One flag per query, not one for the page. A single flag meant clearing it
+  // when the first query landed un-gated every other section too, so sections
+  // whose data was still in flight rendered "No posts found" instead of a
+  // skeleton — a loaded-and-empty page that then filled in.
+  const [modsLoading, setModsLoading] = useState(() => !cached0)
+  const [curationLoading, setCurationLoading] = useState(() => !cached0)
+  const [blogsLoading, setBlogsLoading] = useState(() => !cached0)
+  // The curated rails are derived from the mod list *and* the curation doc, so
+  // they can't paint until both are in.
+  const railsLoading = modsLoading || curationLoading
 
   useEffect(() => {
     let cancelled = false
     const hasCache = !!homeCache
     // Fresh cache on a quick return: paint it and skip the network entirely.
-    if (homeCache && Date.now() - homeCache.at < HOME_TTL) { setLoading(false); return }
+    const settleAll = () => { setModsLoading(false); setCurationLoading(false); setBlogsLoading(false) }
+    if (homeCache && Date.now() - homeCache.at < HOME_TTL) { settleAll(); return }
     // Otherwise revalidate. With a cache to show, do it in the background (no
     // skeletons) behind a "Checking for updates…" toast, and update in place.
     const background = hasCache
     async function load() {
       const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
       if (background) beginRefresh()
-      else setLoading(true)
       try {
         // All three start together, but they're awaited separately so each
         // section paints when its own data lands instead of every section
         // waiting on the slowest filter. A failure is isolated to its section
         // (null), so one dead query can't blank the rest of the page — and on a
         // background refresh it can't blank what the cache already painted.
-        const wait = background ? undefined : HOME_MAX_WAIT
-        const modsP = fetchEvents(relays, { kinds: [KINDS.MOD] }, 10000, wait).catch(() => null)
-        const blogsP = fetchEvents(relays, { kinds: [KINDS.BLOG], authors: [ADMIN_PUBKEY] }, 8000, wait).catch(() => null)
+        const modsP = fetchEvents(relays, { kinds: [KINDS.MOD] }, 10000).catch(() => null)
+        const blogsP = fetchEvents(relays, { kinds: [KINDS.BLOG], authors: [ADMIN_PUBKEY] }, 8000).catch(() => null)
         const curationP = fetchEvents(relays, {
           kinds: [NIP78_KIND],
           authors: [ADMIN_PUBKEY],
@@ -132,9 +144,10 @@ export function HomePage() {
 
         const allMods = modEvents ? constructModListFromEvents(modEvents) : mods
         if (modEvents) setMods(allMods)
-        // "Latest Mods" has what it needs — drop the skeletons now. The curated
-        // rails and blog teasers below fill in as their own fetches land.
-        if (!background) setLoading(false)
+        // "Latest Mods" has what it needs. Only that section stops showing
+        // skeletons — the rails and blog teasers keep theirs until their own
+        // data lands.
+        setModsLoading(false)
 
         const curationRaw = await curationP
         if (cancelled) return
@@ -206,6 +219,8 @@ export function HomePage() {
         ).slice(0, 5)
         const gamesVal = gameNames.map(name => ({ name, ...(getGameImages(name) ?? {}) }))
         setGames(gamesVal)
+        // Everything the curation doc feeds — rails, games, banner, ads — is set.
+        setCurationLoading(false)
 
         // ── Blog posts ──
         const blogEvents = await blogsP
@@ -226,6 +241,7 @@ export function HomePage() {
           .sort((a, b) => b.publishedAt - a.publishedAt)
           .slice(0, 2)
         setBlogs(parsedBlogs)
+        setBlogsLoading(false)
 
         const authors = new Map<string, UserProfile>()
         await Promise.allSettled([...new Set(parsedBlogs.map(b => b.pubkey))].map(async pk => {
@@ -249,7 +265,9 @@ export function HomePage() {
         // silently fail
       } finally {
         if (background) endRefresh()
-        else if (!cancelled) setLoading(false)
+        // Clears whatever is still pending — an early return above (a failed
+        // query) must not leave a section spinning forever.
+        if (!cancelled) settleAll()
       }
     }
     load()
@@ -275,9 +293,9 @@ export function HomePage() {
         <FeaturedBanner banner={banner} />
 
         {/* Featured slider: full-bleed band */}
-        {(loading || visibleSlider.length > 0) && (
+        {(railsLoading || visibleSlider.length > 0) && (
           <div className="w-screen mx-[calc(50%_-_50vw)]">
-            {loading ? (
+            {railsLoading ? (
               <Skeleton className="h-[320px] md:h-[440px] w-full rounded-none" />
             ) : (
               <FeaturedSlider mods={visibleSlider} />
@@ -287,7 +305,7 @@ export function HomePage() {
       </div>
 
       {/* Featured Mods (admin-curated) */}
-      {!loading && visibleFeatured.length > 0 && (
+      {!railsLoading && visibleFeatured.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold text-white">Featured Mods</h2>
@@ -315,7 +333,7 @@ export function HomePage() {
       )}
 
       {/* Featured Games */}
-      {!loading && games.length > 0 && (
+      {!railsLoading && games.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-white">Featured Games</h2>
@@ -340,7 +358,7 @@ export function HomePage() {
           </Link>
         </div>
 
-        {loading ? (
+        {modsLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="space-y-2">
@@ -381,13 +399,13 @@ export function HomePage() {
           </div>
         ) : (
           <p className="text-neutral-500 text-center py-8">
-            {loading ? 'Loading…' : 'No blog posts found.'}
+            {blogsLoading ? 'Loading…' : 'No blog posts found.'}
           </p>
         )}
       </section>
 
       {/* Ads (up to 4; empty-state message when none) */}
-      <HomeAds ads={ads} loading={loading} />
+      <HomeAds ads={ads} loading={curationLoading} />
     </div>
   )
 }
