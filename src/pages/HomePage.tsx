@@ -183,23 +183,54 @@ export function HomePage() {
         if (missing.length) {
           const authors = [...new Set(missing.map(a => a.split(':')[1]))]
           const dtags = [...new Set(missing.map(a => a.split(':').slice(2).join(':')))]
-          const extraEvents = await fetchEvents(relays, { kinds: [KINDS.MOD, LEGACY_MOD_KIND], authors, '#d': dtags }, 6000)
-          if (cancelled) return
-          for (const m of constructModListFromEvents(extraEvents.filter(e => e.kind === KINDS.MOD))) byATag.set(m.aTag, m)
-          for (const ev of extraEvents) {
-            if (ev.kind === LEGACY_MOD_KIND && isLegacyModEvent(ev)) {
-              const m = extractLegacyModData(ev)
-              byATag.set(m.aTag, m)
+          const absorb = (events: NostrEvent[]) => {
+            for (const m of constructModListFromEvents(events.filter(e => e.kind === KINDS.MOD))) byATag.set(m.aTag, m)
+            for (const ev of events) {
+              if (ev.kind === LEGACY_MOD_KIND && isLegacyModEvent(ev)) {
+                const m = extractLegacyModData(ev)
+                byATag.set(m.aTag, m)
+              }
             }
+          }
+          // Two attempts, because this isn't a top-up. Curation points almost
+          // entirely at legacy (30402) posts while the main query asks only for
+          // 31142, so every curated coordinate is "missing" on every load and
+          // this single read is the only thing that resolves the whole featured
+          // section. One flaky answer used to empty it; a second try is cheap
+          // next to that, and is skipped entirely once everything resolves.
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const extraEvents = await fetchEvents(relays, { kinds: [KINDS.MOD, LEGACY_MOD_KIND], authors, '#d': dtags }, 6000)
+            if (cancelled) return
+            absorb(extraEvents)
+            if (wantedCoords.every(a => byATag.has(a))) break
           }
         }
         const resolve = (coords: string[]) =>
           coords.map(a => byATag.get(a)).filter((m): m is ModDetails => !!m)
 
+        // Curation is authoritative only when its query actually answered, and
+        // only when the coordinates it names could be fetched.
+        //
+        // Deriving from the latest mods is right for a site that curates
+        // nothing. It is badly wrong when curation exists but didn't arrive:
+        // the page then replaces a hand-picked lineup with whatever mods
+        // happened to come back, which reads as "the featured section is
+        // showing things I never chose". Both failures produce an empty list,
+        // so they have to be told apart by *why* it's empty.
+        //
+        // When we can't trust it, the previous lineup is left alone rather than
+        // replaced by a guess.
+        const curationAnswered = !!curationRaw
         const curatedSlider = resolve(sliderCoords)
-        const sliderVal = curatedSlider.length ? curatedSlider : allMods.slice(0, 5)
+        const sliderUsable = sliderCoords.length === 0 || curatedSlider.length > 0
+        const sliderVal = !curationAnswered || !sliderUsable
+          ? sliderMods
+          : (curatedSlider.length ? curatedSlider : allMods.slice(0, 5))
         setSliderMods(sliderVal)
-        const featuredVal = resolve(gridCoords)
+
+        const curatedGrid = resolve(gridCoords)
+        const gridUsable = gridCoords.length === 0 || curatedGrid.length > 0
+        const featuredVal = curationAnswered && gridUsable ? curatedGrid : featuredMods
         setFeaturedMods(featuredVal)
 
         // Admin banner + ads share this NIP-78 curation batch, so they ride the
@@ -217,7 +248,13 @@ export function HomePage() {
           ? curatedGameNames
           : [...new Set(allMods.map(m => m.game).filter(Boolean))]
         ).slice(0, 5)
-        const gamesVal = gameNames.map(name => ({ name, ...(getGameImages(name) ?? {}) }))
+        // Same rule as the rails: games are named directly rather than by
+        // coordinate, so there's nothing to fail to resolve — but a curation
+        // doc that never arrived would still silently swap the picked games for
+        // games derived from the latest mods.
+        const gamesVal = curationAnswered
+          ? gameNames.map(name => ({ name, ...(getGameImages(name) ?? {}) }))
+          : games
         setGames(gamesVal)
         // Everything the curation doc feeds — rails, games, banner, ads — is set.
         setCurationLoading(false)
@@ -251,8 +288,11 @@ export function HomePage() {
         if (cancelled) return
         setBlogAuthors(authors)
         // Only persist a complete picture — caching a page assembled around a
-        // failed query would serve that gap instantly on the next visit.
-        if (!modEvents || !curationRaw) return
+        // failed query would serve that gap instantly on the next visit, which
+        // is what made a bad load look like it had stuck. Curated coordinates
+        // that didn't resolve count as incomplete: what's on screen is the
+        // previous lineup, not a result worth saving.
+        if (!modEvents || !curationRaw || !sliderUsable || !gridUsable) return
         writeHomeCache({
           at: Date.now(),
           // Only the latest few are shown ("Latest Mods"); cap the persisted
