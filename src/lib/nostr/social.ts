@@ -6,6 +6,7 @@
 import type { UnsignedEvent, Event as NostrEvent } from 'nostr-tools'
 import { fetchEvents } from './relay-pool'
 import { countLeadingZeroBits } from '@/lib/pow/pow'
+import { LEGACY_MOD_KIND } from '@/lib/mods/legacy' // LEGACY
 
 /**
  * A reference to any Nostr event that can be reacted to / commented on / zapped.
@@ -106,7 +107,22 @@ export async function fetchComments(relays: string[], root: NostrTarget): Promis
   const filter = root.aTag
     ? { kinds: [1111], '#A': [root.aTag] }
     : { kinds: [1111], '#E': [root.id] }
-  return fetchEvents(relays, filter, 6000)
+
+  // LEGACY: comments on the old site predate NIP-22 — they're plain kind-1
+  // notes carrying the mod's coordinate in a lowercase `a` tag. Nothing here
+  // ever matched them, so every legacy mod looked like it had no discussion
+  // while the old site still showed it.
+  //
+  // Only asked for under a legacy root. Current mods never accumulated kind-1
+  // comments, so widening the query there would add nothing but a way to put
+  // unmoderated notes under a post.
+  if (root.kind !== LEGACY_MOD_KIND || !root.aTag) return fetchEvents(relays, filter, 6000)
+
+  const [modern, legacy] = await Promise.all([
+    fetchEvents(relays, filter, 6000),
+    fetchEvents(relays, { kinds: [1], '#a': [root.aTag] }, 6000),
+  ])
+  return [...modern, ...legacy] // deduped by id in buildCommentTree
 }
 
 /** Direct-parent event id of a comment (the lowercase `e` tag), or null if it replies to the root. */
@@ -130,8 +146,13 @@ export function buildCommentTree(events: NostrEvent[], minPow = 0, powExempt?: S
   const nodes = new Map<string, CommentNode>()
   for (const ev of byId.values()) {
     const pow = countLeadingZeroBits(ev.id)
-    // People you follow (and yourself) bypass the PoW content filter.
-    if (pow < minPow && !powExempt?.has(ev.pubkey)) continue
+    // People you follow (and yourself) bypass the PoW content filter, and so do
+    // legacy kind-1 comments: they were written before this client mined any
+    // work, so they measure 0-2 bits against a default threshold of 15 and the
+    // filter would hide every one of them. Same exemption legacy mods already
+    // get in applyModFilters, and equally bounded — kind-1 events only reach
+    // this tree under a legacy root (see fetchComments).
+    if (pow < minPow && ev.kind !== 1 && !powExempt?.has(ev.pubkey)) continue
     nodes.set(ev.id, { event: ev, pow, replies: [] })
   }
 
