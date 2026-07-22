@@ -153,26 +153,57 @@ export type DeleteStep = 'edit' | 'request'
  *
  * Both go through the PoW pipeline. `onProgress(step, phase)` reports the
  * mining/signing/publishing phase of each step.
+ *
+ * Unlike every other publish, deletion deliberately ignores the "max 3 relays
+ * per list" posting preference and goes everywhere it can reach. That cap
+ * exists to spread publishing load, which is a reasonable trade for a new post
+ * — a missed relay just doesn't have it. Retraction is the opposite: a missed
+ * relay keeps serving the post forever, and this client actively works against
+ * itself there, since eventRedundancy has readers re-broadcast copies to relays
+ * that lack them.
+ *
+ * The relay set is resolved ONCE and reused for both steps. Resolving it twice
+ * re-ran the random per-list pick, so the tombstone and the deletion request
+ * could land on different subsets — leaving relays holding the original with a
+ * purge request they may ignore, or a purge request for something they were
+ * never given the tombstone for.
+ *
+ * `both`, not `write`: a relay we only read from can still hold a copy, and it
+ * is the copy that matters here. A write rejected by a read-only relay costs
+ * nothing.
  */
 export async function requestDelete(
   originalEvent: NostrEvent,
   onProgress?: (step: DeleteStep, phase: PublishStatus) => void,
+  opts: { requestOnly?: boolean } = {},
 ): Promise<{ success: boolean; error?: string }> {
-  // Step 1: Publish tombstoned version
-  const deletedEvent = buildDeletedEvent(originalEvent)
-  const deletedResult = await signAndPublish(deletedEvent, (s) => onProgress?.('edit', s))
-  if (!deletedResult.success) {
-    onProgress?.('edit', 'error')
-    return { success: false, error: `Failed to publish deleted event: ${deletedResult.error}` }
-  }
+  const everywhere = useSettingsStore.getState().getAllEnabledRelayUrls('both')
 
-  // Step 2: Publish kind 5 deletion request
+  // Step 1: tombstoned version. Carries created_at + 1, so a relay that takes
+  // it will also refuse the pre-delete copy if a re-broadcast offers it later.
+  // This is the only mechanism that works on relays which ignore kind 5, so it
+  // gets the widest reach we can give it.
+  //
+  // Skipped for regular (non-addressable) events like comments and notes: there
+  // is nothing to replace, so the kind-5 request is the only lever.
+  const deletedResult = opts.requestOnly
+    ? { success: true, error: undefined as string | undefined }
+    : await signAndPublish(buildDeletedEvent(originalEvent), (s) => onProgress?.('edit', s), 10000, everywhere)
+  if (!deletedResult.success) onProgress?.('edit', 'error')
+
+  // Step 2: kind 5 deletion request — attempted even if step 1 failed. It's the
+  // stronger signal on relays that honour it, and skipping it because the edit
+  // failed only loses ground: there is no state in which sending it is worse.
   const deletionRequest = buildDeletionRequest(originalEvent)
-  const deletionResult = await signAndPublish(deletionRequest, (s) => onProgress?.('request', s))
-  if (!deletionResult.success) {
-    onProgress?.('request', 'error')
-    return { success: false, error: `Failed to publish deletion request: ${deletionResult.error}` }
-  }
+  const deletionResult = await signAndPublish(deletionRequest, (s) => onProgress?.('request', s), 10000, everywhere)
+  if (!deletionResult.success) onProgress?.('request', 'error')
 
-  return { success: true }
+  if (deletedResult.success && deletionResult.success) return { success: true }
+  // Report what actually failed rather than the first failure, so a partial
+  // deletion isn't described as if nothing happened.
+  const failures = [
+    !deletedResult.success && `tombstone (${deletedResult.error})`,
+    !deletionResult.success && `deletion request (${deletionResult.error})`,
+  ].filter(Boolean)
+  return { success: false, error: `Failed to publish ${failures.join(' and ')}` }
 }

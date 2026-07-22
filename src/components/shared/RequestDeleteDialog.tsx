@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, Trash2, Loader2, Check, X, Circle } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Event as NostrEvent } from 'nostr-tools'
-import { requestDelete, signAndPublish, type DeleteStep } from '@/lib/nostr/publish'
-import { buildDeletionRequest } from '@/lib/nostr/events'
+import { requestDelete, type DeleteStep } from '@/lib/nostr/publish'
 import { forgetCachedEvent } from '@/lib/nostr/eventCache'
 import { purgeFromModCaches } from '@/hooks/useProgressiveMods'
 import { Button } from '@/components/ui/button'
@@ -74,12 +73,10 @@ export function RequestDeleteDialog({ open, onOpenChange, event, title, noun, re
     setEdit('pending')
     setRequest('pending')
 
-    const res = requestOnly
-      ? await signAndPublish(buildDeletionRequest(event), (phase) => setRequest(phase as Phase))
-      : await requestDelete(event, (step: DeleteStep, phase: Phase) => {
-        if (step === 'edit') setEdit(phase)
-        else setRequest(phase)
-      })
+    const res = await requestDelete(event, (step: DeleteStep, phase: Phase) => {
+      if (step === 'edit') setEdit(phase)
+      else setRequest(phase)
+    }, { requestOnly })
 
     if (res.success) {
       // Evict every cached copy. The tombstone is published, but the listing and
