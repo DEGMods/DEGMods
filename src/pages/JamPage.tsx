@@ -8,6 +8,7 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import { Gamepad2, Clock, Users, Scale, FileUp, ListOrdered, Pencil, Loader2, AlertTriangle, MoreHorizontal, Copy, FileJson, RefreshCw, ChevronDown, Trash2, ChevronLeft } from 'lucide-react'
 import { JamTallyModal } from '@/components/jam/JamTallyModal'
+import { JamPodium } from '@/components/jam/JamPodium'
 import { JudgeRow } from '@/components/jam/JudgeList'
 import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { Button } from '@/components/ui/button'
@@ -28,7 +29,9 @@ import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { useNow } from '@/hooks/useNow'
 import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { fetchEvent, fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { streamLatestEvent } from '@/lib/nostr/streamLatest'
+import { beginRefresh, endRefresh } from '@/lib/ui/refreshToast'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractJam, isModJam, jamStatus, jamCountdownLabel, type JamDetails } from '@/lib/nostr/jam'
 import { isDeleted } from '@/lib/nostr/events'
@@ -156,6 +159,8 @@ export function JamPage() {
   useEffect(() => {
     if (!naddr) return
     let cancelled = false
+    /** Tears down the cold-view watch early (set once it starts). */
+    let stopWatch: (() => void) | null = null
 
     async function load() {
       setNotFound(false); setNewerEvent(null)
@@ -177,23 +182,40 @@ export function JamPage() {
       if (cached) applyEvent(cached)
       else setLoading(true)
 
-      // 2. Background re-fetch to catch a newer revision. With a cached copy shown,
-      // use the high-assurance multi-pass fetch; on a cold view, the fast one.
+      // 2. Catch a newer revision.
       try {
         const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
         const filter = { kinds: [KINDS.JAM], authors: [pubkey], '#d': [identifier] }
-        const ev = cached ? await fetchLatestEvent(relays, filter) : await fetchEvent(relays, filter)
-        if (cancelled) return
-        if (!ev) { if (!cached) { setNotFound(true); setLoading(false) } return }
-        if (!cached) applyEvent(ev)
-        else if (ev.created_at > cached.created_at) setNewerEvent(ev) // prompt, don't force
+
+        // With a cached copy on screen, latency is hidden — use the
+        // high-assurance multi-pass fetch so a newer revision on a slow relay is
+        // reliably caught.
+        if (cached) {
+          const ev = await fetchLatestEvent(relays, filter)
+          if (cancelled || !ev) return
+          if (ev.created_at > cached.created_at) setNewerEvent(ev) // prompt, don't force
+          return
+        }
+
+        // Cold view: render whichever relay answers first, then keep listening.
+        const w = streamLatestEvent(relays, filter, {
+          have: resolved ?? null,
+          onApply: (ev) => { if (!cancelled) applyEvent(ev) },
+          onNewer: (ev) => { if (!cancelled) setNewerEvent(ev) },
+          onEmpty: () => { if (!cancelled) { setNotFound(true); setLoading(false) } },
+          onWatching: (on) => (on ? beginRefresh() : endRefresh()),
+        })
+        stopWatch = w.stop
+        await w.done
       } catch {
         if (!cancelled && !cached) { setNotFound(true); setLoading(false) }
       }
     }
 
     load()
-    return () => { cancelled = true }
+    // Navigating away mid-watch has to close the subscription and release the
+    // indicator, or the pill would stay up for the rest of the session.
+    return () => { cancelled = true; stopWatch?.() }
   }, [naddr, applyEvent])
 
   // Cooperative rebroadcast: a few seconds in, help keep the jam replicated.
@@ -463,6 +485,12 @@ export function JamPage() {
           {naddr && <ShareBox url={`${window.location.origin}/mod-jam/${naddr}`} title={jam.title} />}
           <SidebarAd />
         </div>
+      </div>
+
+      {/* Winners — full width, above the comments. Renders only once results
+          have been published; see JamPodium. */}
+      <div className="mt-8">
+        <JamPodium jam={jam} />
       </div>
 
       {/* Comments — full width below both columns (so on mobile they sit at the bottom) */}
