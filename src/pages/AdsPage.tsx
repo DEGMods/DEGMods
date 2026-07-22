@@ -51,9 +51,12 @@ const placements = [
  * Stated as minimums, and lower than the raw dashboard numbers on purpose.
  *
  * The previous figures came from the old site, which counted a fresh page view
- * every time a filter changed the URL — the excluded-tags toggle alone was ~20%
- * of all views. Those are the same person on the same page, so they're removed
- * here. Visitor counts are untouched: a repeat view can't invent a session.
+ * every time a filter changed the URL. Those are the same person on the same
+ * page, so they're removed here — measured per path against the analytics
+ * export rather than estimated: /search churned 97%, /mods 41%, and the /game/*
+ * listings 55–72%, while mod and blog post pages churned 0.1% because nothing
+ * on them rewrites the URL. That's ~31% of all views removed. Visitor counts are
+ * untouched: a repeat view can't invent a session.
  *
  * They're minimums because several real readers are never counted at all —
  * ad-blockers, scripts disabled, the site's own analytics opt-out, and mod pages
@@ -61,25 +64,29 @@ const placements = [
  */
 const stats = [
   { value: '≥23K', label: 'Avg. monthly visitors' },
-  { value: '≥160K', label: 'Avg. monthly page views' },
+  { value: '≥145K', label: 'Avg. monthly page views' },
   { value: '≥340K', label: 'Total visitors (since launch)' },
-  { value: '≥2.3M', label: 'Total page views (since launch)' },
+  { value: '≥2M', label: 'Total page views (since launch)' },
 ]
 
 /**
  * Monthly price = CPM × (monthly page views ÷ 1000), shared = that ÷ 4.
  *
  * So these rates are tied to the `stats` figure above and have to move with it:
- * at ≥160K monthly views, $6.25 → $1,000 exclusive / $250 shared. The CPMs were
- * $5/$10/$15 against a 203K view count that turned out to include ~20% filter
- * churn; the traffic figure came down, so the rate came up and the money stayed
- * put. Change one of these and re-derive the other, or an advertiser doing the
+ * at ≥145K monthly views, $7 → $1,015, listed as $1,000 exclusive / $250 shared.
+ * Rounding is deliberately toward the advertiser — the listed price buys
+ * slightly more than the CPM demands, never less.
+ *
+ * The CPMs were $5/$10/$15 against a 203K view count, then $6.25/$12.50/$18.75
+ * against 160K. Each correction removed churn the previous figure still carried,
+ * so the traffic came down, the rate came up, and the money stayed put. Change
+ * one of these and re-derive the other, or an advertiser doing the
  * multiplication finds the page disagreeing with itself.
  */
 const tiers = [
-  { tier: 'Indie', cpm: '$6.25', shared: '~$250 / mo', exclusive: '~$1,000 / mo' },
-  { tier: 'Double-A', cpm: '$12.50', shared: '~$500 / mo', exclusive: '~$2,000 / mo' },
-  { tier: 'Triple-A', cpm: '$18.75', shared: '~$750 / mo', exclusive: '~$3,000 / mo' },
+  { tier: 'Indie', cpm: '$7.00', shared: '~$250 / mo', exclusive: '~$1,000 / mo' },
+  { tier: 'Double-A', cpm: '$14.00', shared: '~$500 / mo', exclusive: '~$2,000 / mo' },
+  { tier: 'Triple-A', cpm: '$21.00', shared: '~$750 / mo', exclusive: '~$3,000 / mo' },
 ]
 
 export function AdCard({ ad }: { ad: AdEntry }) {
@@ -247,12 +254,13 @@ export function AdsPage() {
         </div>
 
         <p className="text-xs leading-relaxed text-neutral-500">
-          Full-exclusivity example: a $6.25 CPM against our ~160K historical monthly views = $6.25 &times; (160,000
-          &divide; 1,000) = <span className="font-semibold text-neutral-300">$1,000/mo</span>; the shared default is
-          a quarter of that (<span className="font-semibold text-neutral-300">$250/mo</span>). The price is fixed by
-          the historical CPM, and it does <span className="font-semibold text-neutral-300">not</span> guarantee 160K
-          impressions. Your ad may receive fewer, possibly 80K or less. You pay the flat monthly rate regardless of
-          impressions actually delivered.
+          Full-exclusivity example: a $7 CPM against our ~145K historical monthly views = $7 &times; (145,000
+          &divide; 1,000) = <span className="font-semibold text-neutral-300">$1,015/mo</span>, listed at a flat
+          $1,000; the shared default is a quarter of that (
+          <span className="font-semibold text-neutral-300">$250/mo</span>). The price is fixed by the historical CPM,
+          and it does <span className="font-semibold text-neutral-300">not</span> guarantee 145K impressions. Your ad
+          may receive fewer, possibly 70K or less. You pay the flat monthly rate regardless of impressions actually
+          delivered.
         </p>
 
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-500/90">
