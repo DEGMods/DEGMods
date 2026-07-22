@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useShortUrl } from '@/hooks/useShortUrl'
+import { useSeoMeta } from '@/hooks/useSeoMeta'
 import { decodePostParam, selectorFor } from '@/lib/nostr/nipShort'
 import { ShortAddressChooser, postPreview } from '@/components/social/ShortAddressChooser'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
@@ -138,6 +139,15 @@ export function JamPage() {
 
   // Show the short address in the URL bar once this jam has one.
   useShortUrl(rawEvent, '/mod-jam')
+
+  // Only mod jams render here, so only those describe themselves to crawlers —
+  // matching what the sitemap lists.
+  useSeoMeta(jam && isModJam(jam) ? {
+    title: jam.title,
+    description: jam.summary || jam.content,
+    image: jam.image,
+    type: 'article',
+  } : null)
 
   const rawJson = useMemo(
     () => (rawEvent ? (readableRaw ? readableEventJson(rawEvent as unknown as Record<string, unknown>) : JSON.stringify(rawEvent, null, 2)) : ''),

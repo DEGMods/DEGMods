@@ -1,11 +1,16 @@
 /**
  * Build-time SEO sitemap generator (zero infra — runs in GitHub Actions).
  *
- * Fetches recent mods (31142) and blogs (30023) from public relays, dedupes by
- * addressable coordinate (latest version wins → handles edits), prunes deleted
- * coordinates (kind 5), and writes sharded sitemap(s) + a sitemap index +
- * robots.txt into the build output. Stateless and bounded: each run covers the
- * recent window back to SEO_MAX entries, so it's fully forkable with no DB.
+ * Fetches recent mods (31142), blogs (30023) and mod jams (31143) from public
+ * relays, dedupes by addressable coordinate (latest version wins → handles
+ * edits), drops tombstoned posts and coordinates deleted via kind 5, and writes
+ * sharded sitemap(s) + a sitemap index + robots.txt into the build output.
+ * Stateless and bounded: each run covers the recent window back to SEO_MAX
+ * entries, so it's fully forkable with no DB.
+ *
+ * Legacy mods (30402) are deliberately absent — see the note in ModPage; they
+ * emit no meta either, so listing them would advertise pages that describe
+ * themselves only with site defaults.
  *
  * Config via env (all optional):
  *   SITE_URL     canonical base URL         (default https://degmods.com)
@@ -62,11 +67,29 @@ const DISALLOW = /^(1|true|yes|on)$/i.test(String(process.env.SEO_DISALLOW || ''
 
 const MOD_KIND = 31142
 const BLOG_KIND = 30023
+const JAM_KIND = 31143
 const PAGE = 500
 const URLS_PER_SITEMAP = 20000
 const QUERY_TIMEOUT = 8000
 
-const KIND_PATH = { [MOD_KIND]: 'mod', [BLOG_KIND]: 'blog' }
+const KIND_PATH = { [MOD_KIND]: 'mod', [BLOG_KIND]: 'blog', [JAM_KIND]: 'mod-jam' }
+
+/** Self-tombstone: the post still exists as an event but renders as deleted. */
+const isTombstoned = (ev) => ev.tags.some(t => t[0] === 'deleted' && t[1] === 'true')
+
+/**
+ * Extra per-kind admission rules, on top of the shared ones in fetchKind.
+ *
+ * Jams are a shared kind: `j` names what the jam is for, and this client only
+ * renders `j=mod`. Listing a game jam would advertise a URL that resolves to
+ * "not found" here. The client tag is required too, so jams minted by tooling
+ * that doesn't identify itself stay out of the index.
+ */
+const KIND_ACCEPT = {
+  [JAM_KIND]: (ev) =>
+    ev.tags.some(t => t[0] === 'j' && t[1] === 'mod') &&
+    ev.tags.some(t => t[0] === 'client' && t[1]),
+}
 
 /** NIP-13 proof-of-work: count leading zero bits of an event id (hex). */
 function countLeadingZeroBits(hex) {
@@ -97,15 +120,26 @@ async function fetchKind(pool, kind) {
     let oldest = until
     for (const ev of events) {
       if (ev.created_at < oldest) oldest = ev.created_at // advance the cursor past spam too
-      if (MIN_POW > 0 && countLeadingZeroBits(ev.id) < MIN_POW) continue
       const d = ev.tags.find(t => t[0] === 'd')?.[1]
       if (!d) continue
       const coord = `${kind}:${ev.pubkey}:${d}`
       const prev = byCoord.get(coord)
-      if (!prev || ev.created_at > prev.created_at) {
-        const publishedAt = Number(ev.tags.find(t => t[0] === 'published_at')?.[1]) || ev.created_at
-        byCoord.set(coord, { created_at: ev.created_at, published_at: publishedAt, pubkey: ev.pubkey, identifier: d })
-      }
+      if (prev && ev.created_at <= prev.created_at) continue
+
+      // Admission is recorded on the newest revision rather than used to skip
+      // events, because skipping would hand the coordinate back to an older
+      // revision that still qualified — a deleted post would stay in the
+      // sitemap via its own pre-deletion copy. Deletion has to win, so the
+      // latest revision decides, whatever it says.
+      //
+      // PoW is judged the same way but deliberately doesn't gate the tracking:
+      // it's a spam filter for *listing*, and a tombstone should retract a post
+      // even if it carries less work than the post did.
+      const listable = (MIN_POW === 0 || countLeadingZeroBits(ev.id) >= MIN_POW) &&
+        !isTombstoned(ev) &&
+        (!KIND_ACCEPT[kind] || KIND_ACCEPT[kind](ev))
+      const publishedAt = Number(ev.tags.find(t => t[0] === 'published_at')?.[1]) || ev.created_at
+      byCoord.set(coord, { created_at: ev.created_at, published_at: publishedAt, pubkey: ev.pubkey, identifier: d, listable })
     }
 
     if (oldest >= until) break          // no forward progress
@@ -152,16 +186,22 @@ async function main() {
 
   const pool = new SimplePool()
 
-  const [mods, blogs, deleted] = await Promise.all([
-    fetchKind(pool, MOD_KIND),
-    fetchKind(pool, BLOG_KIND),
-    fetchDeletedCoords(pool),
-  ])
+  // Sequential, not Promise.all. Each walk paginates against the same 15
+  // relays, and running them together made slow relays miss the per-query
+  // deadline — the jam walk came back with 1 of 3 events, so a live jam was
+  // silently left out of the sitemap. Partial results are the one failure this
+  // script must not have: a missing URL looks identical to a deleted one.
+  // Build time is irrelevant here; it runs on a 6-hourly cron.
+  const mods = await fetchKind(pool, MOD_KIND)
+  const blogs = await fetchKind(pool, BLOG_KIND)
+  const jams = await fetchKind(pool, JAM_KIND)
+  const deleted = await fetchDeletedCoords(pool)
 
   /** Coordinate map → sitemap url entries. */
   const toEntries = (map, kind) => {
     const out = []
     for (const [coord, info] of map) {
+      if (!info.listable) continue
       if (deleted.has(coord)) continue
       let naddr
       try { naddr = nip19.naddrEncode({ kind, pubkey: info.pubkey, identifier: info.identifier }) } catch { continue }
@@ -174,11 +214,11 @@ async function main() {
     return out
   }
 
-  const content = [...toEntries(mods, MOD_KIND), ...toEntries(blogs, BLOG_KIND)]
+  const content = [...toEntries(mods, MOD_KIND), ...toEntries(blogs, BLOG_KIND), ...toEntries(jams, JAM_KIND)]
     .sort((a, b) => b.published_at - a.published_at) // newest by original publication first
 
   // Static, always-present pages.
-  const staticPages = ['', 'mods', 'blog', 'games', 'faq', 'guides', 'ads']
+  const staticPages = ['', 'mods', 'blog', 'games', 'faq', 'guides', 'ads', 'mod-jams']
     .map(p => ({ loc: `${SITE_URL}/${p}`.replace(/\/$/, '') || SITE_URL }))
 
   // Shard content sitemaps; static pages get their own.
@@ -206,7 +246,10 @@ async function main() {
   writeFileSync(join(OUT_DIR, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`)
 
   pool.close(RELAYS)
-  console.log(`sitemap: ${content.length} content urls (${mods.size} mods, ${blogs.size} blogs, minPow=${MIN_POW}, ${deleted.size} deletions pruned) across ${sitemapFiles.length} files → ${OUT_DIR}`)
+  // Counted after the listable filter, so the numbers match what was written
+  // rather than how many coordinates were seen.
+  const listable = (map) => [...map.values()].filter(i => i.listable).length
+  console.log(`sitemap: ${content.length} content urls (${listable(mods)} mods, ${listable(blogs)} blogs, ${listable(jams)} jams, minPow=${MIN_POW}, ${deleted.size} deletions pruned) across ${sitemapFiles.length} files → ${OUT_DIR}`)
 }
 
 main().catch(err => { console.error('sitemap generation failed:', err); process.exit(1) })
