@@ -1,3 +1,4 @@
+import { DeletedPostScreen } from '@/components/shared/DeletedPostScreen'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Event as NostrEvent, Filter } from 'nostr-tools'
 import { useShortUrl } from '@/hooks/useShortUrl'
@@ -329,17 +330,14 @@ export default function ModPage() {
   // --- Deleted state ---
   if (deleted) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Trash2 className="h-12 w-12 text-red-400" />
-        <h2 className="text-xl font-semibold text-neutral-200">Mod deleted</h2>
-        <p className="text-neutral-400 text-sm">
-          This mod has been permanently deleted.
-        </p>
-        <Button variant="outline" onClick={() => navigate('/mods')}>
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Back to Mods
-        </Button>
-      </div>
+      <DeletedPostScreen
+        noun="mod"
+        heading="Mod"
+        event={rawEvent as unknown as NostrEvent | null}
+        title={mod?.title}
+        backTo="/mods"
+        backLabel="Back to Mods"
+      />
     )
   }
 

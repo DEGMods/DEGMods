@@ -1,3 +1,4 @@
+import { DeletedPostScreen } from '@/components/shared/DeletedPostScreen'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -158,6 +159,9 @@ export function JamPage() {
   const applyEvent = useCallback((ev: NostrEvent) => {
     // A tombstoned jam keeps only its d/published_at tags, so extractJam would
     // just see it as malformed — check the marker first to report it properly.
+    // Set before the deleted check: the tombstone is what the author needs in
+    // order to re-broadcast the deletion from the deleted screen.
+    setRawEvent(ev)
     if (isDeleted(ev)) { setDeleted(true); setLoading(false); return }
     const j = extractJam(ev)
     // Mod client: only mod jams render here. Any non-mod jam (same kind) is
@@ -239,15 +243,14 @@ export function JamPage() {
 
   if (deleted) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
-        <Trash2 className="h-12 w-12 text-red-400" />
-        <h2 className="text-xl font-semibold text-neutral-200">Mod jam deleted</h2>
-        <p className="text-sm text-neutral-400">This mod jam has been permanently deleted.</p>
-        <Button variant="outline" onClick={() => navigate('/mod-jams')}>
-          <ChevronLeft className="mr-1 h-4 w-4" />
-          Back to Mod Jams
-        </Button>
-      </div>
+      <DeletedPostScreen
+        noun="mod jam"
+        heading="Mod jam"
+        event={rawEvent}
+        title={jam?.title}
+        backTo="/mod-jams"
+        backLabel="Back to Mod Jams"
+      />
     )
   }
   // An ambiguous short address: nothing to show until the reader picks.

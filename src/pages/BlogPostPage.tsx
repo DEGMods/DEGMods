@@ -1,3 +1,4 @@
+import { DeletedPostScreen } from '@/components/shared/DeletedPostScreen'
 import { useState, useEffect, useCallback } from 'react'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { useShortUrl } from '@/hooks/useShortUrl'
@@ -254,17 +255,14 @@ export default function BlogPostPage() {
   // --- Deleted state ---
   if (deleted) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Trash2 className="h-12 w-12 text-red-400" />
-        <h2 className="text-xl font-semibold text-neutral-200">Blog post deleted</h2>
-        <p className="text-neutral-400 text-sm">
-          This blog post has been permanently deleted.
-        </p>
-        <Button variant="outline" onClick={() => navigate('/blog')}>
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Back to Blog
-        </Button>
-      </div>
+      <DeletedPostScreen
+        noun="blog post"
+        heading="Blog post"
+        event={rawEvent as unknown as NostrEvent | null}
+        title={blog?.title}
+        backTo="/blog"
+        backLabel="Back to Blog"
+      />
     )
   }
 
