@@ -8,7 +8,6 @@ import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useNow } from '@/hooks/useNow'
 import { useAuthStore } from '@/stores/authStore'
-import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchLatestEvent, fetchEvents } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
@@ -153,7 +152,6 @@ export function ModJamBanner({
     )
   }
 
-  const hasVoting = jam.votingEnabled
   const hasWarning = !!jam.contentWarning && !revealed
   const status = jamStatus(jam, now)
   const inWindow = !!jam.votingEnd && now >= jam.end && now <= jam.votingEnd
@@ -169,35 +167,30 @@ export function ModJamBanner({
   const staleBallot = !!ballot && !ballotCounts
 
   // Vote button state → { label, disabled, reason }.
+  //
+  // Shown only to a signed-in judge. Anyone else gets no button at all, rather
+  // than one that reads like an invitation and then refuses them: a signed-out
+  // visitor can't be told whether they're a judge without signing in first, so
+  // any label offered to them either over-promises or pointlessly advertises a
+  // door they can't open.
   let voteBtn: { label: string; disabled: boolean; reason?: string; icon: typeof Vote; spinning?: boolean } | null = null
-  if (hasVoting) {
+  if (eligible) {
     if (ballotChecking) {
-      // Unknown yet — never offer "Vote on it" to someone who already voted.
+      // Unknown yet — never offer "Judge it" to someone who already voted.
       voteBtn = { label: 'Checking your vote…', disabled: true, icon: Loader2, spinning: true }
     } else if (ballotCounts) {
       voteBtn = { label: 'View your vote', disabled: false, icon: Eye }
     } else if (status === 'upcoming' || status === 'active') {
-      // Window checks come before the signed-out check: a closed jam is closed to
-      // everyone, so say that rather than sending someone through a login first.
       voteBtn = { label: 'Judge it', disabled: true, reason: 'Voting opens when submissions close.', icon: Vote }
     } else if (!inWindow) {
       voteBtn = { label: 'Judge it', disabled: true, reason: 'Voting has ended.', icon: Vote }
-    } else if (!myPubkey) {
-      // Signed out we can't know whether they're a judge, so the label promises
-      // the sign-in, not the vote. Stays enabled — a judge has to be able to get
-      // in — but never says "Vote on it" to someone who'd be refused right after.
-      voteBtn = { label: 'Sign in to judge', disabled: false, reason: 'Only this jam’s judges can score entries.', icon: Vote }
-    } else if (!eligible) {
-      voteBtn = { label: 'Judges only', disabled: true, reason: 'Only the jam’s judges can score entries.', icon: Vote }
     } else {
       voteBtn = { label: 'Judge it', disabled: false, icon: Vote }
     }
   }
 
-  const onVoteClick = () => {
-    if (!myPubkey) { useLoginModalStore.getState().open(); return }
-    setModalOpen(true)
-  }
+  // Only a signed-in judge ever sees the button, so there's no signed-out branch.
+  const onVoteClick = () => setModalOpen(true)
 
   const naddr = jam.naddr
   const VoteIcon = voteBtn?.icon ?? Vote
@@ -262,7 +255,9 @@ export function ModJamBanner({
           <EntryScoresPanel jam={jam} entryCoordinate={submissionCoordinate} />
         )}
 
-        {staleBallot && !ballotChecking && (
+        {/* Judges only, like the button — a non-judge's leftover ballot isn't
+            something to explain at them. */}
+        {eligible && staleBallot && !ballotChecking && (
           <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-400/90">
             <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
             You scored this entry before voting opened, so that vote won’t be counted.
