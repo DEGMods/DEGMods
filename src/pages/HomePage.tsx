@@ -32,6 +32,17 @@ const NIP78_KIND = 30078
 const HOME_TTL = 2 * 60 * 1000
 const HOME_CACHE_KEY = 'home-cache-v2'
 
+/**
+ * Deadline for relays that are slow or never EOSE, on a first (uncached) visit.
+ *
+ * Without one, a fetch settles only when every relay has answered or the hard
+ * timeout expires — so a single stalled relay held the landing page at skeletons
+ * for the full ten seconds, which is exactly the state a first-time visitor
+ * arrives in. Results that land after this still merge in on the next visit via
+ * the cache; nothing is lost, it just isn't waited for.
+ */
+const HOME_MAX_WAIT = 3500
+
 // Home data survives navigation AND full reloads (persisted to localStorage) so
 // returning is instant instead of re-fetching everything and flashing skeletons.
 // A stale cache still paints immediately, then refreshes in the background.
@@ -102,19 +113,34 @@ export function HomePage() {
       if (background) beginRefresh()
       else setLoading(true)
       try {
-        const [modEvents, blogEvents, curationEvents] = await Promise.all([
-          fetchEvents(relays, { kinds: [KINDS.MOD] }, 10000),
-          fetchEvents(relays, { kinds: [KINDS.BLOG], authors: [ADMIN_PUBKEY] }, 8000),
-          fetchEvents(relays, {
-            kinds: [NIP78_KIND],
-            authors: [ADMIN_PUBKEY],
-            '#d': ['home-featured-mods-slider', 'home-featured-mods', 'home-featured-games', FEATURED_BANNER_DTAG, ADS_DTAG],
-          }, 6000, 4500),
-        ])
+        // All three start together, but they're awaited separately so each
+        // section paints when its own data lands instead of every section
+        // waiting on the slowest filter. A failure is isolated to its section
+        // (null), so one dead query can't blank the rest of the page — and on a
+        // background refresh it can't blank what the cache already painted.
+        const wait = background ? undefined : HOME_MAX_WAIT
+        const modsP = fetchEvents(relays, { kinds: [KINDS.MOD] }, 10000, wait).catch(() => null)
+        const blogsP = fetchEvents(relays, { kinds: [KINDS.BLOG], authors: [ADMIN_PUBKEY] }, 8000, wait).catch(() => null)
+        const curationP = fetchEvents(relays, {
+          kinds: [NIP78_KIND],
+          authors: [ADMIN_PUBKEY],
+          '#d': ['home-featured-mods-slider', 'home-featured-mods', 'home-featured-games', FEATURED_BANNER_DTAG, ADS_DTAG],
+        }, 6000, 4500).catch(() => null)
+
+        const modEvents = await modsP
         if (cancelled) return
 
-        const allMods = constructModListFromEvents(modEvents)
-        setMods(allMods)
+        const allMods = modEvents ? constructModListFromEvents(modEvents) : mods
+        if (modEvents) setMods(allMods)
+        // "Latest Mods" has what it needs — drop the skeletons now. The curated
+        // rails and blog teasers below fill in as their own fetches land.
+        if (!background) setLoading(false)
+
+        const curationRaw = await curationP
+        if (cancelled) return
+        // No curation is a legitimate state (a fork that curates nothing), so
+        // this is kept distinct from the query having failed.
+        const curationEvents = curationRaw ?? []
 
         // ── Admin curation (NIP-78): used when present, else derive ──
         // Keep the NEWEST event per d-tag — relays can return stale revisions of
@@ -182,6 +208,11 @@ export function HomePage() {
         setGames(gamesVal)
 
         // ── Blog posts ──
+        const blogEvents = await blogsP
+        if (cancelled) return
+        // A failed blog query leaves the previous teasers alone. Treating it as
+        // "no posts" would clear a section the cache had already painted.
+        if (!blogEvents) return
         const byKey = new Map<string, typeof blogEvents[0]>()
         for (const ev of blogEvents) {
           const d = ev.tags.find(t => t[0] === 'd')?.[1] ?? ''
@@ -203,6 +234,9 @@ export function HomePage() {
         }))
         if (cancelled) return
         setBlogAuthors(authors)
+        // Only persist a complete picture — caching a page assembled around a
+        // failed query would serve that gap instantly on the next visit.
+        if (!modEvents || !curationRaw) return
         writeHomeCache({
           at: Date.now(),
           // Only the latest few are shown ("Latest Mods"); cap the persisted
