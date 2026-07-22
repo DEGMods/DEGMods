@@ -303,7 +303,7 @@ export default function WriteBlogPage() {
 
       {/* Featured Image */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-neutral-300">Featured Image</label>
+        <label className="flex items-center gap-2 text-sm font-medium text-neutral-300">Featured Image</label>
         <Input
           value={form.featuredImageUrl}
           onChange={e => updateField('featuredImageUrl', e.target.value)}
@@ -334,7 +334,7 @@ export default function WriteBlogPage() {
 
       {/* Summary */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-neutral-300">Summary</label>
+        <label className="flex items-center gap-2 text-sm font-medium text-neutral-300">Summary</label>
         <Textarea
           value={form.summary}
           onChange={e => updateField('summary', e.target.value)}
@@ -348,7 +348,7 @@ export default function WriteBlogPage() {
 
       {/* Content Warning */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-neutral-300">Content Warning</label>
+        <label className="flex items-center gap-2 text-sm font-medium text-neutral-300">Content Warning</label>
         <label className="flex items-center gap-3 cursor-pointer">
           <Switch
             checked={form.contentWarning}
@@ -418,7 +418,7 @@ export default function WriteBlogPage() {
 
       {/* Tags */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-neutral-300">Tags</label>
+        <label className="flex items-center gap-2 text-sm font-medium text-neutral-300">Tags</label>
         <div className="space-y-2">
           {form.tags.map((tag, i) => (
             <div key={i} className="space-y-1">
@@ -462,9 +462,6 @@ export default function WriteBlogPage() {
 
       {/* Actions */}
       <div className="flex items-center justify-between gap-4">
-        <div className="text-xs text-neutral-500">
-          {!editNaddr && <span>Draft auto-saved</span>}
-        </div>
         <div className="flex flex-1 items-center gap-3">
           <Button
             variant="outline"
