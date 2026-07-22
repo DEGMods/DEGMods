@@ -65,8 +65,8 @@ const placements = [
 const stats = [
   { value: '≥23K', label: 'Avg. monthly visitors' },
   { value: '≥145K', label: 'Avg. monthly page views' },
-  { value: '≥340K', label: 'Total visitors (since launch)' },
-  { value: '≥2M', label: 'Total page views (since launch)' },
+  { value: '≥340K', label: 'Total visitors (measured period)' },
+  { value: '≥2M', label: 'Total page views (measured period)' },
 ]
 
 /**
@@ -197,7 +197,9 @@ export function AdsPage() {
           <h2 className="text-2xl font-semibold">Audience &amp; Reach</h2>
         </div>
         <p className="text-sm leading-relaxed text-neutral-500">
-          Site-wide traffic since launch (May 2025 to July 2026), measured with self-hosted Umami.
+          Site-wide traffic from May 2025 to July 2026, measured with self-hosted Umami. Analytics
+          were added some months after the site launched, so the totals below cover that window
+          rather than the site&rsquo;s whole life — earlier traffic simply wasn&rsquo;t recorded.
           Visitors are counted once per day, so a reader who returns on ten days counts ten times —
           these are visits by unique readers, not ten thousand separate people. Figures are stated as
           minimums: readers using ad-blockers, browsers with scripts disabled, or the site&rsquo;s own
