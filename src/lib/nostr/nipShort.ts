@@ -224,10 +224,35 @@ export async function decodePostParam(
   try {
     const d = nip19.decode(param)
     if (d.type !== 'naddr') return null
-    return { kind: d.data.kind, pubkey: d.data.pubkey, identifier: d.data.identifier }
+    return {
+      kind: d.data.kind,
+      pubkey: d.data.pubkey,
+      identifier: stripSelfCoordPrefix(d.data.kind, d.data.pubkey, d.data.identifier),
+    }
   } catch {
     return null
   }
+}
+
+/**
+ * Undo an address whose identifier is its own full coordinate.
+ *
+ * Some links minted by the old site put `<kind>:<pubkey>:<d>` in the naddr's
+ * identifier slot, where the event's actual `d` tag is only `<d>`. Filtering on
+ * the doubled value matches nothing, so the post reads as deleted or missing —
+ * while the same link still resolves on the old site. These addresses are out in
+ * the world (shared, bookmarked, indexed) and can't be recalled, so they're
+ * repaired on read.
+ *
+ * Anchored to *this* address's own kind and pubkey rather than a general
+ * `<digits>:<hex>:` pattern, so a legitimate d-tag that merely contains colons
+ * is left alone. Looped because the prefix was occasionally doubled twice.
+ */
+function stripSelfCoordPrefix(kind: number, pubkey: string, identifier: string): string {
+  const prefix = `${kind}:${pubkey}:`.toLowerCase()
+  let id = identifier
+  while (id.toLowerCase().startsWith(prefix)) id = id.slice(prefix.length)
+  return id
 }
 
 /**
