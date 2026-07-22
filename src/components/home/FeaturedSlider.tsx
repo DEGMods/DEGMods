@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useResolvedImageSrc } from '@/components/shared/BlossomImage'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
+import { useEffectiveModFlags, useModerationOverlay } from '@/hooks/useModerationTags'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { SafeImage } from '@/components/shared/SafeImage'
 import type { ModDetails } from '@/types/mod'
@@ -51,6 +53,17 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
     return () => { cancelled = true }
   }, [mod?.pubkey, mod?.id])
 
+  // Same treatment as a mod card: the author's own warning plus anything the
+  // admin tagged on top, revealable per-post, and held until the overlay check
+  // settles so a post the admin flagged can't paint before we know.
+  //
+  // Above the early return, and taking `mod?.aTag` rather than the mod: the
+  // slider renders nothing until its mods arrive, so hooks placed after that
+  // return would change in number the moment they do — which React treats as
+  // fatal and unmounts the page over.
+  const { revealed, reveal } = useNsfwReveal()
+  const { overlay, checked: tagsChecked } = useModerationOverlay(mod?.aTag)
+
   if (count === 0 || !mod) return null
 
   // Legacy mods are kind 30402, not 31142 — encode the mod's actual kind so the
@@ -60,7 +73,9 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
     pubkey: mod.pubkey,
     identifier: mod.dTag,
   })
-  const blurred = !!mod.contentWarning
+  const contentWarning = mod.contentWarning || overlay?.contentWarning
+  const hasWarning = !!contentWarning && !revealed
+  const holdImage = !tagsChecked && !mod.contentWarning
   const npub = nip19.npubEncode(mod.pubkey)
   const authorName = author?.display_name || `${npub.slice(0, 10)}…`
 
@@ -98,7 +113,7 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
                   loading="eager"
                   className={cn(
                     'absolute inset-0 h-full w-full object-cover',
-                    blurred && 'blur-xl',
+                    (hasWarning || holdImage) && 'blur-xl',
                   )}
                   fallback={
                     <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-900/40 to-[#171717]">
@@ -106,11 +121,15 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
                     </div>
                   }
                 />
-                {blurred && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/40 text-neutral-200">
+                {hasWarning && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); reveal() }}
+                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-black/60 text-neutral-300"
+                  >
                     <AlertTriangle className="h-6 w-6 text-yellow-500" />
-                    <span className="text-xs">{mod.contentWarning}</span>
-                  </div>
+                    <span className="px-3 text-center text-xs font-medium">{contentWarning}</span>
+                    <span className="text-[10px] text-neutral-500">Click to reveal</span>
+                  </button>
                 )}
               </div>
             </Link>
@@ -247,10 +266,18 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
 // image hook so its bytes are already loaded when it becomes the active slide.
 function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'right'; onClick: () => void }) {
   const url = useResolvedImageSrc(mod.featuredImageUrl)
-  // Same rule as the active slide. A peek is smaller and partly faded out by the
-  // mask, but it's the same picture — leaving it uncovered put NSFW art on the
+  // Same rule as the active slide — author's warning plus the admin overlay, and
+  // held until the check settles. A peek is smaller and partly faded by the
+  // mask, but it's the same picture, so leaving it uncovered put NSFW art on the
   // landing page for anyone whose next or previous slide happened to be one.
-  const blurred = !!mod.contentWarning
+  //
+  // No per-item reveal here: the peek is itself a button that advances the
+  // slider, and a reveal control inside it would be a nested button. Clicking it
+  // brings the mod to the centre, where the reveal lives. It still honours the
+  // "show NSFW media" preference, since that resolves through `revealed`.
+  const { revealed } = useNsfwReveal()
+  const flags = useEffectiveModFlags(mod)
+  const blurred = (!!flags.contentWarning && !revealed) || (!flags.checked && !mod.contentWarning)
   return (
     <button
       type="button"
@@ -286,7 +313,7 @@ function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'rig
           />
         )}
       </AnimatePresence>
-      {blurred && (
+      {blurred && !!flags.contentWarning && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40">
           <AlertTriangle className="h-5 w-5 text-yellow-500" />
         </div>
