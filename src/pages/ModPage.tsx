@@ -10,6 +10,7 @@ import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
 import { fetchLatestEvent, subscribe } from '@/lib/nostr/relay-pool'
+import { beginRefresh, endRefresh } from '@/lib/ui/refreshToast'
 import { extractModData } from '@/lib/nostr/events'
 import { LEGACY_MOD_KIND, extractLegacyModData } from '@/lib/mods/legacy' // LEGACY
 import { LegacyMigrateBanner, LegacyMigratedNotice } from '@/components/mod/LegacyMigrate' // LEGACY
@@ -163,6 +164,8 @@ export default function ModPage() {
   useEffect(() => {
     if (!naddr) return
     let cancelled = false
+    /** Tears down the cold-view watch early (set once it starts). */
+    let stopWatch: (() => void) | null = null
 
     /**
      * Cold-view load: show the first relay to answer, keep listening for a newer
@@ -178,6 +181,7 @@ export default function ModPage() {
       new Promise<void>((resolve) => {
         let best: NostrEvent | null = have
         let done = false
+        let indicating = false
         const openedAt = Date.now()
 
         const finish = () => {
@@ -185,11 +189,13 @@ export default function ModPage() {
           done = true
           clearTimeout(timer)
           try { sub.close() } catch { /* already closed */ }
+          if (indicating) { indicating = false; endRefresh() }
           // Nothing anywhere, and nothing was already on screen.
           if (!best && !cancelled) { setNotFound(true); setLoading(false) }
           resolve()
         }
 
+        stopWatch = finish
         const timer = setTimeout(finish, COLD_WATCH_MS)
         const sub = subscribe(relayUrls, filter, (ev) => {
           if (cancelled || done) return
@@ -198,6 +204,9 @@ export default function ModPage() {
           best = ev
           if (first || Date.now() - openedAt < SILENT_UPGRADE_MS) applyEvent(ev)
           else setNewerEvent(ev)
+          // Say so while slower relays are still being heard: what's on screen
+          // came from whoever answered first and may yet be superseded.
+          if (first && !indicating) { indicating = true; beginRefresh() }
         }, finish)
       })
 
@@ -254,7 +263,9 @@ export default function ModPage() {
     }
 
     load()
-    return () => { cancelled = true }
+    // Navigating away mid-watch has to close the subscription and release the
+    // indicator, or the pill would stay up for the rest of the session.
+    return () => { cancelled = true; stopWatch?.() }
   }, [naddr, applyEvent])
 
   // Cooperative rebroadcast: after the mod's been on screen a few seconds, help
