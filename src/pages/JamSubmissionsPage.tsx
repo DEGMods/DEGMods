@@ -319,16 +319,13 @@ export function JamSubmissionsPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {paginated.map((mod) => {
             const rank = results ? rowsForEntry(results, mod.aTag) : null
-            const showRank = !!rank && (!!rank.judge || !!rank.community)
+            const showRank = !!rank?.judge
             return (
               <div key={mod.aTag} className="relative">
                 {showRank && (
                   <div className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-1">
                     {jam?.votingEnabled && rank!.judge && (
                       <span className="inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 backdrop-blur-sm"><Medal className="h-3 w-3" /> Judges’ #{rank!.judge.r}</span>
-                    )}
-                    {jam?.userVotingEnabled && rank!.community && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 backdrop-blur-sm"><Medal className="h-3 w-3" /> Community #{rank!.community.r}</span>
                     )}
                   </div>
                 )}

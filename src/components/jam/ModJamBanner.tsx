@@ -49,7 +49,7 @@ export function ModJamBanner({
   // this doesn't match the current one, we haven't checked yet — derived rather
   // than a loading flag so there's no first-render frame claiming "not voted".
   const [checkedKey, setCheckedKey] = useState<string | null>(null)
-  const [rank, setRank] = useState<{ judge: JamResultRow | null; community: JamResultRow | null } | null>(null)
+  const [rank, setRank] = useState<{ judge: JamResultRow | null } | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const { revealed, reveal } = useNsfwReveal()
   const [jamDeleted, setJamDeleted] = useState(false)
@@ -153,12 +153,13 @@ export function ModJamBanner({
     )
   }
 
-  const hasVoting = jam.votingEnabled || jam.userVotingEnabled
+  const hasVoting = jam.votingEnabled
   const hasWarning = !!jam.contentWarning && !revealed
   const status = jamStatus(jam, now)
   const inWindow = !!jam.votingEnd && now >= jam.end && now <= jam.votingEnd
   const isJudge = !!myPubkey && judgeHexSet(jam.judges).has(myPubkey)
-  const eligible = jam.userVotingEnabled || (jam.votingEnabled && isJudge)
+  // Only judges vote — there is no community track (see docs/jam-event.md).
+  const eligible = jam.votingEnabled && isJudge
   // Signed in but we haven't confirmed whether they've already voted on this entry.
   const ballotChecking = !!myPubkey && checkedKey !== `${jam.dTag}:${submissionDTag}:${myPubkey}`
   // A ballot cast outside [end, voting_end] doesn't count. Treat it as "not voted"
@@ -235,9 +236,8 @@ export function ModJamBanner({
           </Link>
         </div>
 
-        {/* Rank pills once results are published. Judges first — that track is
-            the official one; the community pill is an audience signal. */}
-        {rank && (rank.judge || rank.community) && (
+        {/* Rank pill once results are published. */}
+        {rank?.judge && (
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {jam.votingEnabled && rank.judge && (
               <span className={cn(
@@ -248,19 +248,15 @@ export function ModJamBanner({
                 {rank.judge.r === 1 ? 'Winner' : `Judges’ #${rank.judge.r}`} · {rank.judge.s.toFixed(1)} avg
               </span>
             )}
-            {jam.userVotingEnabled && rank.community && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-black/30 px-1.5 py-0.5 text-sky-300"><Medal className="h-3 w-3" /> Community #{rank.community.r} · {rank.community.s.toFixed(1)} avg</span>
-            )}
           </div>
         )}
 
-        {/* Only the top 100 of each track is published, so every entry keeps a
-            route to its own numbers — but not until voting is over. A running
-            average shown to people who haven't voted yet anchors them, lets
-            entrants see who to rally against, and nudges later judges toward
-            earlier ones. The ballots are public either way, so this isn't a
-            secret; it just stops the client handing out the bias for free. */}
-        {(jam.votingEnabled || jam.userVotingEnabled) && status === 'ended' && (
+        {/* Only the top 100 is published, so every entry keeps a route to its own
+            numbers — but not until voting is over. A running average shown to
+            judges who haven't scored yet anchors them toward earlier ones. The
+            ballots are public either way, so this isn't a secret; it just stops
+            the client handing out the bias for free. */}
+        {jam.votingEnabled && status === 'ended' && (
           <EntryScoresPanel jam={jam} entryCoordinate={submissionCoordinate} />
         )}
 

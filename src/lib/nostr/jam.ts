@@ -47,8 +47,11 @@ export interface JamDetails {
   start: number
   end: number
   votingEnabled: boolean
-  userVotingEnabled: boolean
-  judges: string[] // names or npubs
+  /**
+   * Judge keys — npub or hex. Only judges vote: an open community vote can't be
+   * counted honestly on Nostr (see docs/jam-event.md), so there isn't one.
+   */
+  judges: string[]
   votingEnd: number | null
   criteria: JamCriterion[] // empty = single "overall" score
   scoreMax: number // shared 0-max scale for every criterion (and the overall score); default 10
@@ -83,7 +86,6 @@ export interface JamFormState {
   start: number
   end: number
   votingEnabled: boolean
-  userVotingEnabled: boolean
   judges: string[]
   votingEnd: number | null
   criteria: JamCriterion[]
@@ -124,7 +126,7 @@ export function buildJamEvent(form: JamFormState): UnsignedEvent {
   const now = Math.floor(Date.now() / 1000)
   const createdAt = form.isEdit && form.previousCreatedAt ? form.previousCreatedAt + 1 : now
   const publishedAt = form.publishedAt ?? now
-  const bucketEnd = (form.votingEnabled || form.userVotingEnabled) && form.votingEnd ? form.votingEnd : form.end
+  const bucketEnd = form.votingEnabled && form.votingEnd ? form.votingEnd : form.end
 
   const tags: string[][] = [
     ['d', form.dTag],
@@ -148,10 +150,9 @@ export function buildJamEvent(form: JamFormState): UnsignedEvent {
   for (const t of form.tags.map((s) => s.trim()).filter(Boolean)) tags.push(['t', t.toLowerCase()])
 
   if (form.votingEnabled) tags.push(['voting', 'true'])
-  if (form.userVotingEnabled) tags.push(['user-voting', 'true'])
   if (form.votingEnabled) for (const j of form.judges.map((s) => s.trim()).filter(Boolean)) tags.push(['judge', j])
-  if ((form.votingEnabled || form.userVotingEnabled) && form.votingEnd) tags.push(['voting_end', String(form.votingEnd)])
-  if (form.votingEnabled || form.userVotingEnabled) {
+  if (form.votingEnabled && form.votingEnd) tags.push(['voting_end', String(form.votingEnd)])
+  if (form.votingEnabled) {
     // One shared max scale for the whole jam (every criterion + the overall score).
     const scoreMax = form.scoreMax || 10
     tags.push(['score_max', String(scoreMax)])
@@ -201,7 +202,6 @@ export function extractJam(event: NostrEvent): JamDetails | null {
   if (!dTag || !start || !end) return null
 
   const votingEnabled = get('voting') === 'true'
-  const userVotingEnabled = get('user-voting') === 'true'
   const votingEndRaw = Number(get('voting_end')) || 0
   const cwTag = event.tags.find((t) => t[0] === 'content-warning')
   const nsfwLegacy = event.tags.find((t) => t[0] === 'nsfw' && t[1] === 'true')
@@ -236,7 +236,6 @@ export function extractJam(event: NostrEvent): JamDetails | null {
     start,
     end,
     votingEnabled,
-    userVotingEnabled,
     judges: all('judge').map((t) => t[1]).filter(Boolean),
     votingEnd: votingEndRaw || null,
     criteria: all('criterion').map((t) => ({ label: t[1], max: Number(get('score_max')) || Number(t[2]) || 10 })).filter((c) => c.label),
@@ -273,10 +272,10 @@ export function constructJamListFromEvents(events: NostrEvent[]): JamDetails[] {
 export type JamStatus = 'upcoming' | 'active' | 'voting' | 'ended'
 
 /** Current phase of a jam relative to `now` (seconds). */
-export function jamStatus(jam: Pick<JamDetails, 'start' | 'end' | 'votingEnd' | 'votingEnabled' | 'userVotingEnabled'>, now: number): JamStatus {
+export function jamStatus(jam: Pick<JamDetails, 'start' | 'end' | 'votingEnd' | 'votingEnabled'>, now: number): JamStatus {
   if (now < jam.start) return 'upcoming'
   if (now < jam.end) return 'active'
-  const hasVoting = jam.votingEnabled || jam.userVotingEnabled
+  const hasVoting = jam.votingEnabled
   if (hasVoting && jam.votingEnd && now < jam.votingEnd) return 'voting'
   return 'ended'
 }

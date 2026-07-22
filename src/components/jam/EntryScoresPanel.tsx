@@ -10,10 +10,9 @@ import { cn } from '@/lib/utils'
 /**
  * This entry's scores, computed on demand.
  *
- * Only the top 100 of each track is published, so for most entries this is the
- * only way to see a result. Deliberately behind a button: judges cost one fetch
- * but the community track costs criteria × (max+1) count queries, which
- * shouldn't run on every page view.
+ * Only the top 100 is published, so for most entries this is the only way to see
+ * a result. Behind a button rather than automatic: it's one fetch, but one fetch
+ * per entry on every page view still isn't free.
  *
  * The caller only mounts this once voting has closed — a running average shown
  * mid-vote anchors people who haven't voted yet. Don't render it earlier.
@@ -64,18 +63,14 @@ export function EntryScoresPanel({ jam, entryCoordinate }: { jam: JamDetails; en
   }
 
   const Track = ({
-    label, tone, votes, avg, perCriterion, unknown, official,
+    label, tone, votes, avg, perCriterion, official,
   }: {
-    label: string; tone: string; votes: number; avg: number; perCriterion: number[]; unknown?: boolean; official?: boolean
+    label: string; tone: string; votes: number; avg: number; perCriterion: number[]; official?: boolean
   }) => (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
         <span className={cn('text-[11px] font-medium', tone)}>{label}</span>
-        {/* "Nobody voted" and "we couldn't find out" are very different claims —
-            never render an outage as a confident zero. */}
-        {unknown ? (
-          <span className="text-[11px] text-amber-400">Couldn&apos;t be counted</span>
-        ) : votes > 0 ? (
+        {votes > 0 ? (
           <span className="text-[11px] tabular-nums text-neutral-300">
             {avg.toFixed(1)}/{jam.scoreMax || 10} · {votes.toLocaleString()} {votes === 1 ? 'ballot' : 'ballots'}
           </span>
@@ -83,7 +78,7 @@ export function EntryScoresPanel({ jam, entryCoordinate }: { jam: JamDetails; en
           <span className="text-[11px] text-neutral-500">No ballots</span>
         )}
       </div>
-      {!unknown && votes > 0 && criteria.length > 1 && (
+      {votes > 0 && criteria.length > 1 && (
         <ul className="space-y-0.5">
           {criteria.map((c, i) => (
             <li key={c.label} className="flex items-baseline justify-between gap-2 text-[11px]">
@@ -101,15 +96,8 @@ export function EntryScoresPanel({ jam, entryCoordinate }: { jam: JamDetails; en
     <div className="space-y-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2.5">
       {jam.votingEnabled && (
         <Track
-          label="Judges — official" tone="text-amber-300" official
+          label="Judges" tone="text-amber-300" official
           votes={tally.judge.votes} avg={tally.judge.avg} perCriterion={tally.judge.perCriterion}
-        />
-      )}
-      {jam.userVotingEnabled && (
-        <Track
-          label="Community — audience signal" tone="text-sky-300"
-          votes={tally.community.votes} avg={tally.community.avg} perCriterion={tally.community.perCriterion}
-          unknown={tally.communityUnknown}
         />
       )}
       <p className="border-t border-[#262626] pt-2 text-[10px] leading-relaxed text-neutral-500">

@@ -1,39 +1,28 @@
 /**
  * Tallying a jam.
  *
- * Two tracks, gathered in completely different ways because they scale
- * completely differently:
+ * One track: the judges. They're a bounded, known set of pubkeys, so their
+ * ballots are *fetched* as real events, validated whole, and averaged exactly —
+ * anyone can re-fetch the same ballots and get the same answer.
  *
- * - **Judges** — a bounded, known set of pubkeys, so their ballots are *fetched*
- *   as real events, validated whole, and averaged exactly. This is the
- *   authoritative track: anyone can re-fetch the same ballots and verify it.
- * - **Community** — unbounded. Never fetched. Relays are asked to *count* ballots
- *   per (criterion, score) bucket, so cost is fixed by the jam's shape rather
- *   than by how many people voted. Best-effort: counts can't be deduplicated
- *   across relays, so the highest answer for each bucket wins (a relay holds a
- *   subset, so its count is always a floor).
- *
- * See docs/jam-event.md.
+ * There is deliberately no open community vote. Counting one on Nostr means
+ * either downloading an unbounded number of ballots or asking relays to count
+ * them (NIP-45, which ~5% of relays implement and which can't be deduplicated
+ * across relays). Both are impractical, and neither fixes the real problem: keys
+ * are free, so an open vote measures who scripted it. See docs/jam-event.md.
  */
-import { fetchEvents, countEvents } from '@/lib/nostr/relay-pool'
+import { fetchEvents } from '@/lib/nostr/relay-pool'
 import { KINDS } from '@/lib/constants'
 import { isValidSubmission, submissionWindow, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
 import { extractModData } from '@/lib/nostr/events'
 import {
-  extractBallot, isBallotCounted, judgeHexSet, ballotCriteria, scoreBuckets,
-  emptyHistogram, histogramToTrack, aggregateResults,
+  extractBallot, isBallotCounted, judgeHexSet, ballotCriteria, aggregateResults,
   type JamBallot, type TrackAggregate, type EntryAggregate,
 } from '@/lib/nostr/jamVoting'
-
-/** Concurrent COUNT queries in flight. Enough to be quick, few enough not to trip rate limits. */
-const COUNT_CONCURRENCY = 8
 
 export interface EntryTally {
   coordinate: string
   judge: TrackAggregate
-  community: TrackAggregate
-  /** No relay answered a single count query — "we don't know", not "nobody voted". */
-  communityUnknown: boolean
 }
 
 /** The jam's valid entries — newest per coordinate, bounded to the submission window. */
@@ -83,70 +72,16 @@ export async function fetchJudgeBallots(relays: string[], jam: JamDetails): Prom
     .filter((b): b is JamBallot => !!b)
 }
 
-/**
- * Count one entry's community ballots into a histogram.
- *
- * `criteria × (max + 1)` small queries, run with bounded concurrency. A bucket no
- * relay answers stays 0 and is reported through `unknown` so a relay outage can
- * be told apart from a genuine shutout.
- */
-export async function countEntryHistogram(
-  relays: string[],
-  jam: JamDetails,
-  entryCoordinate: string,
-  onProgress?: () => void,
-): Promise<{ hist: number[][]; answered: number; asked: number }> {
-  const buckets = scoreBuckets(jam)
-  const hist = emptyHistogram(jam)
-  let answered = 0
-  let cursor = 0
 
-  const worker = async () => {
-    for (;;) {
-      const i = cursor++
-      if (i >= buckets.length) return
-      const b = buckets[i]
-      try {
-        const n = await countEvents(relays, {
-          kinds: [KINDS.JAM_BALLOT],
-          '#a': [entryCoordinate],
-          '#c': [b.bucket],
-          since: jam.end,
-          until: jam.votingEnd ?? jam.end,
-        })
-        // countEvents already takes the highest answer across relays and returns
-        // 0 when none replied, so a 0 here is "nobody answered or nobody voted".
-        if (n > 0) { hist[b.index][b.value] = n; answered++ }
-      } catch {
-        /* leave the bucket at 0 — reported via `answered` */
-      }
-      onProgress?.()
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(COUNT_CONCURRENCY, buckets.length) }, worker))
-  return { hist, answered, asked: buckets.length }
-}
-
-/** Judge + community results for a single entry, for the on-demand view. */
+/** One entry's judge result, for the on-demand view. One fetch. */
 export async function tallyEntry(relays: string[], jam: JamDetails, entryCoordinate: string): Promise<EntryTally> {
   const criteriaCount = ballotCriteria(jam).length
-  const [judgeBallots, counted] = await Promise.all([
-    jam.votingEnabled ? fetchJudgeBallots(relays, jam) : Promise.resolve(null),
-    jam.userVotingEnabled ? countEntryHistogram(relays, jam, entryCoordinate) : Promise.resolve(null),
-  ])
+  const judgeBallots = jam.votingEnabled ? await fetchJudgeBallots(relays, jam) : null
 
   const forEntry = (judgeBallots ?? []).filter((b) => b.submissionCoordinate === entryCoordinate)
   const judgeAgg = aggregateResults([entryCoordinate], forEntry, judgeHexSet(jam.judges), criteriaCount)[0]
 
-  return {
-    coordinate: entryCoordinate,
-    judge: judgeAgg.judge,
-    community: counted ? histogramToTrack(counted.hist) : { avg: 0, votes: 0, perCriterion: [] },
-    // Every bucket came back empty — indistinguishable from "no relay answered",
-    // so say so rather than rendering a confident zero.
-    communityUnknown: !!counted && counted.answered === 0,
-  }
+  return { coordinate: entryCoordinate, judge: judgeAgg.judge }
 }
 
 export interface FullTally {
@@ -155,67 +90,31 @@ export interface FullTally {
   judgeBallots: number
   /** True when judge voting is on but no judge is listed as an npub. */
   judgesUnverifiable: boolean
-  communityAnswered: number
-  communityAsked: number
 }
 
 /**
- * Tally the whole jam: judges fetched once, community counted per entry.
+ * Tally the whole jam.
  *
- * `onProgress` fires per completed count query so a large jam can show real
- * movement — total work is entries × criteria × (max + 1), known up front, which
- * is the point of counting instead of sweeping.
+ * Judges are a known, bounded set of pubkeys, so their ballots are fetched as
+ * real events and counted exactly — one query for the whole jam, regardless of
+ * how many entries or judges there are. There is no community track: see
+ * docs/jam-event.md for why an open vote isn't counted here.
  */
-export async function tallyJam(
-  relays: string[],
-  jam: JamDetails,
-  onProgress?: (done: number, total: number) => void,
-): Promise<FullTally> {
-  const criteria = ballotCriteria(jam)
-  const criteriaCount = criteria.length
+export async function tallyJam(relays: string[], jam: JamDetails): Promise<FullTally> {
+  const criteriaCount = ballotCriteria(jam).length
   const entries = await fetchEntries(relays, jam)
   const coordinates = entries.map((m) => m.aTag)
 
   const judgeBallots = jam.votingEnabled ? await fetchJudgeBallots(relays, jam) : null
   const judgesUnverifiable = !!jam.votingEnabled && judgeBallots === null
 
-  // Judge track: exact, from real events.
   const aggregates = aggregateResults(coordinates, judgeBallots ?? [], judgeHexSet(jam.judges), criteriaCount)
-
-  // Community track: counted per entry, overwriting the (empty) user track above.
-  let done = 0
-  let communityAnswered = 0
-  let communityAsked = 0
-  if (jam.userVotingEnabled) {
-    const total = coordinates.length * scoreBuckets(jam).length
-    onProgress?.(0, total)
-    for (const agg of aggregates) {
-      const { hist, answered, asked } = await countEntryHistogram(relays, jam, agg.coordinate, () => {
-        onProgress?.(++done, total)
-      })
-      communityAnswered += answered
-      communityAsked += asked
-      agg.user = histogramToTrack(hist)
-    }
-    // Ranks were assigned against an empty community track — redo that one.
-    rerankUser(aggregates)
-  }
 
   return {
     entries: entries.map((m) => ({ coordinate: m.aTag, title: m.title })),
     aggregates,
     judgeBallots: (judgeBallots ?? []).length,
     judgesUnverifiable,
-    communityAnswered,
-    communityAsked,
   }
 }
 
-/** Re-assign the community rank after counting replaced that track. */
-function rerankUser(aggregates: EntryAggregate[]) {
-  const ranked = [...aggregates]
-    .filter((a) => a.user.votes > 0)
-    .sort((a, b) => b.user.avg - a.user.avg || b.user.votes - a.user.votes)
-  for (const a of aggregates) a.uRank = 0
-  ranked.forEach((a, i) => { a.uRank = i + 1 })
-}

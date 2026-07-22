@@ -13,7 +13,7 @@ The three kinds in the jam family:
 |---|---|---|---|
 | `31143` | Jam | jam creator | The jam itself: metadata, dates, voting config, criteria. |
 | `31243` | Ballot | a voter | One person's scores for one entry. |
-| `31343` | Result | jam creator | The creator's published tally — top 100 per track (aggregates + ranks). |
+| `31343` | Result | jam creator | The creator's published tally — top 100 (aggregates + ranks). |
 
 ---
 
@@ -33,7 +33,7 @@ The three kinds in the jam family:
     ["title", "Winter Survival Mod Jam 2026"],
     ["image", "https://image.nostr.build/winterjam-banner.jpg"],
     ["video", "https://video.nostr.build/winterjam-trailer.mp4"],
-    ["summary", "A two-week jam for winter-survival mods, with judge + community voting."],
+    ["summary", "A two-week jam for winter-survival mods, judged by a panel."],
     ["theme", "Frozen wasteland"],
     ["screenshots",
       "https://image.nostr.build/winterjam-promo-01.png",
@@ -51,9 +51,8 @@ The three kinds in the jam family:
     ["y", "2026-02"],
 
     ["voting", "true"],
-    ["user-voting", "true"],
     ["judge", "npub1qqqqq…"],
-    ["judge", "FrostWorks"],
+    ["judge", "npub1zzzzz…"],
     ["voting_end", "1771718400"],
 
     ["criterion", "Graphics", "10"],
@@ -207,30 +206,32 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 
 **Maximum jam duration:** clients MUST NOT publish a jam whose `start → voting_end || end` span exceeds **12 months** (so `y` can never exceed 13 entries, and absurd jams are rejected at the source). This is a creation-side guard only; a foreign event with a longer span is still rendered normally, since readers use `start`/`end` and ignore `y`.
 
-### `voting` / `user-voting` — Voting Switches
+### `voting` — Voting Switch
 
 ```json
-["voting", "true"],
-["user-voting", "true"]
+["voting", "true"]
 ```
 
 - **Required:** No (default `"false"` / omit)
-- **Purpose:** Two **independent** tracks:
-  - **`voting`** — **judge voting**: the pubkeys listed in `judge` score entries.
-  - **`user-voting`** — **community voting**: anyone may score entries (see [Anti-gaming](#anti-gaming--future-vote-weighting)).
-- Either, both, or neither may be enabled.
+- **Purpose:** Turns on judge voting — the pubkeys listed in `judge` score entries.
+- **There is one track.** See [Why there's no community vote](#why-theres-no-community-vote).
 
 ### `judge` — Judges
 
 ```json
-["judge", "npub1qqqqq…"],
-["judge", "FrostWorks"]
+["judge", "npub1qqqqq…"]
 ```
 
-- **Required:** Only when `voting` (judge voting) is `"true"` — then **at least one**.
+- **Required:** Only when `voting` is `"true"` — then **at least one**.
 - **Repeatable:** Yes, one per judge.
-- **Value:** an **npub** or a plain **name**. npubs are resolved to profiles by the client; names render as text.
-- **Purpose:** Defines who the official judges are. A ballot counts toward the **judge tally** only if its author is in this list — so judge scores are self-verifying (the jam itself declares its judges).
+- **Value:** an **npub** (or bare 64-char hex pubkey). **A name is not valid.**
+- **Purpose:** Defines who the judges are. A ballot counts only if its author is in
+  this list, so the tally is self-verifying — the jam itself declares its judges.
+
+> A judge listed by name has no pubkey to match a ballot against, so their scores
+> could never be counted. That used to publish happily and produce an empty
+> result at tally time, which is a failure nobody sees until it's too late to fix.
+> Clients MUST reject a non-key judge entry at publish time.
 
 ### `voting_end` — Voting Deadline
 
@@ -238,7 +239,7 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 ["voting_end", "1771718400"]
 ```
 
-- **Required:** When `voting` **or** `user-voting` is `"true"`.
+- **Required:** When `voting` is `"true"`.
 - **Value:** Unix timestamp string.
 - **Purpose:** When voting closes.
 - **Constraint:** none enforced. The voting window is **`[end, voting_end]`** — see [Voting Window](#voting-window) — so a `voting_end` before `end` yields an empty window and voting never opens. Inert, not malformed.
@@ -301,7 +302,7 @@ These behave exactly as in the [mod event](./game-mod-event.md):
 ["relays", "wss://brs.degmods.com", "wss://nos.lol", "wss://pyramid.fiatjaf.com"]
 ```
 
-- **Required:** No for judge-only jams; **effectively required** when `user-voting` is on, since community votes are tallied by counting and at least one relay must support NIP-45.
+- **Required:** No, but strongly recommended — a ballot stored nowhere the tally reads is a vote that silently does not count.
 - **Value:** Multi-value list of relay URLs.
 - **Purpose:** Declares the canonical relays where **ballots should be published** and where the **tally reads from**, so the count is as complete as it can be.
 - **Client behavior:**
@@ -378,9 +379,8 @@ A jam is "a mod event minus the mod-specific parts, plus jam parts." Removed fro
 | `end` | Yes | No | Unix ts string | Submissions close |
 | `y` | Should | Yes | `YYYY-MM` | Derived month buckets (date-range index); ignored on read |
 | `voting` | No | No | `true`/`false` | Judge voting |
-| `user-voting` | No | No | `true`/`false` | Community voting |
-| `judge` | If `voting` | Yes | name or npub | ≥1 when judge voting on |
-| `voting_end` | If any voting | No | Unix ts string | Voting closes |
+| `judge` | If `voting` | Yes | npub or hex pubkey | ≥1 when voting on; a name is invalid |
+| `voting_end` | If `voting` | No | Unix ts string | Voting closes |
 | `criterion` | No | Yes | `label` + optional `max` | 0 = overall; else 2–15 |
 | `reward` | No | Yes | `monetary`+`currency`+`amount`, or `other`+`text` | One per prize |
 | `reward_note` | No | No | Text | How prizes are distributed |
@@ -389,7 +389,7 @@ A jam is "a mod event minus the mod-specific parts, plus jam parts." Removed fro
 | `faq` | No | Yes | `question` + `answer` | |
 | `results` | No | No | Unix ts string | Added after tally |
 
-**Validation:** if `voting` → ≥1 `judge`; if `user-voting` → ≥1 counting relay in `relays`; custom criteria → 2–15; `score_max` 2–100.
+**Validation:** if `voting` → ≥1 `judge`, and every `judge` must be an npub/hex pubkey; custom criteria → 2–15; `score_max` 2–100.
 
 **Dates are deliberately unconstrained.** A creator may set `end` before `start`,
 or `voting_end` before `end` — useful for backdating a jam, and nothing downstream
@@ -496,7 +496,7 @@ If the jam has no `criterion` tags, a single overall score at index 0.
 - **`value`** is the score, `0…score_max`.
 - **`label`** is carried purely for human readability when inspecting a raw event. Nothing reads it — the index is authoritative. A ballot whose label disagrees with the jam is not thereby invalid.
 
-**Why one single-letter tag holding all of it.** Relays index single-letter tags only, and a filter matches on the tag's *first* value. Putting the score alone there (`["c","8",…]`) would make `#c:["8"]` match "scored 8 on **anything**", collapsing every criterion together. Packing the whole bucket key into that one slot makes each (criteria set, criterion, score) bucket independently queryable, which is what lets the community tally run on counts instead of downloads — see [Tallying](#tallying--results).
+**Why one single-letter tag holding all of it.** Relays index single-letter tags only, and a filter matches on the tag's *first* value. Putting the score alone there (`["c","8",…]`) would make `#c:["8"]` match "scored 8 on **anything**", collapsing every criterion together. Packing the whole bucket key into that one slot keeps each (criteria set, criterion, score) independently queryable. The tally no longer relies on that — judges' ballots are fetched, not counted — but the encoding is kept because it also carries the criteria fingerprint, which is what makes a ballot self-describing about the criteria set it was cast against.
 
 #### The criteria fingerprint
 
@@ -543,18 +543,41 @@ corrupt for everyone.
 
 If ballots used `previous + 1`, a post-deadline edit would inherit an in-window timestamp and sneak past the deadline. Ballots therefore have **no `published_at`** — the current `created_at` is the single source of truth for "when this vote stands as of."
 
-### Anti-gaming & Future Vote-Weighting
+### Why there's no community vote
 
-For v1, community (`user-voting`) results are a **plain count, gated only by PoW**. PoW raises per-vote cost but does not stop a determined botnet — this is understood and accepted for now.
+Earlier drafts of this spec had a second, open track (`user-voting`) that anyone
+could vote in, tallied by asking relays to **count** ballots per (criterion,
+score) bucket. It is removed. Two reasons, and the second is the one that
+matters.
 
-**Future weighting/filtering (not built — direction only):** count or weight user votes by signals that are hard to fake, e.g.:
+**1. It can't be counted practically.** Counting cost is fixed by the jam's
+*shape*, not its turnout: `entries × criteria × (score_max + 1)` COUNT queries. A
+single entry with 6 criteria on a 0–100 scale is **606 queries whether two people
+voted or two million**. Downloading the ballots instead is fine at small scale
+but unbounded at large — a million ballots is ~1 GB and 8+ minutes of signature
+verification in a browser. And NIP-45 itself is implemented by roughly **5% of
+relays**, so the counting path frequently can't run at all.
 
-- a verified **DNN ID**;
-- a **game purchase** from the (future) Nostr-based game store;
-- an **external purchase** (Steam / itch) proven via a signed event referenced in the voter's profile, with opt-in public purchase history;
-- account age (ignore pubkeys with no activity before `start`).
+**2. It can't be counted meaningfully.** Keys are free. Ten thousand keypairs and
+ten thousand ballots is a shell script. An open vote on Nostr measures who
+bothered to script it, not what an audience thinks — and no counting improvement
+fixes that. A perfect aggregation NIP would produce a fast, precise, signed count
+of a meaningless number.
 
-(Web-of-Trust weighting was considered and **rejected** for jams — deemed undesirable here.)
+Judges work precisely because they invert both properties: a **known, bounded,
+named** set of pubkeys. That is what makes their ballots fetchable exactly,
+verifiable by anyone, and accountable to a name.
+
+**If an audience signal is wanted**, the answer is something with an inherent
+cost rather than better counting — zaps are the obvious one, since sats can't be
+minted the way keypairs can. Reactions serve as a soft, unranked signal. Neither
+belongs in a result event.
+
+> **Not entrant cross-rating either.** The game-jam convention (only entrants may
+> rate) bounds the electorate nicely, but it doesn't transfer: testing a *mod*
+> means owning the game, installing it, and playing — nothing like a five-minute
+> browser game. And in a ten-entry field, entrants rating rivals is trivially
+> collusive.
 
 ---
 
@@ -562,116 +585,37 @@ For v1, community (`user-voting`) results are a **plain count, gated only by PoW
 
 Triggered **manually by the jam creator** after `voting_end`.
 
-### 1. Two tracks, two very different methods
+### 1. Fetch the judges' ballots
 
-The judge track and the community track are gathered in completely different
-ways, because they have completely different scaling properties.
-
-**Judges — fetch the actual ballots.** The judge list is bounded (≤25) and known
-in advance, so the ballots can be pulled directly with an author filter:
+The judge list is bounded (≤25) and known in advance, so the ballots are pulled
+directly with an author filter — **one query for the whole jam**, whatever the
+turnout:
 
 ```json
 { "kinds":[31243], "#a":["31143:<pk>:<jam-d>"], "authors":["<judge-hex>", "…"],
   "since":<end>, "until":<voting_end> }
 ```
 
-Cost is bounded by *judges × entries*, never by how many people voted. These
-ballots are validated and averaged exactly as written below, and anyone can
-re-fetch them and independently verify the published result. **This is the
-authoritative track.**
+Cost is bounded by *judges × entries*, never by how many people voted. The
+ballots are signed events, so anyone can re-fetch the same set and independently
+recompute the published result and get the same answer. There is no second track
+and no counting — see [Why there's no community vote](#why-theres-no-community-vote).
 
-**A judge listed by name rather than npub cannot be counted.** The `judge` tag
-accepts free text so a creator can credit someone who has no Nostr identity, but
-an author filter can only be built from a pubkey. If a jam's `judge` list contains
-no npubs at all, its judge track is necessarily empty, and a client should say so
-plainly at tally time rather than reporting a silent zero.
-
-**Community — count, don't download.** Community voting is unbounded: a popular
-jam can attract millions of ballots, and no browser can download them all. So
-the community track never fetches ballots at all. It asks relays to **count**
-them (NIP-45), one query per (entry, criterion, score) bucket:
-
-```json
-// how many ballots gave this entry a 8 on criterion #0?
-{ "kinds":[31243], "#a":["31142:<mod-pk>:<mod-d>"], "#c":["0:8"],
-  "since":<end>, "until":<voting_end> }
-```
-
-From the resulting histogram: `average = Σ (value × count) / Σ counts`, per criterion,
-then the entry's score is the mean of those.
-
-**Reported vote count is the largest per-criterion total, not a sum.** Each
-criterion is counted independently, and a relay may answer some buckets and not
-others, so summing across criteria would multiply the same voters. The criterion
-with the most complete picture is the best available estimate of how many people
-voted — an estimate, and worth remembering when a displayed count looks off.
-
-The decisive property is that **query count is independent of ballot volume**.
-It is *entries × criteria × (score_max + 1)* whether the jam received a thousand
-ballots or ten million. A 20-entry jam with 6 criteria on a 0–10 scale costs
-~1,300 tiny queries at any scale. Cost now tracks entries — bounded by how many
-mods humans actually made — instead of votes, which are bounded by nothing.
-
-There is no sweep. The paginated download of every ballot is gone.
-
-### 1a. Merging counts across relays — best effort
-
-Counts cannot be deduplicated. If relay A reports 60,000 and relay B reports
-60,000, there is no way to tell union from overlap; only the raw events would
-say, and not downloading them is the point.
-
-**Rule: take the highest count for each bucket independently.** A relay holds
-only a subset of the ballots, so its count for a bucket is always **≤** the true
-count. The maximum across relays therefore can never inflate a bucket — it is
-always a floor, never an invention — and taking it per bucket rather than
-per relay keeps the best available evidence for every bucket.
-
-The consequence is that the community tally is **best effort and may undercount**.
-A relay that is down or slow when the tally runs takes any ballots stored only
-there with it. This must be stated plainly to the creator *and* to voters at the
-moment they cast a ballot — a close result that nobody was warned about is an
-argument that cannot be settled.
-
-### 1b. What this costs in rigour
-
-Counting buys scale by giving up three things the judge track keeps:
-
-- **No whole-ballot validity.** A ballot that omits a criterion still counts in
-  the criteria it did fill, where a downloaded ballot would be dropped whole.
-  The damage is bounded — an out-of-range or undeclared score matches no valid
-  bucket and is silently excluded — but partial ballots do slip through.
-- **No PoW check.** Proof of work can't be verified from a count.
-- **Reproducible, not verifiable.** Re-running the queries proves the relay
-  agrees with itself, not that the ballots exist. Anyone wanting real
-  verification can still download every ballot and recompute by hand; it just
-  stops being the default path.
-
-These are acceptable on the community track precisely because it is *not* the
-authoritative one. The result that decides who won never depends on a relay's
-arithmetic.
-
-### 1c. Relay requirement
-
-A jam with `user-voting` enabled **must** list at least one `relays` entry that
-supports NIP-45, or its community votes can never be tallied. Clients should
-probe each vote relay (send a trivial `COUNT`, see whether a `COUNT` response
-comes back) and refuse to enable community voting until one qualifies. DEG Mods
-badges each vote relay in the editor and auto-disables community voting if the
-last counting relay is removed or switched off.
+**A judge listed by anything other than a pubkey cannot be counted**, because an
+author filter can only be built from a key. Clients MUST reject such a `judge`
+entry at publish time rather than discovering it at tally time, when the jam is
+over and the fix is impossible.
 
 ### 2. Validate and aggregate
-
-Applies in full to the **judge track**; the community track gets what counting
-can express (see 1b).
 
 - **Dedup** by ballot coordinate `31243:<voter>:<jam-d>:<sub-d>`; across relays keep the version with the **highest `created_at` that is still ≤ `voting_end`**.
 - **Validate:** `created_at ∈ [end, voting_end]`, PoW meets difficulty, and the `c` tags match the jam's criteria **exactly** — one score per declared criterion index, no extras, no duplicates, each value within `0…score_max`. For the **judge tally**, additionally require the author ∈ the jam's `judge` list.
   - **A ballot that doesn't match exactly is dropped whole**, not partially counted, and the tally continues without it. Partial acceptance is gameable: a ballot that skips criteria would be averaged over a smaller denominator than its rivals'.
-- **Aggregate** per entry, per criterion → **average**. Keep **two independent tracks**: judges (judge-authored ballots, fetched) and community (all ballots, counted), each with its vote count.
+- **Aggregate** per entry, per criterion → **average**. The entry's score is the mean of its per-criterion averages, so **every criterion counts equally**. Keep the ballot count alongside it.
 
 ### 3. Rank
 
-Compute **two ranks**: a **judges' rank** and a **users' rank**. Optionally a **combined** rank if the creator wants one (e.g. weight judges 70% / users 30%). Ties broken by vote count, then earliest submission.
+Rank by average descending. Ties broken by vote count, then earliest submission.
 
 ### 4. Publish — one Result event (kind `31343`)
 
@@ -687,22 +631,18 @@ person who cares about entry #487 is its creator, who can compute it on demand
 {
   "kind": 31343,
   "pubkey": "<jam-creator>",
-  "content": "{\"judge\":[…100 rows…],\"community\":[…100 rows…]}",
+  "content": "{\"judge\":[…100 rows…]}",
   "tags": [
     ["d", "<jam-d>:r:0"],
     ["a", "31143:<jam-pk>:<jam-d>"],
-    ["truncated", "100"],             // top N per track; absence ≠ "no votes"
+    ["truncated", "100"],             // top N; absence ≠ "no votes"
     ["client", "DEG MODS"]
   ]
 }
 ```
 
-**Two sections, ranked independently.** `judge` holds the top 100 by judges'
-rank, `community` the top 100 by community rank. **An entry may appear in both,
-and the duplication is intended** — the two tracks are separate results, not two
-views of one. Cutting on a single ranking would be a bug: an entry can place #3
-with judges and #400 with the community, and a judge-track winner must never be
-dropped because the crowd ignored it.
+**One section.** `judge` holds the top 100 by rank. Zero-vote entries are omitted
+rather than published as rank 0 — absence already says it, more cheaply.
 
 **Row format.** One row per entry, per section:
 
@@ -731,8 +671,8 @@ lands at **~47 KB**, inside the 64 KB relays commonly allow. Two levers exist if
 a stricter relay needs them: dropping the redundant `31142:` prefix (~1 KB), and
 trimming the criteria breakdown.
 
-- **Read results:** `{ "kinds":[31343], "authors":["<jam-pk>"], "#a":["31143:<pk>:<jam-d>"] }` → one event → both leaderboards.
-- The result is the creator's **signed** tally. The judge track can be independently recomputed from the ballots and verified; the community track can only be re-queried (see [1b](#1b-what-this-costs-in-rigour)).
+- **Read results:** `{ "kinds":[31343], "authors":["<jam-pk>"], "#a":["31143:<pk>:<jam-d>"] }` → one event → the leaderboard.
+- The result is the creator's **signed** tally, and it can be independently recomputed from the ballots and verified by anyone.
 - Finally, stamp the jam event with `["results", "<ts>"]` (edit → `created_at = prev + 1`).
 
 ### Per-entry results on demand
@@ -764,19 +704,14 @@ accepted cost of not publishing thousands of rows nobody reads.
 
 ### Who wins
 
-**The judge track is authoritative.** Judges' ballots are fetched as real events,
-validated whole, PoW-checked and independently verifiable; a jam's winner is
-judge rank #1, and clients should say so plainly.
+**The winner is judge rank #1**, and clients should say so plainly. Judges'
+ballots are fetched as real events, validated whole, PoW-checked and
+independently verifiable — anyone can recount them and reach the same answer.
 
-**The community track is an audience signal, not an award.** It is counted, not
-verified — no PoW check, no whole-ballot validation, and per-bucket maximums mean
-the *highest* claim from any relay wins by construction. That is fine for "what
-did people like" and disqualifying for "who took the prize."
-
-**A jam with community voting and no judges therefore has no verifiable result.**
-Clients should either discourage that combination at creation or label its
-results plainly as unofficial — never render them with the authority of a judged
-jam's.
+**A jam with `voting` off has no result at all**, only entries. That is a valid
+way to run a jam (a showcase rather than a competition), but clients must not
+manufacture a ranking for it from reactions, zaps, or anything else. Those are
+audience signals; they belong next to an entry, never inside a result event.
 
 **Displaying ranks.** Where both tracks exist, show both, judges first: on the
 entry card in the submissions list, and in the entry's own results section on the
@@ -788,7 +723,7 @@ mod post.
 |---|---|---|---|
 | `d` | Yes | `<jam-d>:r:0` | Replaceable (re-tally updates in place) |
 | `a` | Yes | `31143:<pk>:<jam-d>` | The jam |
-| `truncated` | Yes | `<N>` | Top N published per track; absence ≠ no votes |
+| `truncated` | Yes | `<N>` | Top N published; absence ≠ no votes |
 | `content` | Yes | JSON object | `{judge: [...], community: [...]}` |
 
 ---
@@ -815,14 +750,14 @@ Game jams reuse **this exact design**; only a few things differ, and none are bu
 - **Date search:** multi-letter tags aren't relay-indexable, so a derived single-letter **`y` month-bucket** index (one per month spanned, `start` → `voting_end || end`) enables `#y` prefiltering. Untrusted and ignored on read (truth is re-derived from `start`/`end`); jams capped at **12 months** on creation.
 - **`g`** optional + repeatable for jams (0 = general).
 - **Submissions** = normal entry event + `["a","31143:…"]` + `["l","jam-entry"]` (bare `l`, no `L`).
-- **Two voting tracks:** `voting` (judges, self-verified via `judge` list) and `user-voting` (community, PoW only for now; future weighting via DNN ID / purchases; WoT rejected).
+- **One voting track:** `voting` (judges, self-verified via the `judge` list, which must hold pubkeys). An open community vote was specced and **removed** — impractical to count and, more importantly, meaningless to count while keys are free.
 - **Criteria:** none = single overall `0–score_max`; custom = 2–15 `criterion` tags, all sharing one `score_max` (2–100, default 10).
 - **Ballot scores** live in `c` tags keyed by a criteria fingerprint (`"<n>x<max>:<hash>"`) plus criterion index and value, so each (criterion, score) bucket is independently countable and a mid-voting criteria change fails loudly instead of misattributing.
 - **Rewards:** repeatable `reward` tags (toggle `monetary` [free-text currency + amount] or `other` [text]) + a single free-text `reward_note` for distribution.
 - **Ballot** identity via composite `d` (`<jam-d>:<sub-d>`); edits use `created_at = now`; no `published_at`.
 - **Jam/mod edits** use `created_at = prev + 1` (feed-stable); **ballot edits** use `now` (deadline-enforcing).
-- **Tally:** creator-triggered. Judges' ballots are **fetched** by author filter and counted exactly; community ballots are **counted** via NIP-45 per (entry, criterion, score) bucket, taking the highest count per bucket across relays. Query cost tracks entries, not votes. Two ranks, progress UI.
-- **Results:** one `31343` event holding the top 100 of each track, with a `truncated` marker; zero-vote entries omitted; anything below the cut is computed on demand from the entry's own page. Jam keeps only a `results` marker. Judge track fully recomputable/verifiable; community track re-queryable.
-- **Relays** tag declares where ballots go / tally reads; client auto-seeds up to 3 client + 3 user relays, each removable, and badges NIP-45 support. Community voting can't be enabled without at least one counting relay, and switches itself off if the last one is removed.
+- **Tally:** creator-triggered. Judges' ballots are **fetched** by author filter in one query and counted exactly. No NIP-45 anywhere.
+- **Results:** one `31343` event holding the top 100, with a `truncated` marker; zero-vote entries omitted; anything below the cut is computed on demand from the entry's own page, and only after `voting_end` (a running average anchors voters). Jam keeps only a `results` marker. Fully recomputable and verifiable by anyone.
+- **Relays** tag declares where ballots go / tally reads; client auto-seeds up to 3 client + 3 user relays, each removable. No relay capability requirement — a vote relay just has to store and serve events.
 - **Edit locks:** `start`, `end`, `voting_end` and the whole voting setup freeze once their moment passes (60s early, to absorb clock skew), re-checked on save rather than only on render.
 - **Games** get their own future kind; never overloaded onto `31142`.

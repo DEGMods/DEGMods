@@ -182,6 +182,23 @@ export function isBallotCounted(
 }
 
 /** Hex pubkeys of the jam's judges (only npub-form entries are self-verifiable). */
+/**
+ * Is this judge entry something a ballot can actually be matched against?
+ *
+ * The editor blocks publishing anything else. Judges used to be free text, which
+ * published happily and then quietly produced an empty judge track at tally time,
+ * because a name has no pubkey to compare a ballot's author to.
+ */
+export function isJudgeKey(judge: string): boolean {
+  const v = judge.trim()
+  if (/^[0-9a-f]{64}$/i.test(v)) return true
+  try {
+    return nip19.decode(v).type === 'npub'
+  } catch {
+    return false
+  }
+}
+
 export function judgeHexSet(judges: string[]): Set<string> {
   const out = new Set<string>()
   for (const j of judges) {
@@ -208,9 +225,7 @@ export interface TrackAggregate {
 export interface EntryAggregate {
   coordinate: string // 31142:<mod-pk>:<mod-d>
   judge: TrackAggregate
-  user: TrackAggregate
   jRank: number
-  uRank: number
 }
 
 function emptyTrack(n = 0): TrackAggregate { return { avg: 0, votes: 0, perCriterion: Array(n).fill(0) } }
@@ -250,32 +265,27 @@ export function aggregateResults(
   judgeHexes: Set<string>,
   criteriaCount: number,
 ): EntryAggregate[] {
-  const byEntry = new Map<string, { judge: JamBallot[]; user: JamBallot[] }>()
-  for (const coord of entryCoordinates) byEntry.set(coord, { judge: [], user: [] })
+  const byEntry = new Map<string, JamBallot[]>()
+  for (const coord of entryCoordinates) byEntry.set(coord, [])
   for (const b of countedBallots) {
-    const bucket = byEntry.get(b.submissionCoordinate)
-    if (!bucket) continue // ballot for an unknown/invalid entry
-    bucket.user.push(b)
-    if (judgeHexes.has(b.pubkey)) bucket.judge.push(b)
+    if (!judgeHexes.has(b.pubkey)) continue // only judges vote
+    byEntry.get(b.submissionCoordinate)?.push(b) // skips unknown/invalid entries
   }
 
-  const aggregates: EntryAggregate[] = [...byEntry.entries()].map(([coordinate, { judge, user }]) => ({
+  const aggregates: EntryAggregate[] = [...byEntry.entries()].map(([coordinate, judge]) => ({
     coordinate,
     judge: aggregateTrack(judge, criteriaCount),
-    user: aggregateTrack(user, criteriaCount),
     jRank: 0,
-    uRank: 0,
   }))
 
   assignRank(aggregates, 'judge', (a) => a.jRank, (a, r) => { a.jRank = r })
-  assignRank(aggregates, 'user', (a) => a.uRank, (a, r) => { a.uRank = r })
   return aggregates
 }
 
 /** Rank by avg desc, tie-broken by vote count desc. Zero-vote entries share the last rank 0. */
 function assignRank(
   aggregates: EntryAggregate[],
-  track: 'judge' | 'user',
+  track: 'judge',
   _get: (a: EntryAggregate) => number,
   set: (a: EntryAggregate, rank: number) => void,
 ) {
@@ -302,8 +312,7 @@ export interface JamResultRow {
 
 export interface JamResults {
   judge: JamResultRow[]
-  community: JamResultRow[]
-  /** Top N published per track. Absence from a section means "not in the top N", not "no votes". */
+  /** Top N published. Absence means "not in the top N", not "no votes". */
   truncatedAt: number
 }
 
@@ -311,25 +320,23 @@ export interface JamResults {
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 /**
- * The top N of one track, ranked.
+ * The top N entries, ranked.
  *
  * Zero-vote entries are dropped rather than published as rank 0: a row of all
  * zeroes carries no information, and absence already says the same thing more
- * cheaply. The two tracks are cut independently and may contain the same entry —
- * an entry can place #3 with judges and #400 with the community, so cutting on a
- * single ranking would silently discard a winner.
+ * cheaply.
  */
-export function trackRows(aggregates: EntryAggregate[], track: 'judge' | 'user', topN = RESULT_TOP_N): JamResultRow[] {
+export function trackRows(aggregates: EntryAggregate[], topN = RESULT_TOP_N): JamResultRow[] {
   return aggregates
-    .filter((a) => a[track].votes > 0)
-    .sort((a, b) => (track === 'judge' ? a.jRank - b.jRank : a.uRank - b.uRank))
+    .filter((a) => a.judge.votes > 0)
+    .sort((a, b) => a.jRank - b.jRank)
     .slice(0, topN)
     .map((a) => ({
       a: a.coordinate,
-      r: track === 'judge' ? a.jRank : a.uRank,
-      v: a[track].votes,
-      s: round1(a[track].avg),
-      c: a[track].perCriterion.map(round1),
+      r: a.jRank,
+      v: a.judge.votes,
+      s: round1(a.judge.avg),
+      c: a.judge.perCriterion.map(round1),
     }))
 }
 
@@ -340,7 +347,7 @@ export function buildResultEvent(
 ): UnsignedEvent {
   return {
     kind: KINDS.JAM_RESULT,
-    content: JSON.stringify({ judge: results.judge, community: results.community }),
+    content: JSON.stringify({ judge: results.judge }),
     tags: [
       ['d', `${jamDTag}:r:0`],
       ['a', jamCoordinate],
@@ -374,7 +381,6 @@ export function extractResults(event: NostrEvent): JamResults | null {
     if (!obj || typeof obj !== 'object') return null
     return {
       judge: parseRows(obj.judge),
-      community: parseRows(obj.community),
       truncatedAt: Number(event.tags.find((t) => t[0] === 'truncated')?.[1]) || RESULT_TOP_N,
     }
   } catch {
@@ -389,62 +395,8 @@ export function latestResults(events: NostrEvent[]): JamResults | null {
   return newest ? extractResults(newest) : null
 }
 
-// ─── Counting the community track (NIP-45) ──────────────────────────
 
-/**
- * Every (criterion, score) bucket a valid ballot for this jam could fall into.
- *
- * The community track is tallied by asking relays how many ballots sit in each
- * bucket rather than downloading them, so the number of queries is fixed by the
- * jam's shape — criteria × (max + 1) — and is completely independent of how many
- * people voted. A jam with ten million ballots costs exactly the same as one with
- * ten. See docs/jam-event.md.
- */
-export function scoreBuckets(jam: Pick<JamDetails, 'criteria' | 'scoreMax'>): { index: number; value: number; bucket: string }[] {
-  const fp = criteriaFingerprint(jam)
-  const criteria = ballotCriteria(jam)
-  const out: { index: number; value: number; bucket: string }[] = []
-  for (let i = 0; i < criteria.length; i++) {
-    for (let v = 0; v <= criteria[i].max; v++) out.push({ index: i, value: v, bucket: scoreBucket(fp, i, v) })
-  }
-  return out
-}
-
-/** A histogram of counts per criterion: `histogram[criterionIndex][score] = ballots`. */
-export type ScoreHistogram = number[][]
-
-export function emptyHistogram(jam: Pick<JamDetails, 'criteria' | 'scoreMax'>): ScoreHistogram {
-  return ballotCriteria(jam).map((c) => Array(c.max + 1).fill(0))
-}
-
-/**
- * Turn a counted histogram into a track aggregate.
- *
- * `votes` is the largest per-criterion total rather than a sum: each criterion is
- * counted independently and a relay may answer some buckets and not others, so
- * the criterion with the most complete picture is the best available estimate of
- * how many people voted.
- */
-export function histogramToTrack(hist: ScoreHistogram): TrackAggregate {
-  const perCriterion: number[] = []
-  let votes = 0
-  const scored: number[] = []
-  for (const counts of hist) {
-    let total = 0, n = 0
-    for (let v = 0; v < counts.length; v++) { total += v * counts[v]; n += counts[v] }
-    const avg = n ? total / n : 0
-    perCriterion.push(avg)
-    if (n > 0) scored.push(avg)
-    if (n > votes) votes = n
-  }
-  const avg = scored.length ? scored.reduce((a, v) => a + v, 0) / scored.length : 0
-  return { avg, votes, perCriterion }
-}
-
-/** An entry's row in each track, for rendering ranks on the entry itself. */
-export function rowsForEntry(results: JamResults, coordinate: string): { judge: JamResultRow | null; community: JamResultRow | null } {
-  return {
-    judge: results.judge.find((r) => r.a === coordinate) ?? null,
-    community: results.community.find((r) => r.a === coordinate) ?? null,
-  }
+/** An entry's published row, for rendering its rank on the entry itself. */
+export function rowsForEntry(results: JamResults, coordinate: string): { judge: JamResultRow | null } {
+  return { judge: results.judge.find((r) => r.a === coordinate) ?? null }
 }

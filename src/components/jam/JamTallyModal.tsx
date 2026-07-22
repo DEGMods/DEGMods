@@ -25,10 +25,9 @@ const fmtWindow = (ts: number) => new Date(ts * 1000).toLocaleString(undefined, 
 /**
  * Creator-only tally flow.
  *
- * Judges' ballots are fetched and counted exactly; community ballots are counted
- * via NIP-45 rather than downloaded, so the work is fixed by the jam's shape and
- * doesn't grow with how many people voted. Publishes one Result event (kind
- * 31343) holding the top 100 of each track, then stamps the jam.
+ * Judges' ballots are fetched as events and counted exactly — one query for the
+ * whole jam. Publishes one Result event (kind 31343) holding the top 100, then
+ * stamps the jam.
  */
 export function JamTallyModal({
   open,
@@ -49,7 +48,6 @@ export function JamTallyModal({
   const [published, setPublished] = useState<JamResults | null>(null)
   const [loadingPublished, setLoadingPublished] = useState(false)
 
-  const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [tally, setTally] = useState<FullTally | null>(null)
   const [titles, setTitles] = useState<Map<string, string>>(new Map())
   const [searched, setSearched] = useState<string[]>([])
@@ -83,11 +81,11 @@ export function JamTallyModal({
   }, [open, phase])
 
   const run = async () => {
-    setPhase('counting'); setError(null); setProgress({ done: 0, total: 0 })
+    setPhase('counting'); setError(null)
     try {
       const rd = relays()
       setSearched(rd)
-      const result = await tallyJam(rd, jam, (done, total) => setProgress({ done, total }))
+      const result = await tallyJam(rd, jam)
       setTally(result)
       setTitles(new Map(result.entries.map((e) => [e.coordinate, e.title])))
       setPhase('review')
@@ -102,8 +100,7 @@ export function JamTallyModal({
     setPhase('publishing'); setError(null)
     try {
       const results: JamResults = {
-        judge: trackRows(tally.aggregates, 'judge'),
-        community: trackRows(tally.aggregates, 'user'),
+        judge: trackRows(tally.aggregates),
         truncatedAt: RESULT_TOP_N,
       }
       const res = await signAndPublish(
@@ -136,19 +133,14 @@ export function JamTallyModal({
   const close = () => { if (phase !== 'counting' && phase !== 'publishing') onOpenChange(false) }
 
   const votingEndTs = jam.votingEnd ?? jam.end
-  const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0
 
-  const reviewJudge = tally ? trackRows(tally.aggregates, 'judge', 5) : []
-  const reviewCommunity = tally ? trackRows(tally.aggregates, 'user', 5) : []
-  // Community counted but every bucket came back empty — can't tell an outage
-  // from a genuine shutout, so don't imply the latter.
-  const communityBlank = !!tally && jam.userVotingEnabled && tally.communityAsked > 0 && tally.communityAnswered === 0
+  const reviewJudge = tally ? trackRows(tally.aggregates, 5) : []
 
-  const RowList = ({ rows, tone }: { rows: JamResultRow[]; tone: 'judge' | 'community' }) => (
+  const RowList = ({ rows }: { rows: JamResultRow[] }) => (
     <div className="space-y-1.5">
       {rows.map((r) => (
-        <div key={`${tone}-${r.a}`} className="flex items-baseline gap-2 rounded-md border border-[#262626] px-2.5 py-2">
-          <span className={cn('shrink-0 text-xs font-semibold tabular-nums', tone === 'judge' ? 'text-amber-300' : 'text-sky-300')}>#{r.r}</span>
+        <div key={r.a} className="flex items-baseline gap-2 rounded-md border border-[#262626] px-2.5 py-2">
+          <span className="shrink-0 text-xs font-semibold tabular-nums text-amber-300">#{r.r}</span>
           <span className="min-w-0 flex-1 truncate text-sm text-neutral-200">{titles.get(r.a) ?? r.a}</span>
           <span className="shrink-0 text-[11px] tabular-nums text-neutral-400">
             {r.s.toFixed(1)} · {r.v.toLocaleString()} {r.v === 1 ? 'vote' : 'votes'}
@@ -171,21 +163,13 @@ export function JamTallyModal({
             <div className="space-y-3">
               {loadingPublished ? (
                 <div className="flex items-center gap-2 text-sm text-neutral-300"><Loader2 className="h-4 w-4 animate-spin text-[#fc4462]" /> Loading published results…</div>
-              ) : published && (published.judge.length > 0 || published.community.length > 0) ? (
+              ) : published && published.judge.length > 0 ? (
                 <>
-                  <p className="text-xs text-neutral-500">Published {jam.resultsAt ? fmtWindow(jam.resultsAt) : ''} · top {published.truncatedAt} per track</p>
-                  {published.judge.length > 0 && (
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-medium text-amber-300">Judges — official result</p>
-                      <RowList rows={published.judge.slice(0, 10)} tone="judge" />
-                    </div>
-                  )}
-                  {published.community.length > 0 && (
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-medium text-sky-300">Community — audience signal</p>
-                      <RowList rows={published.community.slice(0, 10)} tone="community" />
-                    </div>
-                  )}
+                  <p className="text-xs text-neutral-500">Published {jam.resultsAt ? fmtWindow(jam.resultsAt) : ''} · top {published.truncatedAt}</p>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-amber-300">Judges&rsquo; result</p>
+                    <RowList rows={published.judge.slice(0, 10)} />
+                  </div>
                 </>
               ) : (
                 <p className="text-sm text-neutral-500">
@@ -199,9 +183,8 @@ export function JamTallyModal({
           {phase === 'confirm' && (
             <div className="space-y-2 text-sm text-neutral-300">
               <p>
-                Judges&apos; ballots are fetched and counted exactly. Community votes are counted by
-                asking each vote relay how many ballots it holds — best effort, and votes stored only
-                on a relay that&apos;s down right now can be missed.
+                Judges&apos; ballots are fetched as signed events and counted exactly, so anyone can
+                recount them and get the same answer.
               </p>
               <p className="text-neutral-400">
                 The top {RESULT_TOP_N} of each track is published. Anything below that stays available
@@ -213,24 +196,12 @@ export function JamTallyModal({
 
           {phase === 'counting' && (
             <div className="space-y-3">
+              {/* No progress bar any more: judges are one fetch for the whole
+                  jam, so there are no units to count through. */}
               <div className="flex items-center gap-2 text-sm text-neutral-300">
                 <Loader2 className="h-4 w-4 animate-spin text-[#fc4462]" />
-                {progress.total
-                  ? <>Counting community votes… <span className="tabular-nums text-neutral-400">{progress.done.toLocaleString()}/{progress.total.toLocaleString()} checks</span></>
-                  : <>Fetching entries and judges&rsquo; ballots…</>}
+                Fetching entries and judges&rsquo; ballots…
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-[#262626]"><div className="h-full bg-[#fc4462] transition-[width]" style={{ width: `${pct}%` }} /></div>
-              {/* The big number is queries, not ballots: the community track is
-                  built by asking the relays how many votes gave each criterion
-                  each possible score — entries × criteria × (score_max + 1) of
-                  them. Two voters can sit behind six hundred checks, so say so
-                  rather than let it read as a vote count. */}
-              {progress.total > 0 && (
-                <p className="text-[11px] leading-relaxed text-neutral-500">
-                  One check per score value per criterion — not a vote count. A jam scored out of
-                  {' '}{jam.scoreMax || 10} needs {(jam.scoreMax || 10) + 1} of them per criterion, per entry.
-                </p>
-              )}
               <p className="flex items-start gap-1.5 text-[11px] text-amber-400/90"><AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> Keep this window open until the tally finishes.</p>
             </div>
           )}
@@ -240,21 +211,12 @@ export function JamTallyModal({
               <div className="flex flex-wrap gap-3 text-sm">
                 <span className="rounded-md bg-[#262626] px-2.5 py-1 text-neutral-200">{tally.entries.length} {tally.entries.length === 1 ? 'entry' : 'entries'}</span>
                 {jam.votingEnabled && <span className="rounded-md bg-[#262626] px-2.5 py-1 text-amber-300">{tally.judgeBallots} judge {tally.judgeBallots === 1 ? 'ballot' : 'ballots'}</span>}
-                {jam.userVotingEnabled && <span className="rounded-md bg-[#262626] px-2.5 py-1 text-sky-300">{reviewCommunity.length > 0 ? 'community counted' : 'no community votes found'}</span>}
               </div>
 
               {tally.judgesUnverifiable && (
                 <p className="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-300">
                   <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
                   No judge is listed as an npub, so their ballots can&apos;t be identified. The judge track will be empty.
-                </p>
-              )}
-
-              {communityBlank && (
-                <p className="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-300">
-                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-                  No vote relay answered a single count. This means &quot;we couldn&apos;t find out&quot;, not
-                  &quot;nobody voted&quot; — check your vote relays support counting before publishing.
                 </p>
               )}
 
@@ -267,19 +229,12 @@ export function JamTallyModal({
                 </ul>
               </details>
 
-              {reviewJudge.length > 0 && (
+              {reviewJudge.length > 0 ? (
                 <div className="space-y-1.5">
                   <p className="text-xs font-medium text-amber-300">Judges — decides the winner</p>
-                  <RowList rows={reviewJudge} tone="judge" />
+                  <RowList rows={reviewJudge} />
                 </div>
-              )}
-              {reviewCommunity.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-sky-300">Community — audience signal</p>
-                  <RowList rows={reviewCommunity} tone="community" />
-                </div>
-              )}
-              {reviewJudge.length === 0 && reviewCommunity.length === 0 && (
+              ) : (
                 <p className="text-sm text-neutral-500">No counted votes — publishing will record an empty result.</p>
               )}
             </div>

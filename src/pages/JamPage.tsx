@@ -245,7 +245,7 @@ export function JamPage() {
   const isAuthor = myPubkey === jam.pubkey
   const canSubmit = status === 'active'
   const submitTip = status === 'upcoming' ? `Opens when the jam starts (${jamCountdownLabel(jam, now)})` : 'Submissions are closed'
-  const hasVoting = jam.votingEnabled || jam.userVotingEnabled
+  const hasVoting = jam.votingEnabled
   const votingOver = hasVoting && !!jam.votingEnd && now > jam.votingEnd
 
   const copyNaddr = () => { if (naddr) { navigator.clipboard.writeText(naddr); toast.success('Note ID copied to clipboard') } }
@@ -354,24 +354,12 @@ export function JamPage() {
           </Section>
 
           {/* Voting */}
-          {(jam.votingEnabled || jam.userVotingEnabled) && (
+          {jam.votingEnabled && (
             <Section title="Voting">
-              <div className="flex flex-wrap gap-2 text-xs">
-                {jam.votingEnabled && <span className="rounded-md bg-[#262626] px-2 py-1 text-neutral-200">Judge voting</span>}
-                {jam.userVotingEnabled && <span className="rounded-md bg-[#262626] px-2 py-1 text-neutral-200">Community voting</span>}
-              </div>
-              {/* Judges' ballots are fetched and verified individually; community
-                  votes are counted by relays, which can't be independently
-                  checked. Without judges there's nothing authoritative to point
-                  at, and the results shouldn't read as if there were. */}
-              {!jam.votingEnabled && jam.userVotingEnabled && (
-                <p className="flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-300">
-                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                  This jam has no judges, so its results are unofficial. Community votes are counted
-                  by the vote relays rather than verified one by one, and can be undercounted or
-                  inflated.
-                </p>
-              )}
+              <p className="text-xs text-neutral-400">
+                Scored by this jam&rsquo;s judges. Their ballots are signed events, so anyone can
+                recount them and get the same answer.
+              </p>
               <div>
                 <p className="mb-1.5 text-xs font-medium text-neutral-400">Scored on</p>
                 <div className="flex flex-wrap gap-1.5">

@@ -21,7 +21,7 @@ import { DatePicker } from './DatePicker'
 import { TimePicker, browserUses12h } from './TimePicker'
 import { IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { probeCountSupport, cachedCountSupport, type CountSupport } from '@/lib/nostr/relayCapabilities'
+import { isJudgeKey } from '@/lib/nostr/jamVoting'
 import { localToUnix, unixToLocal, MOD_JAM_TYPE, type JamFormState, type JamReward, type JamCriterion, type JamFaq, type JamRule, type JamDetails } from '@/lib/nostr/jam'
 import { cn } from '@/lib/utils'
 
@@ -101,7 +101,6 @@ interface EditorState {
   startDate: string; startTime: string
   endDate: string; endTime: string
   votingEnabled: boolean
-  userVotingEnabled: boolean
   judges: string[]
   votingEndDate: string; votingEndTime: string
   customCriteria: boolean
@@ -143,7 +142,7 @@ function emptyState(): EditorState {
     contentWarning: false,
     screenshots: [], games: [], tags: [],
     startDate: '', startTime: '', endDate: '', endTime: '',
-    votingEnabled: false, userVotingEnabled: false, judges: [],
+    votingEnabled: false, judges: [],
     votingEndDate: '', votingEndTime: '',
     customCriteria: false, criteria: ['', ''], scoreMax: 10,
     rewards: [], rewardNote: '', relays: defaultVoteRelays(), faq: [], rules: [],
@@ -159,7 +158,7 @@ function stateFromJam(jam: JamDetails): EditorState {
     contentWarning: !!jam.contentWarning,
     screenshots: [...jam.screenshots], games: [...jam.games], tags: [...jam.tags],
     startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
-    votingEnabled: jam.votingEnabled, userVotingEnabled: jam.userVotingEnabled, judges: [...jam.judges],
+    votingEnabled: jam.votingEnabled, judges: [...jam.judges],
     votingEndDate: ve.date, votingEndTime: ve.time,
     customCriteria: jam.criteria.length > 0,
     criteria: jam.criteria.length ? jam.criteria.map((c) => c.label) : ['', ''],
@@ -259,30 +258,8 @@ function GameChipInput({ games, onChange, maxLength, max }: { games: string[]; o
   )
 }
 
-/**
- * A relay's NIP-45 badge. Counting is how community votes get tallied at scale,
- * so whether a relay supports it is worth knowing while you're picking relays
- * rather than after the jam has run.
- */
-function CountBadgeForRelay({ state }: { state: CountSupport }) {
-  const style: Record<string, { text: string; cls: string; tip: string }> = {
-    checking: { text: 'checking…', cls: 'border-[#333] text-neutral-500', tip: 'Asking this relay whether it supports counting.' },
-    yes: { text: 'counts', cls: 'border-emerald-500/40 text-emerald-400', tip: 'Supports NIP-45 — community votes here can be tallied by counting.' },
-    no: { text: 'no count', cls: 'border-amber-500/40 text-amber-400', tip: "Reachable, but doesn't support NIP-45 counting. Ballots still publish here." },
-    unreachable: { text: 'unreachable', cls: 'border-red-500/40 text-red-400', tip: "Couldn't connect to this relay." },
-    unknown: { text: 'checking…', cls: 'border-[#333] text-neutral-500', tip: '' },
-  }
-  const s = style[state] ?? style.unknown
-
-  return (
-    <span title={s.tip} className={cn('shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium', s.cls)}>
-      {s.text}
-    </span>
-  )
-}
-
 /** Vote-relay list: each relay is a full-width row with an enable toggle + remove. */
-function VoteRelayList({ relays, onChange, appendOnly, support }: { relays: VoteRelay[]; onChange: (v: VoteRelay[]) => void; appendOnly?: boolean; support: Record<string, CountSupport> }) {
+function VoteRelayList({ relays, onChange, appendOnly }: { relays: VoteRelay[]; onChange: (v: VoteRelay[]) => void; appendOnly?: boolean }) {
   const [val, setVal] = useState('')
   const add = () => {
     const u = val.trim()
@@ -300,7 +277,6 @@ function VoteRelayList({ relays, onChange, appendOnly, support }: { relays: Vote
             <div key={r.url} className="flex items-center gap-3 rounded-lg border border-[#262626] bg-[#212121] px-3 py-2">
               <Switch checked={r.enabled} onCheckedChange={() => toggle(r.url)} disabled={appendOnly} />
               <span className={cn('min-w-0 flex-1 truncate font-mono text-xs', r.enabled ? 'text-neutral-200' : 'text-neutral-500 line-through')}>{r.url}</span>
-              <CountBadgeForRelay state={support[r.url] ?? 'unknown'} />
               {!appendOnly && <button type="button" onClick={() => remove(r.url)} className="shrink-0 text-neutral-500 hover:text-red-400"><X className="h-4 w-4" /></button>}
             </div>
           ))}
@@ -368,7 +344,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   // Which sections still have an unfilled required field. Mirrors the checks in
   // submit() so the dots and the error you'd get on publish never disagree.
   const missing = useMemo(() => {
-    const votingOn = s.votingEnabled || s.userVotingEnabled
+    const votingOn = s.votingEnabled
     return {
       basics: !s.title.trim() || !s.image.trim() || !s.summary.trim() || !s.content.trim(),
       tags: s.tags.length === 0,
@@ -381,44 +357,9 @@ export function JamEditor({ editJam, onPublish, publishing }: {
     }
   }, [s])
 
-  // ─── Vote-relay counting support ──────────────────────────────────
-  // Community votes are tallied by asking relays to COUNT ballots, so at least
-  // one enabled vote relay has to support NIP-45 or there is no way to produce
-  // community results at all.
-  const [support, setSupport] = useState<Record<string, CountSupport>>({})
-  const relayUrls = s.relays.map((r) => r.url).join(',')
+  // No NIP-45 probing here any more: judges' ballots are fetched as events, so a
+  // vote relay only has to store and serve them like any other.
 
-  useEffect(() => {
-    let cancelled = false
-    for (const r of s.relays) {
-      const known = cachedCountSupport(r.url)
-      if (known !== 'unknown') { setSupport((p) => ({ ...p, [r.url]: known })); continue }
-      setSupport((p) => (p[r.url] ? p : { ...p, [r.url]: 'checking' }))
-      probeCountSupport(r.url).then((res) => { if (!cancelled) setSupport((p) => ({ ...p, [r.url]: res })) })
-    }
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relayUrls])
-
-  const enabledRelays = s.relays.filter((r) => r.enabled)
-  const canCommunityVote = enabledRelays.some((r) => support[r.url] === 'yes')
-  // Don't judge until every enabled relay has answered — mid-probe we don't yet
-  // know whether counting is available.
-  const probingRelays = enabledRelays.some((r) => {
-    const st = support[r.url]
-    return !st || st === 'unknown' || st === 'checking'
-  })
-
-  // Removing or disabling the last counting relay silently strands community
-  // voting, so turn it off with the relay rather than leaving a toggle on that
-  // can no longer be honoured.
-  useEffect(() => {
-    if (!probingRelays && !canCommunityVote && s.userVotingEnabled) {
-      set('userVotingEnabled', false)
-      toast.warning('Community voting turned off — no enabled vote relay supports counting.')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [probingRelays, canCommunityVote, s.userVotingEnabled])
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) => setS((p) => ({ ...p, [k]: v }))
 
@@ -430,7 +371,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
   const publishedRef = useRef(s)
   const isDirty = useMemo(() => JSON.stringify(s) !== JSON.stringify(publishedRef.current), [s])
 
-  const votingOn = s.votingEnabled || s.userVotingEnabled
+  const votingOn = s.votingEnabled
 
   // Moments that have already passed can't be rewritten — they'd retroactively
   // change which submissions and ballots count. Judged against the *published*
@@ -458,7 +399,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       if (JSON.stringify(s[key]) !== JSON.stringify(pub[key])) setS((p) => ({ ...p, [key]: pub[key] }))
     }
     if (nowTs >= editJam.end) {
-      const scoringChanged = (['customCriteria', 'criteria', 'scoreMax', 'votingEnabled', 'userVotingEnabled', 'judges'] as const)
+      const scoringChanged = (['customCriteria', 'criteria', 'scoreMax', 'votingEnabled', 'judges'] as const)
         .filter((k) => JSON.stringify(s[k]) !== JSON.stringify(pub[k]))
       if (scoringChanged.length) {
         scoringChanged.forEach(restore)
@@ -512,6 +453,12 @@ export function JamEditor({ editJam, onPublish, publishing }: {
     if (!end) return toast.error('Set the end date and time')
     if (votingOn && !votingEnd) return toast.error('Set when voting ends')
     if (s.votingEnabled && s.judges.length === 0) return toast.error('Add at least one judge (or turn off judge voting)')
+    // A ballot is matched to its judge by pubkey, so a judge listed by name can
+    // never be counted — that used to publish fine and fail silently at tally.
+    const badJudges = s.judges.map((j) => j.trim()).filter(Boolean).filter((j) => !isJudgeKey(j))
+    if (badJudges.length) {
+      return toast.error(`Judges must be npubs — fix: ${badJudges.slice(0, 3).join(', ')}${badJudges.length > 3 ? '…' : ''}`)
+    }
     const labels = s.customCriteria ? s.criteria.map((c) => c.trim()).filter(Boolean) : []
     if (s.customCriteria && labels.length < 2) return toast.error('Custom scoring needs at least 2 criteria')
     if (labels.length > MAX.criteria) return toast.error(`Up to ${MAX.criteria} criteria`)
@@ -537,7 +484,6 @@ export function JamEditor({ editJam, onPublish, publishing }: {
       jamType: MOD_JAM_TYPE,
       start, end,
       votingEnabled: s.votingEnabled,
-      userVotingEnabled: s.userVotingEnabled,
       judges: s.judges,
       votingEnd,
       criteria,
@@ -659,27 +605,15 @@ export function JamEditor({ editJam, onPublish, publishing }: {
           <div><p className="text-sm text-neutral-200">Judge voting</p><p className="text-[11px] text-neutral-500">Only the judges you list score entries.</p></div>
           <Switch checked={s.votingEnabled} onCheckedChange={(v) => set('votingEnabled', v)} disabled={scoringLocked} />
         </div>
-        <div className="flex items-center justify-between rounded-lg bg-[#212121] px-3 py-2">
-          <div>
-            <p className="text-sm text-neutral-200">Community voting</p>
-            <p className="text-[11px] text-neutral-500">Anyone can score entries (proof-of-worked).</p>
-            {!scoringLocked && !canCommunityVote && (
-              <p className="mt-1 text-[11px] text-amber-400">
-                {probingRelays
-                  ? 'Checking whether your vote relays support counting…'
-                  : 'Needs a vote relay that supports counting — community votes are tallied by counting them, and none of your enabled relays can. Add one below.'}
-              </p>
-            )}
-          </div>
-          <Switch
-            checked={s.userVotingEnabled}
-            onCheckedChange={(v) => set('userVotingEnabled', v)}
-            disabled={scoringLocked || probingRelays || !canCommunityVote}
-          />
-        </div>
-
         {s.votingEnabled && (
-          <div className="space-y-1.5"><Label>Judges <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(name or npub)</span></Label><JudgeList judges={s.judges} onChange={(v) => set('judges', v)} maxLength={LIMITS.judge} max={MAX.judges} locked={scoringLocked} /></div>
+          <div className="space-y-1.5">
+            <Label>Judges <span className="text-[#fc4462]">*</span> <span className="text-neutral-600">(npub)</span></Label>
+            <JudgeList judges={s.judges} onChange={(v) => set('judges', v)} maxLength={LIMITS.judge} max={MAX.judges} locked={scoringLocked} />
+            <p className="text-[11px] text-neutral-500">
+              An npub, not a name — a ballot is matched to its judge by key, so a judge listed by
+              name could never be counted.
+            </p>
+          </div>
         )}
 
         {votingOn && (
@@ -794,7 +728,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
             already stored there from the tally.
           </p>
         )}
-        <VoteRelayList relays={s.relays} onChange={(v) => set('relays', v)} appendOnly={scoringLocked} support={support} />
+        <VoteRelayList relays={s.relays} onChange={(v) => set('relays', v)} appendOnly={scoringLocked} />
       </Section>
 
       {/* Rules */}
