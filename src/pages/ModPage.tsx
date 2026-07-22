@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import type { Event as NostrEvent } from 'nostr-tools'
+import type { Event as NostrEvent, Filter } from 'nostr-tools'
 import { useShortUrl } from '@/hooks/useShortUrl'
 import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { useModerationOverlay } from '@/hooks/useModerationTags'
@@ -9,7 +9,7 @@ import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
-import { fetchEvent, fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { fetchLatestEvent, subscribe } from '@/lib/nostr/relay-pool'
 import { extractModData } from '@/lib/nostr/events'
 import { LEGACY_MOD_KIND, extractLegacyModData } from '@/lib/mods/legacy' // LEGACY
 import { LegacyMigrateBanner, LegacyMigratedNotice } from '@/components/mod/LegacyMigrate' // LEGACY
@@ -85,6 +85,20 @@ function readableEventJson(ev: Record<string, unknown>): string {
 }
 
 /**
+ * How long a cold view keeps listening after the first relay answers, so a
+ * newer revision on a slower relay still surfaces. Only bounds the *watching* —
+ * the page has already rendered.
+ */
+const COLD_WATCH_MS = 6000
+
+/**
+ * Grace period in which a newer revision replaces what's on screen silently
+ * instead of prompting. Nothing has been read this soon after opening, so the
+ * swap is invisible where the dialog would be an interruption.
+ */
+const SILENT_UPGRADE_MS = 2500
+
+/**
  * Resolve a featured-video URL into how it should be shown: a direct file, or a
  * YouTube/Vimeo iframe embed (those don't play in a <video> tag).
  */
@@ -150,6 +164,43 @@ export default function ModPage() {
     if (!naddr) return
     let cancelled = false
 
+    /**
+     * Cold-view load: show the first relay to answer, keep listening for a newer
+     * revision until every relay has finished or the window closes.
+     *
+     * A late revision inside the grace window is swapped in silently. The
+     * "newer version" dialog exists to avoid pulling content out from under
+     * someone mid-read — two seconds after opening, nothing has been read yet,
+     * and a modal over a page you just opened is worse than the swap it warns
+     * about. After that, it prompts as before.
+     */
+    const renderFirstThenWatch = (relayUrls: string[], filter: Filter, have: NostrEvent | null) =>
+      new Promise<void>((resolve) => {
+        let best: NostrEvent | null = have
+        let done = false
+        const openedAt = Date.now()
+
+        const finish = () => {
+          if (done) return
+          done = true
+          clearTimeout(timer)
+          try { sub.close() } catch { /* already closed */ }
+          // Nothing anywhere, and nothing was already on screen.
+          if (!best && !cancelled) { setNotFound(true); setLoading(false) }
+          resolve()
+        }
+
+        const timer = setTimeout(finish, COLD_WATCH_MS)
+        const sub = subscribe(relayUrls, filter, (ev) => {
+          if (cancelled || done) return
+          if (best && ev.created_at <= best.created_at) return // older or same
+          const first = !best
+          best = ev
+          if (first || Date.now() - openedAt < SILENT_UPGRADE_MS) applyEvent(ev)
+          else setNewerEvent(ev)
+        }, finish)
+      })
+
     async function load() {
       setNotFound(false)
       setDeleted(false)
@@ -178,23 +229,25 @@ export default function ModPage() {
       if (cached) applyEvent(cached)
       else setLoading(true)
 
-      // 2. Background re-fetch to check for a newer version. With a cached copy
-      // to show, latency is hidden — use the high-assurance multi-pass fetch so
-      // a newer revision on a slow/cold relay is reliably caught. On a cold first
-      // view (no cache) keep the fast single-pass fetch so the page renders quickly.
+      // 2. Check for a newer version.
       try {
         const relayUrls = useSettingsStore.getState().getAllEnabledRelayUrls('read')
         const filter = { kinds: [kind], authors: [author], '#d': [identifier] }
-        const event = cached
-          ? await fetchLatestEvent(relayUrls, filter)
-          : await fetchEvent(relayUrls, filter)
-        if (cancelled) return
-        if (!event) {
-          if (!cached) { setNotFound(true); setLoading(false) }
+
+        // With a cached copy on screen, latency is hidden — use the
+        // high-assurance multi-pass fetch so a newer revision on a slow relay is
+        // reliably caught.
+        if (cached) {
+          const event = await fetchLatestEvent(relayUrls, filter)
+          if (cancelled || !event) return
+          if (event.created_at > cached.created_at) setNewerEvent(event) // prompt, don't force
           return
         }
-        if (!cached) applyEvent(event)
-        else if (event.created_at > cached.created_at) setNewerEvent(event) // prompt, don't force
+
+        // Cold view: render whichever relay answers first, then keep listening.
+        // Waiting for every relay to EOSE meant one slow or dead relay held the
+        // whole page at a spinner, which is also the case a shared link lands in.
+        await renderFirstThenWatch(relayUrls, filter, resolved ?? null)
       } catch {
         if (!cancelled && !cached) { setNotFound(true); setLoading(false) }
       }
