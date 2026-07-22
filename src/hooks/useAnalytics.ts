@@ -57,6 +57,8 @@ function onConfiguredHost(): boolean {
 declare global {
   interface Window {
     umami?: { track: (payload?: unknown) => void }
+    /** Set by the index.html bootstrap for the view it already counted. */
+    __umamiLandingSent?: string
   }
 }
 
@@ -103,6 +105,15 @@ export function useAnalytics() {
   useEffect(() => {
     if (!enabled) return
     const path = location.pathname + location.search
+    // The index.html bootstrap counts the landing view before the bundle has
+    // even parsed, so don't count it twice. Consumed once — coming back to the
+    // same path later is a new view.
+    if (window.__umamiLandingSent === path) {
+      delete window.__umamiLandingSent
+      lastPath.current = path
+      return
+    }
+
     // Guards on what was *sent*, not on what was started. Guarding on the start
     // would break the deferred path: React re-runs this effect (StrictMode does
     // it on every mount), the re-run would see the path as already handled and

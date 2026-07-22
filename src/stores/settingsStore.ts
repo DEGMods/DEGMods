@@ -208,7 +208,12 @@ function withoutRetired<T extends { url: string }>(relays: T[]): T[] {
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-  ...POSTING_DEFAULTS,
+  // Read at store creation, not left to loadFromStorage(), which runs from an
+  // App effect. `analyticsEnabled` lives in here: defaulting it to true until
+  // that effect fired meant a reader who had opted out still got the script
+  // loaded and one pageview sent on every page load, before the setting was
+  // ever consulted. An opt-out that leaks a view isn't an opt-out.
+  ...loadJson<PostingBehaviour>(StorageKey.POSTING_BEHAVIOUR, POSTING_DEFAULTS),
   clientRelays: DEFAULT_RELAYS.map(r => ({ ...r })),
   userRelays: [],
   customRelays: [],
