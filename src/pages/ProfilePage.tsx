@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { nip19, type Filter } from 'nostr-tools'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -22,7 +22,10 @@ import { useBlockFilter } from '@/hooks/useBlock'
 import { useWotModFilter, useWotHiddenCount } from '@/hooks/useWot'
 import { useFollowedSet } from '@/hooks/useFollowedSet'
 import { applyModFilters } from '@/lib/mods/filterMods'
-import { ModFiltersBar, TagEditor } from '@/components/search/ModFiltersBar'
+import { ModFiltersBar, TagEditor, SourcesEditor } from '@/components/search/ModFiltersBar'
+import { usePreferencesStore } from '@/stores/preferencesStore'
+import { UNTAGGED, BUILTIN_SOURCES, type NsfwMode, type SourceEntry } from '@/stores/modFiltersStore'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { SearchBar } from '@/components/search/SearchBar'
 import { cn } from '@/lib/utils'
 import type { BlogDetails } from '@/types/blog'
@@ -35,9 +38,28 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Loader2, User, Tag as TagIcon, ArrowUpDown } from 'lucide-react'
+import { Loader2, User, Tag as TagIcon, ChevronDown, Radio, Users } from 'lucide-react'
 
 const tabTrigger = 'py-1.5 data-[state=active]:bg-[#262626] data-[state=active]:text-purple-400'
+
+const BLOG_NSFW_OPTIONS: { value: NsfwMode; label: string }[] = [
+  { value: 'hide', label: 'Hide NSFW' },
+  { value: 'show', label: 'Show NSFW' },
+  { value: 'only', label: 'Only NSFW' },
+]
+
+/**
+ * Sources start all-enabled, including untagged.
+ *
+ * The mods listing defaults `untagged` off, because an untagged mod there is
+ * usually one scraped in from elsewhere. A blog post carries a client tag only
+ * if the writing app set one, and most long-form clients don't — defaulting it
+ * off would hide the majority of a non-DEG-Mods author's posts by default.
+ */
+const DEFAULT_BLOG_SOURCES: SourceEntry[] = [
+  ...BUILTIN_SOURCES.map((name) => ({ name, enabled: true })),
+  { name: UNTAGGED, enabled: true },
+]
 const hideInactive = 'mt-4 data-[state=inactive]:hidden'
 
 const MODS_PER_PAGE = 12
@@ -322,16 +344,23 @@ function BlogsTab({ pubkey, profile }: { pubkey: string; profile: UserProfile | 
   const filter = useMemo<Filter>(() => ({ kinds: [KINDS.BLOG], authors: [pubkey] }), [pubkey])
   const { events, loading, loadingMore, reachedEnd, loadMore } = useProgressiveEvents(filter)
   const [page, setPage] = useState(1)
-  // Blog filtering is deliberately lighter than mods': a blog has no NSFW flag,
-  // categories, reposts or legacy variant, so those controls would be inert.
-  // Search + tags + order is everything a blog actually carries.
+  // Lighter than the mods bar: categories, reposts, emulation and the legacy
+  // variant have no blog equivalent, so those controls would be inert. NSFW,
+  // sources and moderation do apply and are here. Order is deliberately absent —
+  // posts are always newest-first, the only order a blog listing wants.
   const [search, setSearch] = useState('')
   const [tagFilter, setTagFilter] = useState<string[]>([])
   const [tagsOpen, setTagsOpen] = useState(false)
-  const [oldestFirst, setOldestFirst] = useState(false)
+  const [nsfwMode, setNsfwMode] = useState<NsfwMode>('hide')
+  const [sources, setSources] = useState<SourceEntry[]>(DEFAULT_BLOG_SOURCES)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
+
+  // Admin-hidden posts and blocked authors, honoring the reader's opt-out.
+  const moderate = useModerationFilter()
+  const softOn = usePreferencesStore((s) => s.softModeration)
 
   useEffect(() => { setPage(1) }, [pubkey])
-  useEffect(() => { setPage(1) }, [search, tagFilter, oldestFirst])
+  useEffect(() => { setPage(1) }, [search, tagFilter, nsfwMode, sources])
 
   const blogs = useMemo<BlogDetails[]>(() => {
     const byKey = new Map<string, typeof events[number]>()
@@ -347,19 +376,27 @@ function BlogsTab({ pubkey, profile }: { pubkey: string; profile: UserProfile | 
       .sort((a, b) => b.publishedAt - a.publishedAt)
   }, [events])
 
+  /** Client names seen on this author's posts, for the Sources picker. */
+  const availableClients = useMemo(
+    () => [...new Set(blogs.map((b) => b.client).filter((c): c is string => !!c))],
+    [blogs],
+  )
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
     const wanted = tagFilter.map((t) => t.toLowerCase())
-    const out = blogs.filter((b) => {
+    const disabledSources = new Set(sources.filter((s) => !s.enabled).map((s) => s.name.toLowerCase()))
+    return moderate(blogs).filter((b) => {
+      if (nsfwMode === 'hide' && b.contentWarning) return false
+      if (nsfwMode === 'only' && !b.contentWarning) return false
+      if (disabledSources.size && disabledSources.has((b.client || UNTAGGED).toLowerCase())) return false
       if (wanted.length && !b.tags.some((t) => wanted.includes(t.toLowerCase()))) return false
       if (!q) return true
       return b.title.toLowerCase().includes(q) ||
         b.summary.toLowerCase().includes(q) ||
         b.tags.some((t) => t.toLowerCase().includes(q))
     })
-    // `blogs` is newest-first already, so oldest-first is just a reversal.
-    return oldestFirst ? [...out].reverse() : out
-  }, [blogs, search, tagFilter, oldestFirst])
+  }, [blogs, search, tagFilter, nsfwMode, sources, moderate])
 
   const totalPages = Math.max(1, Math.ceil(visible.length / BLOGS_PER_PAGE))
   const current = Math.min(page, totalPages)
@@ -374,6 +411,25 @@ function BlogsTab({ pubkey, profile }: { pubkey: string; profile: UserProfile | 
       <SearchBar value={search} onChange={setSearch} placeholder="Search this author's posts by title, summary, or tags…" />
       <div className="rounded-lg border border-[#262626] bg-[#1c1c1c] p-3">
         <div className="flex flex-wrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="group inline-flex items-center gap-1.5 rounded-lg border border-[#262626] bg-[#1c1c1c] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040] focus:outline-none">
+                {BLOG_NSFW_OPTIONS.find((o) => o.value === nsfwMode)?.label}
+                <ChevronDown className="h-4 w-4 text-neutral-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="border-[#262626] bg-[#1c1c1c]">
+              {BLOG_NSFW_OPTIONS.map((o) => (
+                <DropdownMenuItem
+                  key={o.value}
+                  onClick={() => setNsfwMode(o.value)}
+                  className={cn('cursor-pointer text-sm', nsfwMode === o.value ? 'text-purple-300' : 'text-neutral-300')}
+                >
+                  {o.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             onClick={() => setTagsOpen(true)}
             className={cn(
@@ -387,16 +443,37 @@ function BlogsTab({ pubkey, profile }: { pubkey: string; profile: UserProfile | 
             {tagFilter.length > 0 && <span className="text-xs tabular-nums opacity-70">{tagFilter.length}</span>}
           </button>
           <button
-            onClick={() => setOldestFirst((v) => !v)}
+            onClick={() => setSourcesOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040]"
           >
-            <ArrowUpDown className="h-4 w-4" /> {oldestFirst ? 'Oldest first' : 'Newest first'}
+            <Radio className="h-4 w-4" /> Sources
+            <span className="text-xs tabular-nums opacity-70">{sources.filter((s) => s.enabled).length}</span>
           </button>
+          {/* Reflects the global soft-moderation setting rather than owning a
+              local copy — one switch, configured in Settings, same as /mods. */}
+          <Link
+            to="/settings?tab=moderation"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040]"
+          >
+            <Users className="h-4 w-4" /> {softOn ? 'Moderated' : 'Unmoderated'}
+          </Link>
           <span className="ml-auto text-sm text-neutral-500">
             {visible.length} {visible.length === 1 ? 'post' : 'posts'}
           </span>
         </div>
       </div>
+
+      <Dialog open={sourcesOpen} onOpenChange={setSourcesOpen}>
+        <DialogContent className="border-[#262626] bg-[#1c1c1c]">
+          <DialogHeader>
+            <DialogTitle className="text-neutral-100">Sources</DialogTitle>
+            <DialogDescription className="text-neutral-400">
+              Show only posts published by these clients.
+            </DialogDescription>
+          </DialogHeader>
+          <SourcesEditor sources={sources} onChange={setSources} availableClients={availableClients} />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={tagsOpen} onOpenChange={setTagsOpen}>
         <DialogContent className="border-[#262626] bg-[#1c1c1c]">

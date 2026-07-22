@@ -446,6 +446,9 @@ export function extractBlogData(event: NostrEvent): BlogDetails {
     featuredImageUrl: getTag('image') || undefined,
     tags: getTags('t'),
     client: getTag('client') || undefined,
+    // Content warning (NIP-36) + the legacy nsfw tag, same as mods.
+    contentWarning: getTag('content-warning') ||
+      (event.tags.some(t => t[0] === 'nsfw' && t[1] === 'true') ? 'nsfw' : undefined),
     isDeleted: event.tags.some(t => t[0] === 'deleted' && t[1] === 'true'),
     aTag: `${KINDS.BLOG}:${event.pubkey}:${dTag}`,
   }
