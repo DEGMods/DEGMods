@@ -1076,6 +1076,12 @@ function WebOfTrustSettings() {
             onCheckedChange={(v) => updateWot({ applyMods: v })}
           />
           <ToggleRow
+            label="Mod jams"
+            description="Hide mod jams from low-trust users across the jam listing."
+            checked={settings.applyJams}
+            onCheckedChange={(v) => updateWot({ applyJams: v })}
+          />
+          <ToggleRow
             label="Comments"
             description="Hide comments and replies from low-trust users."
             checked={settings.applyComments}

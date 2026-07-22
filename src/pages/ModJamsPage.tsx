@@ -11,7 +11,7 @@ import { JamFiltersBar } from '@/components/jam/JamFiltersBar'
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
-import { useWotModFilter, useWotHiddenCount } from '@/hooks/useWot'
+import { useWotJamFilter, useWotHiddenCount } from '@/hooks/useWot'
 import { useFollowedSet } from '@/hooks/useFollowedSet'
 import { useJamFiltersStore } from '@/stores/jamFiltersStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -48,7 +48,7 @@ export function ModJamsPage() {
   const powExempt = useFollowedSet()
   const moderate = useModerationFilter()
   const blockFilter = useBlockFilter()
-  const wotFilter = useWotModFilter()
+  const wotFilter = useWotJamFilter()
 
   const range = useMemo(() => effectiveRange(fromMonth, toMonth), [fromMonth, toMonth])
 

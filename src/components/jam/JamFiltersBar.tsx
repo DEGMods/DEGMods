@@ -92,7 +92,7 @@ export function JamFiltersBar({
   const minPow = useSettingsStore((s) => s.powFilterDifficulty)
   const setMinPow = useSettingsStore((s) => s.setPowFilterDifficulty)
   const moderationDefaults = useModerationStore((s) => s.excludedTags)
-  const wotApplyMods = useWotStore((s) => s.settings.applyMods)
+  const wotApplyJams = useWotStore((s) => s.settings.applyJams)
   const updateWot = useWotStore((s) => s.updateSettings)
 
   const [statusOpen, setStatusOpen] = useState(false)
@@ -155,7 +155,7 @@ export function JamFiltersBar({
         <FilterButton icon={Boxes} label="Sources" count={enabledSources} onClick={() => setSourcesOpen(true)} />
         <FilterButton icon={TagIcon} label="Tags" count={searchTags.length} onClick={() => setTagsOpen(true)} />
         <FilterButton icon={EyeOff} label="Excluded" count={excludedTags.length} onClick={() => setExcludedOpen(true)} />
-        <FilterButton icon={Users} label={wotApplyMods ? 'Moderated' : 'Unmoderated'} onClick={() => setModeratedOpen(true)} />
+        <FilterButton icon={Users} label={wotApplyJams ? 'Moderated' : 'Unmoderated'} onClick={() => setModeratedOpen(true)} />
         <FilterButton icon={ShieldCheck} label="PoW" count={minPow > 0 ? minPow : undefined} onClick={() => setPowOpen(true)} />
 
         <span className="ml-auto text-sm text-neutral-500">
@@ -263,15 +263,15 @@ export function JamFiltersBar({
               ] as const).map((opt) => (
                 <button
                   key={opt.label}
-                  onClick={() => updateWot({ applyMods: opt.on })}
+                  onClick={() => updateWot({ applyJams: opt.on })}
                   className={cn(
                     'rounded-lg border px-3 py-2.5 text-left transition-colors',
-                    wotApplyMods === opt.on ? 'border-[#fc4462]/50 bg-[#fc4462]/10' : 'border-[#262626] hover:border-[#404040]',
+                    wotApplyJams === opt.on ? 'border-[#fc4462]/50 bg-[#fc4462]/10' : 'border-[#262626] hover:border-[#404040]',
                   )}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-neutral-100">{opt.label}</span>
-                    {wotApplyMods === opt.on && <Check className="h-4 w-4 text-[#fc4462]" />}
+                    {wotApplyJams === opt.on && <Check className="h-4 w-4 text-[#fc4462]" />}
                   </div>
                   <span className="text-xs text-neutral-500">{opt.desc}</span>
                 </button>
@@ -280,7 +280,7 @@ export function JamFiltersBar({
 
             <div className="rounded-md border border-[#262626] bg-[#212121] px-3 py-2 text-sm text-neutral-300">
               {wotHiddenCount > 0
-                ? `${wotHiddenCount} ${wotHiddenCount === 1 ? 'jam is' : 'jams are'} ${wotApplyMods ? 'hidden' : 'flagged low-trust'} here by your Web of Trust.`
+                ? `${wotHiddenCount} ${wotHiddenCount === 1 ? 'jam is' : 'jams are'} ${wotApplyJams ? 'hidden' : 'flagged low-trust'} here by your Web of Trust.`
                 : 'No jams are hidden here by your Web of Trust.'}
             </div>
 

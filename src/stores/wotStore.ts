@@ -37,7 +37,7 @@ export const WOT_DEPTH_MAX = 3
 
 /* ─── Types ─── */
 
-export type WotContext = 'mods' | 'comments'
+export type WotContext = 'mods' | 'comments' | 'jams'
 
 export interface WotSettings {
   scoreThreshold: number // -5..+5, default 0
@@ -45,6 +45,7 @@ export interface WotSettings {
   dnnBonus: boolean      // verified DNN ID = +1, default true
   applyMods: boolean     // filter mod listings, default true
   applyComments: boolean // filter comments, default true
+  applyJams: boolean     // filter mod jam listings, default true
 }
 
 interface EventSnapshot { id: string; created_at: number }
@@ -102,6 +103,7 @@ const DEFAULT_SETTINGS: WotSettings = {
   dnnBonus: true,
   applyMods: true,
   applyComments: true,
+  applyJams: true,
 }
 
 /* ─── Module-level graph + caches ─── */
@@ -300,6 +302,7 @@ export const useWotStore = create<WotState>()(
         const { settings } = get()
         if (context === 'mods' && !settings.applyMods) return false
         if (context === 'comments' && !settings.applyComments) return false
+        if (context === 'jams' && !settings.applyJams) return false
         return get().isLowTrust(pubkey)
       },
 
@@ -494,6 +497,15 @@ export const useWotStore = create<WotState>()(
     {
       name: 'deg-mods:wot',
       partialize: (s) => ({ settings: s.settings }),
+      // The stored `settings` object replaces the default wholesale, so a key
+      // added after someone's settings were written would rehydrate as
+      // undefined — reading as "off" and silently disabling that filter for
+      // every existing user. Filling from the defaults first keeps a new
+      // setting at its intended value until it's deliberately changed.
+      merge: (persisted, current) => {
+        const stored = (persisted as { settings?: Partial<WotSettings> } | undefined)?.settings
+        return { ...current, settings: { ...DEFAULT_SETTINGS, ...(stored ?? {}) } }
+      },
     },
   ),
 )

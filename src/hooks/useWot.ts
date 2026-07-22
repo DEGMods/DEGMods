@@ -1,24 +1,39 @@
 import { useMemo } from 'react'
-import { useWotStore } from '@/stores/wotStore'
+import { useWotStore, type WotContext } from '@/stores/wotStore'
 
 /**
  * Returns a filter that removes posts authored by low-trust users (per the
- * user's Web of Trust), when WoT is applied to mods. Direct follows bypass it.
- * Works on anything carrying an author pubkey (mods, jams, …).
+ * user's Web of Trust) for the given surface. Direct follows bypass it. Works
+ * on anything carrying an author pubkey.
  */
-export function useWotModFilter(): <T extends { pubkey: string }>(items: T[]) => T[] {
-  const applyMods = useWotStore((s) => s.settings.applyMods)
+function useWotFilterFor(context: WotContext, applied: boolean) {
   const threshold = useWotStore((s) => s.settings.scoreThreshold)
   const depth = useWotStore((s) => s.settings.followDepth)
   const dnnBonus = useWotStore((s) => s.settings.dnnBonus)
   const lastUpdated = useWotStore((s) => s.lastUpdated)
 
   return useMemo(() => {
-    if (!applyMods) return <T extends { pubkey: string }>(items: T[]) => items
+    if (!applied) return <T extends { pubkey: string }>(items: T[]) => items
     const shouldHide = useWotStore.getState().shouldHide
-    return <T extends { pubkey: string }>(items: T[]) => items.filter((m) => !shouldHide(m.pubkey, 'mods'))
+    return <T extends { pubkey: string }>(items: T[]) => items.filter((m) => !shouldHide(m.pubkey, context))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyMods, threshold, depth, dnnBonus, lastUpdated])
+  }, [context, applied, threshold, depth, dnnBonus, lastUpdated])
+}
+
+/** WoT filter for mod listings, search and discovery. */
+export function useWotModFilter(): <T extends { pubkey: string }>(items: T[]) => T[] {
+  return useWotFilterFor('mods', useWotStore((s) => s.settings.applyMods))
+}
+
+/**
+ * WoT filter for mod jam listings.
+ *
+ * Jams were previously filtered through the mods switch, which meant turning
+ * mods off silently turned jams off too and there was no way to set them
+ * differently. They're their own surface now.
+ */
+export function useWotJamFilter(): <T extends { pubkey: string }>(items: T[]) => T[] {
+  return useWotFilterFor('jams', useWotStore((s) => s.settings.applyJams))
 }
 
 /** How many of these posts are low-trust (would be / are hidden by WoT). */
