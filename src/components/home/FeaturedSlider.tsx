@@ -247,6 +247,10 @@ export function FeaturedSlider({ mods, intervalMs = 8000, transitionMs = 300 }: 
 // image hook so its bytes are already loaded when it becomes the active slide.
 function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'right'; onClick: () => void }) {
   const url = useResolvedImageSrc(mod.featuredImageUrl)
+  // Same rule as the active slide. A peek is smaller and partly faded out by the
+  // mask, but it's the same picture — leaving it uncovered put NSFW art on the
+  // landing page for anyone whose next or previous slide happened to be one.
+  const blurred = !!mod.contentWarning
   return (
     <button
       type="button"
@@ -278,10 +282,15 @@ function SidePeek({ mod, side, onClick }: { mod: ModDetails; side: 'left' | 'rig
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="absolute inset-0 h-full w-full object-cover"
+            className={cn('absolute inset-0 h-full w-full object-cover', blurred && 'blur-xl')}
           />
         )}
       </AnimatePresence>
+      {blurred && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+          <AlertTriangle className="h-5 w-5 text-yellow-500" />
+        </div>
+      )}
     </button>
   )
 }

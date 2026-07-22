@@ -22,12 +22,16 @@ interface DeletedPostScreenProps {
 /**
  * Shown when a post resolved but carries a deletion marker.
  *
- * Readers get the short version: it's gone. The author gets the rest, because
- * only they can act on it and the plain message is actively misleading to them
- * — "permanently deleted" reads as finished, when a deletion that reached three
- * of fifteen relays is not finished at all. That's exactly the case that used to
- * happen (see requestDelete), so authors have posts in this half-state right
- * now: hidden here, still served elsewhere.
+ * Readers get the short version: it's marked deleted. Deliberately not
+ * "permanently deleted" — a deletion that reached three of fifteen relays is
+ * not permanent, and that used to be the normal outcome (see requestDelete), so
+ * authors have posts in that half-state right now: hidden here, still served
+ * elsewhere.
+ *
+ * The author gets the rest, since only they can act on it — including the fact
+ * that re-broadcasting won't change this page. The marker is what puts it here,
+ * so a successful retry looks identical to doing nothing, and without saying so
+ * the button invites being pressed repeatedly in the hope the post comes back.
  *
  * The retry re-broadcasts from the tombstone itself, which carries the `d` tag
  * and coordinate the deletion needs. It re-tombstones at created_at + 1 and
@@ -52,13 +56,14 @@ export function DeletedPostScreen({ noun, heading, event, title, backTo, backLab
             never received it is still serving the original.
           </p>
           <p className="text-sm text-neutral-400">
-            Deletion is best-effort and can only reach relays this client knows about. Re-broadcasting
-            is safe to repeat: it re-sends the deletion to every relay reachable now, which may be more
-            than were reachable the first time.
+            Once is normally enough, and <span className="text-neutral-300">this page will keep looking
+            like this either way</span> — the marker is what puts it here, so a successful re-broadcast
+            doesn&rsquo;t change what you see. Only worth repeating if you were offline or on different
+            relays when you first deleted it.
           </p>
         </div>
       ) : (
-        <p className="text-sm text-neutral-400">This {noun} has been permanently deleted.</p>
+        <p className="text-sm text-neutral-400">This {noun} has been marked as deleted.</p>
       )}
 
       <div className="flex flex-wrap items-center justify-center gap-2">
