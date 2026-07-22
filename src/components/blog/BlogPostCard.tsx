@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils'
 import { KINDS } from '@/lib/constants'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { BookOpen, User } from 'lucide-react'
+import { BookOpen, User, AlertTriangle } from 'lucide-react'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
+import { useModerationOverlay } from '@/hooks/useModerationTags'
 import type { BlogDetails } from '@/types/blog'
 import type { UserProfile } from '@/stores/userStore'
 
@@ -14,6 +16,16 @@ interface BlogPostCardProps {
 }
 
 export function BlogPostCard({ blog, author }: BlogPostCardProps) {
+  const { revealed, reveal } = useNsfwReveal()
+  // The author's own warning, plus anything the admin tagged on top.
+  const { overlay, checked } = useModerationOverlay(blog.aTag)
+  const warning = blog.contentWarning || overlay?.contentWarning
+  const hasWarning = !!warning && !revealed
+  // Hold the image until the overlay has settled, so a post the admin marked
+  // NSFW can't paint before we know. Only the image waits — the title, summary
+  // and author render immediately.
+  const holdImage = !checked && !blog.contentWarning
+
   const naddr = nip19.naddrEncode({
     identifier: blog.dTag,
     pubkey: blog.pubkey,
@@ -40,7 +52,10 @@ export function BlogPostCard({ blog, author }: BlogPostCardProps) {
             <SkeletonImage
               src={blog.featuredImageUrl}
               alt={blog.title}
-              className="absolute inset-0 w-full h-full object-cover"
+              className={cn(
+                'absolute inset-0 w-full h-full object-cover',
+                (hasWarning || holdImage) && 'blur-xl',
+              )}
               fallback={
                 <div className="absolute inset-0 flex items-center justify-center">
                   <BookOpen className="w-6 h-6 text-neutral-700" />
@@ -51,6 +66,17 @@ export function BlogPostCard({ blog, author }: BlogPostCardProps) {
             <div className="absolute inset-0 flex items-center justify-center">
               <BookOpen className="w-6 h-6 text-neutral-700" />
             </div>
+          )}
+
+          {hasWarning && (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); reveal() }}
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-neutral-300"
+            >
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <span className="px-2 text-center text-[10px] font-medium">{warning}</span>
+              <span className="text-[10px] text-neutral-500">Click to reveal</span>
+            </button>
           )}
         </div>
 

@@ -20,6 +20,8 @@ import { ReportDialog } from '@/components/shared/ReportDialog'
 import { useSeoMeta } from '@/hooks/useSeoMeta'
 import { KINDS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
+import { useModerationOverlay } from '@/hooks/useModerationTags'
 import { toast } from 'sonner'
 import type { BlogDetails } from '@/types/blog'
 
@@ -44,7 +46,7 @@ import {
 
 import {
   Loader2, MoreHorizontal, Copy, ExternalLink, FileJson, Edit, Trash2,
-  Flag, AlertTriangle, ChevronLeft, Tag, RefreshCw
+  Flag, AlertTriangle, ChevronLeft, Tag, RefreshCw, Eye
 } from 'lucide-react'
 
 export default function BlogPostPage() {
@@ -69,6 +71,15 @@ export default function BlogPostPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const isOwner = rawEvent && pubkey ? (rawEvent as { pubkey?: string }).pubkey === pubkey : false
+
+  const { revealed: cwRevealed, reveal: revealCw } = useNsfwReveal()
+  // Tags the admin applied on top of this post's own (kind 30985 overlay).
+  const { overlay: tagOverlay, checked: tagsChecked } = useModerationOverlay(blog?.aTag)
+  const contentWarning = blog?.contentWarning || tagOverlay?.contentWarning
+  const hasCW = !!contentWarning
+  // Blur until the overlay has settled too, so a post the admin marked NSFW
+  // can't flash before the check lands.
+  const heroBlurred = (hasCW && !cwRevealed) || (!tagsChecked && !blog?.contentWarning)
 
   // Show the short address in the URL bar once this post has one.
   useShortUrl(rawEvent as unknown as NostrEvent | null, '/blog')
@@ -279,10 +290,25 @@ export default function BlogPostPage() {
               <BlossomImage
                 src={blog.featuredImageUrl}
                 alt={blog.title}
-                className="absolute inset-0 z-[2] h-full w-full object-cover"
+                className={cn(
+                  'absolute inset-0 z-[2] h-full w-full object-cover',
+                  heroBlurred && 'blur-xl',
+                )}
                 onLoad={() => setFeaturedLoaded(true)}
                 onError={() => setFeaturedLoaded(true)}
               />
+              {hasCW && !cwRevealed && (
+                <div
+                  className="absolute inset-0 z-[3] flex cursor-pointer flex-col items-center justify-center bg-black/40"
+                  onClick={() => revealCw()}
+                >
+                  <Eye className="mb-2 h-8 w-8 text-neutral-300" />
+                  <span className="text-sm font-medium text-neutral-300">
+                    Content Warning: {contentWarning}
+                  </span>
+                  <span className="mt-1 text-xs text-neutral-500">Click to reveal</span>
+                </div>
+              )}
             </div>
           )}
 

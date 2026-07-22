@@ -419,6 +419,7 @@ export function buildBlogEvent(form: BlogFormState): UnsignedEvent {
   for (const t of form.tags.filter(t => t.trim())) {
     tags.push(['t', t.toLowerCase()])
   }
+  if (form.contentWarning) tags.push(['content-warning', 'nsfw'])
   tags.push(['client', CLIENT_NAME])
 
   return { kind: KINDS.BLOG, content: form.content, tags, created_at: createdAt, pubkey: '' }

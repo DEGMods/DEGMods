@@ -17,6 +17,7 @@ import type { BlogFormState } from '@/types/blog'
 import { createEmptyBlogFormState } from '@/types/blog'
 
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -79,23 +80,6 @@ export default function WriteBlogPage() {
     toast.success('Changes reset to the published version')
   }
 
-  // Auth gate
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <BookOpen className="h-12 w-12 text-neutral-500" />
-        <h2 className="text-xl font-semibold text-neutral-200">Login required</h2>
-        <p className="text-neutral-400 text-sm">You must be logged in to write blog posts.</p>
-        <Button
-          className="bg-purple-600 hover:bg-purple-700 text-white"
-          onClick={() => useLoginModalStore.getState().open()}
-        >
-          Log In
-        </Button>
-      </div>
-    )
-  }
-
   // Load existing blog for editing
   useEffect(() => {
     if (!editNaddr) return
@@ -137,6 +121,7 @@ export default function WriteBlogPage() {
           content: blogData.content,
           featuredImageUrl: blogData.featuredImageUrl || '',
           tags: blogData.tags.length > 0 ? blogData.tags : [''],
+          contentWarning: !!blogData.contentWarning,
           isEdit: true,
           previousCreatedAt: event.created_at,
           publishedAt: blogData.publishedAt,
@@ -177,6 +162,26 @@ export default function WriteBlogPage() {
     const timeout = setTimeout(saveDraft, 1000)
     return () => clearTimeout(timeout)
   }, [saveDraft])
+
+  // Auth gate. Deliberately below every hook: the auth store hydrates after the
+  // first render, so an early return here changes the number of hooks called
+  // between renders, which React treats as a fatal error and unmounts the whole
+  // page over — a blank screen instead of the login prompt.
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <BookOpen className="h-12 w-12 text-neutral-500" />
+        <h2 className="text-xl font-semibold text-neutral-200">Login required</h2>
+        <p className="text-neutral-400 text-sm">You must be logged in to write blog posts.</p>
+        <Button
+          className="bg-purple-600 hover:bg-purple-700 text-white"
+          onClick={() => useLoginModalStore.getState().open()}
+        >
+          Log In
+        </Button>
+      </div>
+    )
+  }
 
   const updateField = <K extends keyof BlogFormState>(field: K, value: BlogFormState[K]) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -339,6 +344,18 @@ export default function WriteBlogPage() {
           className="bg-[#212121] border-[#262626] text-neutral-100 placeholder:text-neutral-500 resize-none"
         />
         <Counter value={form.summary} max={LIMITS.summary} />
+      </div>
+
+      {/* Content Warning */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-neutral-300">Content Warning</label>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <Switch
+            checked={form.contentWarning}
+            onCheckedChange={(v) => updateField('contentWarning', v)}
+          />
+          <span className="text-sm text-neutral-300">This post contains sensitive content (NSFW)</span>
+        </label>
       </div>
 
       {/* Body with Edit/Preview tabs */}

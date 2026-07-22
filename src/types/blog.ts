@@ -32,6 +32,8 @@ export interface BlogFormState {
   content: string
   featuredImageUrl: string
   tags: string[]
+  /** Presence emits a NIP-36 content-warning tag. */
+  contentWarning: boolean
   isEdit: boolean
   previousCreatedAt?: number
   publishedAt?: number
@@ -45,6 +47,7 @@ export function createEmptyBlogFormState(): BlogFormState {
     content: '',
     featuredImageUrl: '',
     tags: [''],
+    contentWarning: false,
     isEdit: false,
   }
 }
