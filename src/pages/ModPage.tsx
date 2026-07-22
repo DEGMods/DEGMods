@@ -9,7 +9,8 @@ import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
-import { fetchLatestEvent, subscribe } from '@/lib/nostr/relay-pool'
+import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { streamLatestEvent } from '@/lib/nostr/streamLatest'
 import { beginRefresh, endRefresh } from '@/lib/ui/refreshToast'
 import { extractModData } from '@/lib/nostr/events'
 import { LEGACY_MOD_KIND, extractLegacyModData } from '@/lib/mods/legacy' // LEGACY
@@ -86,20 +87,6 @@ function readableEventJson(ev: Record<string, unknown>): string {
 }
 
 /**
- * How long a cold view keeps listening after the first relay answers, so a
- * newer revision on a slower relay still surfaces. Only bounds the *watching* —
- * the page has already rendered.
- */
-const COLD_WATCH_MS = 6000
-
-/**
- * Grace period in which a newer revision replaces what's on screen silently
- * instead of prompting. Nothing has been read this soon after opening, so the
- * swap is invisible where the dialog would be an interruption.
- */
-const SILENT_UPGRADE_MS = 2500
-
-/**
  * Resolve a featured-video URL into how it should be shown: a direct file, or a
  * YouTube/Vimeo iframe embed (those don't play in a <video> tag).
  */
@@ -167,48 +154,18 @@ export default function ModPage() {
     /** Tears down the cold-view watch early (set once it starts). */
     let stopWatch: (() => void) | null = null
 
-    /**
-     * Cold-view load: show the first relay to answer, keep listening for a newer
-     * revision until every relay has finished or the window closes.
-     *
-     * A late revision inside the grace window is swapped in silently. The
-     * "newer version" dialog exists to avoid pulling content out from under
-     * someone mid-read — two seconds after opening, nothing has been read yet,
-     * and a modal over a page you just opened is worse than the swap it warns
-     * about. After that, it prompts as before.
-     */
-    const renderFirstThenWatch = (relayUrls: string[], filter: Filter, have: NostrEvent | null) =>
-      new Promise<void>((resolve) => {
-        let best: NostrEvent | null = have
-        let done = false
-        let indicating = false
-        const openedAt = Date.now()
-
-        const finish = () => {
-          if (done) return
-          done = true
-          clearTimeout(timer)
-          try { sub.close() } catch { /* already closed */ }
-          if (indicating) { indicating = false; endRefresh() }
-          // Nothing anywhere, and nothing was already on screen.
-          if (!best && !cancelled) { setNotFound(true); setLoading(false) }
-          resolve()
-        }
-
-        stopWatch = finish
-        const timer = setTimeout(finish, COLD_WATCH_MS)
-        const sub = subscribe(relayUrls, filter, (ev) => {
-          if (cancelled || done) return
-          if (best && ev.created_at <= best.created_at) return // older or same
-          const first = !best
-          best = ev
-          if (first || Date.now() - openedAt < SILENT_UPGRADE_MS) applyEvent(ev)
-          else setNewerEvent(ev)
-          // Say so while slower relays are still being heard: what's on screen
-          // came from whoever answered first and may yet be superseded.
-          if (first && !indicating) { indicating = true; beginRefresh() }
-        }, finish)
+    /** Cold-view load — see streamLatestEvent for the policy behind it. */
+    const renderFirstThenWatch = (relayUrls: string[], filter: Filter, have: NostrEvent | null) => {
+      const w = streamLatestEvent(relayUrls, filter, {
+        have,
+        onApply: (ev) => { if (!cancelled) applyEvent(ev) },
+        onNewer: (ev) => { if (!cancelled) setNewerEvent(ev) },
+        onEmpty: () => { if (!cancelled) { setNotFound(true); setLoading(false) } },
+        onWatching: (on) => (on ? beginRefresh() : endRefresh()),
       })
+      stopWatch = w.stop
+      return w.done
+    }
 
     async function load() {
       setNotFound(false)

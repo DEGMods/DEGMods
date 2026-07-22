@@ -7,7 +7,9 @@ import { CopyShortLinkItem } from '@/components/shared/CopyShortLinkItem'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
-import { fetchEvent, fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { streamLatestEvent } from '@/lib/nostr/streamLatest'
+import { beginRefresh, endRefresh } from '@/lib/ui/refreshToast'
 import { extractBlogData } from '@/lib/nostr/events'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -86,6 +88,8 @@ export default function BlogPostPage() {
   useEffect(() => {
     if (!naddr) return
     let cancelled = false
+    /** Tears down the cold-view watch early (set once it starts). */
+    let stopWatch: (() => void) | null = null
 
     async function load() {
       setNotFound(false)
@@ -113,26 +117,37 @@ export default function BlogPostPage() {
 
       try {
         const relayUrls = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-        // High-assurance multi-pass when a cached copy is already shown (latency
-        // hidden); fast single-pass on a cold first view so it renders quickly.
         const filter = { kinds: [kind], authors: [authorPk], '#d': [identifier] }
-        const event = cached
-          ? await fetchLatestEvent(relayUrls, filter)
-          : await fetchEvent(relayUrls, filter)
-        if (cancelled) return
-        if (!event) {
-          if (!cached) { setNotFound(true); setLoading(false) }
+
+        // With a cached copy on screen, latency is hidden — use the
+        // high-assurance multi-pass fetch so a newer revision on a slow relay is
+        // reliably caught.
+        if (cached) {
+          const event = await fetchLatestEvent(relayUrls, filter)
+          if (cancelled || !event) return
+          if (event.created_at > cached.created_at) setNewerEvent(event) // prompt, don't force
           return
         }
-        if (!cached) applyEvent(event)
-        else if (event.created_at > cached.created_at) setNewerEvent(event)
+
+        // Cold view: render whichever relay answers first, then keep listening.
+        const w = streamLatestEvent(relayUrls, filter, {
+          have: resolved ?? null,
+          onApply: (ev) => { if (!cancelled) applyEvent(ev) },
+          onNewer: (ev) => { if (!cancelled) setNewerEvent(ev) },
+          onEmpty: () => { if (!cancelled) { setNotFound(true); setLoading(false) } },
+          onWatching: (on) => (on ? beginRefresh() : endRefresh()),
+        })
+        stopWatch = w.stop
+        await w.done
       } catch {
         if (!cancelled && !cached) { setNotFound(true); setLoading(false) }
       }
     }
 
     load()
-    return () => { cancelled = true }
+    // Navigating away mid-watch has to close the subscription and release the
+    // indicator, or the pill would stay up for the rest of the session.
+    return () => { cancelled = true; stopWatch?.() }
   }, [naddr, applyEvent])
 
   // Cooperative rebroadcast: after the post's been on screen a few seconds, help
