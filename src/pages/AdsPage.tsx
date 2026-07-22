@@ -66,10 +66,20 @@ const stats = [
   { value: '≥2.3M', label: 'Total page views (since launch)' },
 ]
 
+/**
+ * Monthly price = CPM × (monthly page views ÷ 1000), shared = that ÷ 4.
+ *
+ * So these rates are tied to the `stats` figure above and have to move with it:
+ * at ≥160K monthly views, $6.25 → $1,000 exclusive / $250 shared. The CPMs were
+ * $5/$10/$15 against a 203K view count that turned out to include ~20% filter
+ * churn; the traffic figure came down, so the rate came up and the money stayed
+ * put. Change one of these and re-derive the other, or an advertiser doing the
+ * multiplication finds the page disagreeing with itself.
+ */
 const tiers = [
-  { tier: 'Indie', cpm: '$5', shared: '~$250 / mo', exclusive: '~$1,000 / mo' },
-  { tier: 'Double-A', cpm: '$10', shared: '~$500 / mo', exclusive: '~$2,000 / mo' },
-  { tier: 'Triple-A', cpm: '$15', shared: '~$750 / mo', exclusive: '~$3,000 / mo' },
+  { tier: 'Indie', cpm: '$6.25', shared: '~$250 / mo', exclusive: '~$1,000 / mo' },
+  { tier: 'Double-A', cpm: '$12.50', shared: '~$500 / mo', exclusive: '~$2,000 / mo' },
+  { tier: 'Triple-A', cpm: '$18.75', shared: '~$750 / mo', exclusive: '~$3,000 / mo' },
 ]
 
 export function AdCard({ ad }: { ad: AdEntry }) {
@@ -237,11 +247,11 @@ export function AdsPage() {
         </div>
 
         <p className="text-xs leading-relaxed text-neutral-500">
-          Full-exclusivity example: a $5 CPM against our ~200K historical monthly views = $5 &times; (200,000
+          Full-exclusivity example: a $6.25 CPM against our ~160K historical monthly views = $6.25 &times; (160,000
           &divide; 1,000) = <span className="font-semibold text-neutral-300">$1,000/mo</span>; the shared default is
           a quarter of that (<span className="font-semibold text-neutral-300">$250/mo</span>). The price is fixed by
-          the historical CPM, and it does <span className="font-semibold text-neutral-300">not</span> guarantee 200K
-          impressions. Your ad may receive fewer, possibly 100K or less. You pay the flat monthly rate regardless of
+          the historical CPM, and it does <span className="font-semibold text-neutral-300">not</span> guarantee 160K
+          impressions. Your ad may receive fewer, possibly 80K or less. You pay the flat monthly rate regardless of
           impressions actually delivered.
         </p>
 
