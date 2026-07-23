@@ -15,6 +15,7 @@ export function Footer() {
             <Link to="/about" className="hover:text-foreground transition-colors">About</Link>
             <Link to="/mod-manager" className="hover:text-foreground transition-colors">Mod Manager</Link>
             <Link to="/ads" className="hover:text-foreground transition-colors">Ads</Link>
+            <Link to="/supporters" className="hover:text-foreground transition-colors">Supporters</Link>
             <Link to="/faq" className="hover:text-foreground transition-colors">FAQ</Link>
             <Link to="/guides" className="hover:text-foreground transition-colors">Guides</Link>
             <Link to="/tos" className="hover:text-foreground transition-colors">Terms of Use</Link>

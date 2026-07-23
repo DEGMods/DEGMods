@@ -39,6 +39,7 @@ import SettingsPage from '@/pages/SettingsPage'
 import { AboutPage } from '@/pages/AboutPage'
 import { ModManagerPage } from '@/pages/ModManagerPage'
 import { AdsPage } from '@/pages/AdsPage'
+import { SupportersPage } from '@/pages/SupportersPage'
 import { FaqPage } from '@/pages/FaqPage'
 import { TosPage } from '@/pages/TosPage'
 import { GuidesPage } from '@/pages/GuidesPage'
@@ -190,6 +191,7 @@ export default function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/mod-manager" element={<ModManagerPage />} />
           <Route path="/ads" element={<AdsPage />} />
+          <Route path="/supporters" element={<SupportersPage />} />
           <Route path="/faq" element={<FaqPage />} />
           <Route path="/tos" element={<TosPage />} />
           <Route path="/guides" element={<GuidesPage />} />

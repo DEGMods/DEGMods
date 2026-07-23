@@ -724,6 +724,87 @@ export function extractAds(event: NostrEvent): AdEntry[] {
   }
 }
 
+// ─── Supporters (kind 30078, d: supporters) ─────────────────────────
+//
+// A showcase of people who funded the project, grouped by funding campaign and
+// then by tier: campaigns[] → tiers[] → supporters[]. A supporter is either a
+// Nostr identity (hex pubkey → resolve kind:0, links to their profile) or a
+// plain name (default avatar, not a link).
+
+export const SUPPORTERS_DTAG = 'supporters'
+
+export interface Supporter {
+  /** Hex pubkey when the supporter has a Nostr identity; resolves kind:0 and links out. */
+  pubkey?: string
+  /** Plain display name when there's no pubkey (also a fallback label). */
+  name?: string
+}
+
+export interface SupporterTier {
+  /** Admin-typed, e.g. "Bronze". */
+  name: string
+  supporters: Supporter[]
+}
+
+export interface FundingCampaign {
+  /** e.g. "Geyser 2025". */
+  name: string
+  /** Optional link to the campaign page. */
+  url?: string
+  tiers: SupporterTier[]
+}
+
+const HEX64 = /^[0-9a-f]{64}$/i
+
+/** Build the admin's supporters showcase (JSON array of campaigns in content). */
+export function buildSupportersEvent(campaigns: FundingCampaign[]): UnsignedEvent {
+  return {
+    kind: KINDS.GAME_DB, // 30078: NIP-78 application-specific data
+    content: JSON.stringify(campaigns),
+    tags: [['d', SUPPORTERS_DTAG]],
+    created_at: Math.floor(Date.now() / 1000),
+    pubkey: '',
+  }
+}
+
+export function extractSupporters(event: NostrEvent): FundingCampaign[] {
+  try {
+    const arr = JSON.parse(event.content)
+    if (!Array.isArray(arr)) return []
+    return arr
+      .map((c): FundingCampaign => {
+        const cc = c as { name?: unknown; url?: unknown; tiers?: unknown }
+        return {
+          name: typeof cc?.name === 'string' ? cc.name : '',
+          url: typeof cc?.url === 'string' && cc.url.trim() ? cc.url : undefined,
+          tiers: Array.isArray(cc?.tiers)
+            ? (cc.tiers as unknown[])
+                .map((t): SupporterTier => {
+                  const tt = t as { name?: unknown; supporters?: unknown }
+                  return {
+                    name: typeof tt?.name === 'string' ? tt.name : '',
+                    supporters: Array.isArray(tt?.supporters)
+                      ? (tt.supporters as unknown[])
+                          .map((s): Supporter => {
+                            const ss = s as { pubkey?: unknown; name?: unknown }
+                            const pubkey = typeof ss?.pubkey === 'string' && HEX64.test(ss.pubkey) ? ss.pubkey.toLowerCase() : undefined
+                            const name = typeof ss?.name === 'string' && ss.name.trim() ? ss.name : undefined
+                            return { pubkey, name }
+                          })
+                          .filter(s => s.pubkey || s.name)
+                      : [],
+                  }
+                })
+                .filter(t => t.name.trim() || t.supporters.length)
+            : [],
+        }
+      })
+      .filter(c => c.name.trim() || c.tiers.length)
+  } catch {
+    return []
+  }
+}
+
 // ─── FAQ (kind 30078, d: site-faq) ──────────────────────────────────
 
 export const FAQ_DTAG = 'site-faq'

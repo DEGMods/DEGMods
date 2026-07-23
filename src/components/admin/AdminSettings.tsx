@@ -11,6 +11,8 @@ import {
   buildGameDbEvent, buildNip78ListEvent, buildAnnouncementEvent, buildMuteListEvent,
   extractAnnouncement, ANNOUNCEMENT_DTAG,
   buildAdsEvent, extractAds, ADS_DTAG, type AdEntry,
+  buildSupportersEvent, extractSupporters, SUPPORTERS_DTAG,
+  type FundingCampaign, type SupporterTier, type Supporter,
   buildFaqEvent, extractFaq, FAQ_DTAG, type FaqItem,
   buildTosEvent, extractTos, TOS_DTAG, type TosItem,
   buildFeaturedBannerEvent, extractFeaturedBanner, FEATURED_BANNER_DTAG,
@@ -57,7 +59,7 @@ import {
   Upload, Trash2, FileText, Plus, Save, Pencil, SkipForward,
   AlertTriangle, X, Link2, Eye, GripVertical, ShieldAlert, EyeOff,
   Image as ImageIcon, HelpCircle, BookOpen, Joystick, Flag, Copy, ExternalLink, ChevronDown, Lightbulb,
-  HardDrive, Radio, BarChart3, ScrollText, Tag, Repeat2,
+  HardDrive, Radio, BarChart3, ScrollText, Tag, Repeat2, HandCoins,
 } from 'lucide-react'
 import { BlossomsTab } from './BlossomsTab'
 import { RelaysTab } from './RelaysTab'
@@ -66,7 +68,7 @@ import type { BlogDetails } from '@/types/blog'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-type AdminTab = 'games-db' | 'featured' | 'announcements' | 'ads' | 'faq' | 'tos' | 'guides' | 'suggestions' | 'moderation' | 'blossoms' | 'relays'
+type AdminTab = 'games-db' | 'featured' | 'announcements' | 'ads' | 'supporters' | 'faq' | 'tos' | 'guides' | 'suggestions' | 'moderation' | 'blossoms' | 'relays'
 
 interface CsvFileEntry {
   hash: string
@@ -106,6 +108,7 @@ const adminTabs: { id: AdminTab; label: string; icon: typeof Database }[] = [
   { id: 'featured', label: 'Featured Content', icon: Star },
   { id: 'announcements', label: 'Announcements', icon: Megaphone },
   { id: 'ads', label: 'Ads', icon: ImageIcon },
+  { id: 'supporters', label: 'Supporters', icon: HandCoins },
   { id: 'faq', label: 'FAQ', icon: HelpCircle },
   { id: 'tos', label: 'ToS', icon: ScrollText },
   { id: 'guides', label: 'Guides', icon: BookOpen },
@@ -146,6 +149,7 @@ export default function AdminSettings() {
       {activeTab === 'featured' && <FeaturedTab />}
       {activeTab === 'announcements' && <AnnouncementsTab />}
       {activeTab === 'ads' && <AdsTab />}
+      {activeTab === 'supporters' && <SupportersTab />}
       {activeTab === 'faq' && <FaqTab />}
       {activeTab === 'tos' && <TosTab />}
       {activeTab === 'guides' && <GuidesTab />}
@@ -1631,6 +1635,194 @@ function GateAdsSection() {
           })()}
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ─── Supporters Tab ─────────────────────────────────────────────────
+//
+// Nested editor: campaigns → tiers → supporters. Each supporter is one text
+// field where the admin types an npub (or nprofile) or a plain name; the input
+// is parsed at publish time into { pubkey } or { name }.
+
+interface EditSupporter { id: string; input: string }
+interface EditTier { id: string; name: string; supporters: EditSupporter[] }
+interface EditCampaign { id: string; name: string; url: string; tiers: EditTier[] }
+
+const uid = () => crypto.randomUUID()
+
+/** npub / nprofile → hex pubkey supporter; anything else → plain name. */
+function parseSupporterInput(input: string): Supporter | null {
+  const v = input.trim()
+  if (!v) return null
+  if (/^(npub1|nprofile1)/i.test(v)) {
+    try {
+      const d = nip19.decode(v)
+      if (d.type === 'npub') return { pubkey: d.data }
+      if (d.type === 'nprofile') return { pubkey: d.data.pubkey }
+    } catch { /* not a valid bech32 — fall through to name */ }
+  }
+  return { name: v }
+}
+
+/** Reconstruct the editor input from a stored supporter (npub for a pubkey). */
+function supporterToInput(s: Supporter): string {
+  if (s.pubkey) { try { return nip19.npubEncode(s.pubkey) } catch { return '' } }
+  return s.name ?? ''
+}
+
+function SupportersTab() {
+  const [campaigns, setCampaigns] = useState<EditCampaign[]>([])
+  const [loading, setLoading] = useState(true)
+  const [publishing, setPublishing] = useState(false)
+  const [baseline, setBaseline] = useState('[]')
+
+  // Editor state → the clean FundingCampaign[] that gets published (and compared
+  // for dirty). Empty inputs and empty tiers/campaigns are dropped, matching
+  // what extractSupporters keeps on read, so a round-trip is stable.
+  const toClean = useCallback((list: EditCampaign[]): FundingCampaign[] =>
+    list.map((c): FundingCampaign => ({
+      name: c.name.trim(),
+      url: c.url.trim() || undefined,
+      tiers: c.tiers.map((t): SupporterTier => ({
+        name: t.name.trim(),
+        supporters: t.supporters.map(s => parseSupporterInput(s.input)).filter((s): s is Supporter => !!s),
+      })).filter(t => t.name || t.supporters.length),
+    })).filter(c => c.name || c.tiers.length), [])
+
+  const serialize = useCallback((list: EditCampaign[]) => JSON.stringify(toClean(list)), [toClean])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const event = await fetchEvent(relays, { kinds: [KINDS.GAME_DB], authors: [ADMIN_PUBKEY], '#d': [SUPPORTERS_DTAG] })
+      const parsed = event ? extractSupporters(event) : []
+      const edit: EditCampaign[] = parsed.map(c => ({
+        id: uid(), name: c.name, url: c.url ?? '',
+        tiers: c.tiers.map(t => ({
+          id: uid(), name: t.name,
+          supporters: t.supporters.map(s => ({ id: uid(), input: supporterToInput(s) })),
+        })),
+      }))
+      setCampaigns(edit)
+      setBaseline(serialize(edit))
+    } catch {
+      toast.error('Failed to load supporters')
+    } finally {
+      setLoading(false)
+    }
+  }, [serialize])
+
+  useEffect(() => { load() }, [load])
+
+  const dirty = serialize(campaigns) !== baseline
+
+  // ── Campaign ops ──
+  const addCampaign = () => setCampaigns(p => [...p, { id: uid(), name: '', url: '', tiers: [] }])
+  const updateCampaign = (id: string, patch: Partial<Omit<EditCampaign, 'id' | 'tiers'>>) =>
+    setCampaigns(p => p.map(c => c.id === id ? { ...c, ...patch } : c))
+  const removeCampaign = (id: string) => setCampaigns(p => p.filter(c => c.id !== id))
+
+  // ── Tier ops ──
+  const addTier = (cid: string) =>
+    setCampaigns(p => p.map(c => c.id === cid ? { ...c, tiers: [...c.tiers, { id: uid(), name: '', supporters: [] }] } : c))
+  const updateTier = (cid: string, tid: string, name: string) =>
+    setCampaigns(p => p.map(c => c.id === cid ? { ...c, tiers: c.tiers.map(t => t.id === tid ? { ...t, name } : t) } : c))
+  const removeTier = (cid: string, tid: string) =>
+    setCampaigns(p => p.map(c => c.id === cid ? { ...c, tiers: c.tiers.filter(t => t.id !== tid) } : c))
+
+  // ── Supporter ops ──
+  const mutTier = (cid: string, tid: string, fn: (s: EditSupporter[]) => EditSupporter[]) =>
+    setCampaigns(p => p.map(c => c.id === cid ? { ...c, tiers: c.tiers.map(t => t.id === tid ? { ...t, supporters: fn(t.supporters) } : t) } : c))
+  const addSupporter = (cid: string, tid: string) => mutTier(cid, tid, s => [...s, { id: uid(), input: '' }])
+  const updateSupporter = (cid: string, tid: string, sid: string, input: string) =>
+    mutTier(cid, tid, s => s.map(x => x.id === sid ? { ...x, input } : x))
+  const removeSupporter = (cid: string, tid: string, sid: string) =>
+    mutTier(cid, tid, s => s.filter(x => x.id !== sid))
+
+  const publish = async () => {
+    setPublishing(true)
+    try {
+      const clean = toClean(campaigns)
+      const result = await signAndPublish(buildSupportersEvent(clean), (status) => {
+        if (status === 'mining') toast.loading('Processing proof of work…', { id: 'sup' })
+        if (status === 'signing') toast.loading('Signing…', { id: 'sup' })
+        if (status === 'publishing') toast.loading('Publishing…', { id: 'sup' })
+      })
+      if (result.success) { toast.success('Supporters published', { id: 'sup' }); setBaseline(serialize(campaigns)) }
+      else toast.error(result.error || 'Publish failed', { id: 'sup' })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Publish failed', { id: 'sup' })
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const inputClass = 'bg-[#212121] border-[#262626] text-white text-sm'
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-neutral-500">
+          <span className="font-semibold text-neutral-300">Supporters.</span> Shown on the <span className="font-mono text-neutral-300">/supporters</span> page, grouped by funding campaign then tier. A supporter is an npub (loads their profile, links out) or a plain name.
+        </p>
+        <Button onClick={addCampaign} variant="outline" size="sm" className="border-[#262626] shrink-0">
+          <Plus size={14} className="mr-1.5" /> Add campaign
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500 py-4"><Loader2 size={14} className="animate-spin" /> Loading supporters…</div>
+      ) : (
+        <>
+          {campaigns.length === 0 && <p className="text-sm text-neutral-500 py-6 text-center">No campaigns yet. Click "Add campaign".</p>}
+
+          {campaigns.map((c) => (
+            <div key={c.id} className="space-y-3 rounded-lg border border-[#262626] bg-[#1c1c1c] p-4">
+              <div className="flex items-center gap-2">
+                <Input value={c.name} onChange={(e) => updateCampaign(c.id, { name: e.target.value })} placeholder="Campaign name (e.g. Geyser 2025)" className={cn(inputClass, 'font-medium')} />
+                <button onClick={() => removeCampaign(c.id)} className="text-neutral-500 hover:text-red-400 shrink-0" aria-label="Remove campaign"><Trash2 size={16} /></button>
+              </div>
+              <Input value={c.url} onChange={(e) => updateCampaign(c.id, { url: e.target.value })} placeholder="Campaign link (optional)" className={cn(inputClass, 'font-mono text-xs')} />
+
+              {c.tiers.map((t) => (
+                <div key={t.id} className="space-y-2 rounded-md border border-[#262626] bg-[#212121] p-3 ml-2">
+                  <div className="flex items-center gap-2">
+                    <Input value={t.name} onChange={(e) => updateTier(c.id, t.id, e.target.value)} placeholder="Tier name (e.g. Bronze)" className="bg-[#1c1c1c] border-[#262626] text-white text-sm" />
+                    <button onClick={() => removeTier(c.id, t.id)} className="text-neutral-500 hover:text-red-400 shrink-0" aria-label="Remove tier"><X size={15} /></button>
+                  </div>
+
+                  {t.supporters.map((s) => {
+                    const parsed = parseSupporterInput(s.input)
+                    const hint = !s.input.trim() ? '' : parsed?.pubkey ? 'Nostr profile' : 'Plain name'
+                    return (
+                      <div key={s.id} className="flex items-center gap-2">
+                        <Input value={s.input} onChange={(e) => updateSupporter(c.id, t.id, s.id, e.target.value)} placeholder="npub or name" className="bg-[#1c1c1c] border-[#262626] text-white text-xs" />
+                        {hint && <span className={cn('shrink-0 text-[10px]', parsed?.pubkey ? 'text-purple-400' : 'text-neutral-500')}>{hint}</span>}
+                        <button onClick={() => removeSupporter(c.id, t.id, s.id)} className="text-neutral-600 hover:text-red-400 shrink-0" aria-label="Remove supporter"><X size={14} /></button>
+                      </div>
+                    )
+                  })}
+
+                  <Button onClick={() => addSupporter(c.id, t.id)} variant="ghost" size="sm" className="h-7 text-xs text-neutral-400 hover:text-neutral-200">
+                    <Plus size={13} className="mr-1" /> Add supporter
+                  </Button>
+                </div>
+              ))}
+
+              <Button onClick={() => addTier(c.id)} variant="outline" size="sm" className="border-[#262626] ml-2">
+                <Plus size={13} className="mr-1.5" /> Add tier
+              </Button>
+            </div>
+          ))}
+
+          <Button onClick={publish} disabled={!dirty || publishing} className="w-full">
+            {publishing ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />}
+            Publish Changes
+          </Button>
+        </>
+      )}
     </div>
   )
 }
