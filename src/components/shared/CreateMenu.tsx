@@ -14,9 +14,9 @@ import { useLoginModalStore } from '@/stores/loginModalStore'
  * blog post or a mod jam is only reachable by knowing the URL.
  */
 const OPTIONS = [
-  { to: '/submit-mod', icon: Package, title: 'Mod', desc: 'Publish a game mod with downloads, screenshots and permissions.' },
-  { to: '/submit-blog', icon: BookOpen, title: 'Blog post', desc: 'Write an article or update for your followers.' },
-  { to: '/submit-mod-jam', icon: JamIcon, title: 'Mod jam', desc: 'Run a time-boxed modding event with voting and prizes.' },
+  { to: '/submit-mod', icon: Package, title: 'Mod post', desc: 'Publish your mod for others to download' },
+  { to: '/submit-blog', icon: BookOpen, title: 'Blog post', desc: 'Publish a blog post for your people to read' },
+  { to: '/submit-mod-jam', icon: JamIcon, title: 'Mod jam', desc: 'Set up a Mod Jam event to entice creators' },
 ] as const
 
 export function CreateMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
