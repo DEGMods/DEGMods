@@ -14,6 +14,11 @@ export const MOD_FILE_UPLOAD_LIMIT_MB = 500
 export const IMAGE_UPLOAD_ACCEPT = '.jpg,.jpeg,.png,.webp,.gif,.avif'
 /** Accepted mod file upload formats. ZIP only — it's the one we can preview contents of (central directory). */
 export const MOD_FILE_UPLOAD_ACCEPT = '.zip'
+/**
+ * Accepted attachments on a social post: images plus short video/audio.
+ * Same SVG exclusion as above — it can carry scripts.
+ */
+export const SOCIAL_UPLOAD_ACCEPT = `${IMAGE_UPLOAD_ACCEPT},.mp4,.webm,.mov,.m4v,.mp3,.ogg,.wav`
 
 export const StorageKey = {
   CURRENT_ACCOUNT: 'deg-mods:current-account',

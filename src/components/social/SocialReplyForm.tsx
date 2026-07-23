@@ -51,7 +51,7 @@ export function SocialReplyForm({ root, parent, placeholder, autoFocus, onPublis
         autoFocus={autoFocus}
         rows={2}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit() } }}
-        className="bg-[#212121] border-[#262626] text-white resize-none"
+        className="bg-[#212121] border-[#262626] text-white resize-y"
       />
       <div className="flex items-center justify-end gap-2">
         {onCancel && (
