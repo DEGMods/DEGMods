@@ -55,7 +55,12 @@ function analyticsBootstrap(): Plugin {
         s.setAttribute('data-auto-track', 'false');
         s.addEventListener('load', function () {
           if (window.umami) {
-            window.umami.track({ url: url });
+            // Callback form, not an object. Umami's track() REPLACES the payload
+            // when handed an object, dropping the website id it would otherwise
+            // read from data-website-id — and an event with no website is
+            // discarded server-side. The callback receives the full default
+            // payload (website, hostname, …) and we override only the url.
+            window.umami.track(function (p) { p.url = url; return p; });
             // Tells the app this one is already counted, so it doesn't repeat it.
             window.__umamiLandingSent = url;
           }

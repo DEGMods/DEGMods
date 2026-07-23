@@ -56,7 +56,11 @@ function onConfiguredHost(): boolean {
 
 declare global {
   interface Window {
-    umami?: { track: (payload?: unknown) => void }
+    // The callback form is what we use: Umami merges the returned object over
+    // its default payload (which carries the website id). Passing a plain object
+    // instead REPLACES the payload and drops the website id, and the server
+    // silently discards any event without one.
+    umami?: { track: (payload?: (p: Record<string, unknown>) => Record<string, unknown>) => void }
     /** Set by the index.html bootstrap for the view it already counted. */
     __umamiLandingSent?: string
   }
@@ -130,8 +134,11 @@ export function useAnalytics() {
         sent = true
         lastPath.current = path
         // An explicit url, rather than letting the tracker read the address
-        // bar — by the time this fires the bar may hold a short address.
-        window.umami.track({ url })
+        // bar — by the time this fires the bar may hold a short address. The
+        // callback form keeps Umami's default payload (website id, hostname, …)
+        // and overrides only the url; a plain object would drop the website id
+        // and the event would be discarded server-side.
+        window.umami.track((payload) => ({ ...payload, url }))
         return
       }
       if (tries++ < 20) setTimeout(() => send(url), 250)
