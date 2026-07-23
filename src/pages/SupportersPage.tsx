@@ -52,14 +52,14 @@ export function SupportersPage() {
   )
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10 py-12">
+    <div className="mx-auto space-y-10 py-12">
       <header className="space-y-3">
         <div className="flex items-center gap-3">
           <HandCoins size={28} className="text-purple-400" />
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Supporters</h1>
         </div>
         <p className="max-w-2xl text-sm leading-relaxed text-neutral-400">
-          The people who funded DEG Mods. Thank you — this project exists because of you.
+          The people who funded DEG Mods. Thank you.
         </p>
       </header>
 
@@ -135,6 +135,11 @@ function SupporterCard({ supporter, profile }: { supporter: Supporter; profile?:
         </AvatarFallback>
       </Avatar>
       <span className="line-clamp-2 text-sm font-medium text-neutral-100">{displayName}</span>
+      {supporter.amount && (
+        <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-xs font-semibold text-purple-300">
+          {supporter.amount}
+        </span>
+      )}
     </div>
   )
 

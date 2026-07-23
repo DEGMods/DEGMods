@@ -738,6 +738,8 @@ export interface Supporter {
   pubkey?: string
   /** Plain display name when there's no pubkey (also a fallback label). */
   name?: string
+  /** Free-text amount the admin typed, e.g. "$10" — shown as-is, not parsed. */
+  amount?: string
 }
 
 export interface SupporterTier {
@@ -786,10 +788,11 @@ export function extractSupporters(event: NostrEvent): FundingCampaign[] {
                     supporters: Array.isArray(tt?.supporters)
                       ? (tt.supporters as unknown[])
                           .map((s): Supporter => {
-                            const ss = s as { pubkey?: unknown; name?: unknown }
+                            const ss = s as { pubkey?: unknown; name?: unknown; amount?: unknown }
                             const pubkey = typeof ss?.pubkey === 'string' && HEX64.test(ss.pubkey) ? ss.pubkey.toLowerCase() : undefined
                             const name = typeof ss?.name === 'string' && ss.name.trim() ? ss.name : undefined
-                            return { pubkey, name }
+                            const amount = typeof ss?.amount === 'string' && ss.amount.trim() ? ss.amount : undefined
+                            return { pubkey, name, amount }
                           })
                           .filter(s => s.pubkey || s.name)
                       : [],

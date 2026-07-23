@@ -1645,7 +1645,7 @@ function GateAdsSection() {
 // field where the admin types an npub (or nprofile) or a plain name; the input
 // is parsed at publish time into { pubkey } or { name }.
 
-interface EditSupporter { id: string; input: string }
+interface EditSupporter { id: string; input: string; amount: string }
 interface EditTier { id: string; name: string; supporters: EditSupporter[] }
 interface EditCampaign { id: string; name: string; url: string; tiers: EditTier[] }
 
@@ -1686,7 +1686,14 @@ function SupportersTab() {
       url: c.url.trim() || undefined,
       tiers: c.tiers.map((t): SupporterTier => ({
         name: t.name.trim(),
-        supporters: t.supporters.map(s => parseSupporterInput(s.input)).filter((s): s is Supporter => !!s),
+        supporters: t.supporters
+          .map((s): Supporter | null => {
+            const parsed = parseSupporterInput(s.input)
+            if (!parsed) return null
+            const amount = s.amount.trim()
+            return amount ? { ...parsed, amount } : parsed
+          })
+          .filter((s): s is Supporter => !!s),
       })).filter(t => t.name || t.supporters.length),
     })).filter(c => c.name || c.tiers.length), [])
 
@@ -1702,7 +1709,7 @@ function SupportersTab() {
         id: uid(), name: c.name, url: c.url ?? '',
         tiers: c.tiers.map(t => ({
           id: uid(), name: t.name,
-          supporters: t.supporters.map(s => ({ id: uid(), input: supporterToInput(s) })),
+          supporters: t.supporters.map(s => ({ id: uid(), input: supporterToInput(s), amount: s.amount ?? '' })),
         })),
       }))
       setCampaigns(edit)
@@ -1735,9 +1742,9 @@ function SupportersTab() {
   // ── Supporter ops ──
   const mutTier = (cid: string, tid: string, fn: (s: EditSupporter[]) => EditSupporter[]) =>
     setCampaigns(p => p.map(c => c.id === cid ? { ...c, tiers: c.tiers.map(t => t.id === tid ? { ...t, supporters: fn(t.supporters) } : t) } : c))
-  const addSupporter = (cid: string, tid: string) => mutTier(cid, tid, s => [...s, { id: uid(), input: '' }])
-  const updateSupporter = (cid: string, tid: string, sid: string, input: string) =>
-    mutTier(cid, tid, s => s.map(x => x.id === sid ? { ...x, input } : x))
+  const addSupporter = (cid: string, tid: string) => mutTier(cid, tid, s => [...s, { id: uid(), input: '', amount: '' }])
+  const updateSupporter = (cid: string, tid: string, sid: string, patch: Partial<EditSupporter>) =>
+    mutTier(cid, tid, s => s.map(x => x.id === sid ? { ...x, ...patch } : x))
   const removeSupporter = (cid: string, tid: string, sid: string) =>
     mutTier(cid, tid, s => s.filter(x => x.id !== sid))
 
@@ -1798,8 +1805,9 @@ function SupportersTab() {
                     const hint = !s.input.trim() ? '' : parsed?.pubkey ? 'Nostr profile' : 'Plain name'
                     return (
                       <div key={s.id} className="flex items-center gap-2">
-                        <Input value={s.input} onChange={(e) => updateSupporter(c.id, t.id, s.id, e.target.value)} placeholder="npub or name" className="bg-[#1c1c1c] border-[#262626] text-white text-xs" />
+                        <Input value={s.input} onChange={(e) => updateSupporter(c.id, t.id, s.id, { input: e.target.value })} placeholder="npub or name" className="bg-[#1c1c1c] border-[#262626] text-white text-xs" />
                         {hint && <span className={cn('shrink-0 text-[10px]', parsed?.pubkey ? 'text-purple-400' : 'text-neutral-500')}>{hint}</span>}
+                        <Input value={s.amount} onChange={(e) => updateSupporter(c.id, t.id, s.id, { amount: e.target.value })} placeholder="Amount (e.g. $10)" className="w-32 shrink-0 bg-[#1c1c1c] border-[#262626] text-white text-xs" />
                         <button onClick={() => removeSupporter(c.id, t.id, s.id)} className="text-neutral-600 hover:text-red-400 shrink-0" aria-label="Remove supporter"><X size={14} /></button>
                       </div>
                     )
