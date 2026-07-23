@@ -7,7 +7,7 @@
  * browser.) Add new platforms here and every consumer picks them up.
  */
 
-export type EmbedType = 'youtube' | 'twitch' | 'kick' | 'twitter' | 'spotify' | 'steam' | 'tiktok'
+export type EmbedType = 'youtube' | 'twitch' | 'kick' | 'twitter' | 'spotify' | 'steam' | 'tiktok' | 'generic'
 
 export type EmbedLayout = 'video' | 'vertical' | 'compact' | 'card'
 
@@ -102,4 +102,79 @@ export function detectEmbed(url: string): EmbedInfo | null {
 
 export function isEmbeddable(url: string): boolean {
   return detectEmbed(url) !== null
+}
+
+// ─── Author-written <iframe> ────────────────────────────────────────
+//
+// A post body may contain a raw <iframe>, usually pasted from a platform's
+// "share → embed" dialog. The markup itself is harmless once the HTML sanitizer
+// has run; the risk is the destination. An arbitrary frame src can serve a
+// convincing fake login, an invisible clickjacking overlay, or a download
+// prompt — none of which is XSS a sanitizer would catch, because the markup is
+// perfectly well-formed and only the target is hostile.
+//
+// So framing is decided by an allowlist of destinations, not by filtering
+// markup. Anything not listed renders as a plain link instead: visible,
+// inspectable, and unable to overlay the page.
+
+/** Player origins that may appear in an author-written iframe src. */
+const IFRAME_EMBED_PATHS: { host: string; path?: RegExp }[] = [
+  { host: 'www.youtube-nocookie.com', path: /^\/embed\// },
+  { host: 'www.youtube.com', path: /^\/embed\// },
+  { host: 'youtube.com', path: /^\/embed\// },
+  { host: 'player.vimeo.com', path: /^\/video\/\d+/ },
+  { host: 'player.twitch.tv', path: /^\/$/ },
+  { host: 'clips.twitch.tv', path: /^\/embed/ },
+  { host: 'player.kick.com' },
+  { host: 'open.spotify.com', path: /^\/embed\// },
+  { host: 'w.soundcloud.com', path: /^\/player/ },
+  { host: 'store.steampowered.com', path: /^\/widget\// },
+  { host: 'platform.twitter.com', path: /^\/embed\// },
+  { host: 'www.tiktok.com', path: /^\/player\// },
+  { host: 'odysee.com', path: /^\/\$\/embed\// },
+  { host: 'rumble.com', path: /^\/embed\// },
+  { host: 'streamable.com', path: /^\/e\// },
+  { host: 'geo.dailymotion.com', path: /^\/player/ },
+  { host: 'www.dailymotion.com', path: /^\/embed\// },
+  { host: 'iframe.mediadelivery.net', path: /^\/embed\// },
+]
+
+/**
+ * Resolve an author-written iframe src to a safe embed, or null to refuse it.
+ *
+ * A share link is handled first, so `<iframe src="…/watch?v=…">` works as well
+ * as the canonical embed URL. Otherwise the src must be a real player path on
+ * an allowlisted origin.
+ */
+export function embedFromIframe(src: string): EmbedInfo | null {
+  let u: URL
+  try {
+    u = new URL(src.trim())
+  } catch {
+    return null
+  }
+  // Never frame anything but http(s) — javascript:/data: must not reach a src.
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+
+  // A pasted watch/share URL gets the platform's own layout and permissions.
+  const detected = detectEmbed(u.toString())
+  if (detected) return detected
+
+  const host = u.hostname.toLowerCase()
+  const match = IFRAME_EMBED_PATHS.find(e => e.host === host && (!e.path || e.path.test(u.pathname)))
+  if (!match) return null
+
+  // Twitch refuses to play unless the embedding domain is named, and that
+  // differs between production, a fork and localhost — so it's set at render.
+  if ((host === 'player.twitch.tv' || host === 'clips.twitch.tv') && !u.searchParams.has('parent')) {
+    u.searchParams.set('parent', typeof window !== 'undefined' ? window.location.hostname : 'localhost')
+  }
+
+  return {
+    type: 'generic',
+    layout: 'video',
+    src: u.toString(),
+    title: 'Embedded media',
+    allow: 'accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+  }
 }

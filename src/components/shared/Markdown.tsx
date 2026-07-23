@@ -8,6 +8,8 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { Copy, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BlossomImage } from './BlossomImage'
+import { embedFromIframe } from '@/lib/embeds'
+import { LinkEmbed } from '@/components/social/LinkEmbed'
 
 /**
  * Fenced code block with a header showing the language (if given) and a copy
@@ -73,8 +75,46 @@ function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   )
 }
 
+/**
+ * An `<iframe>` an author put in a post body.
+ *
+ * The src is re-parsed and checked against the embed allowlist rather than
+ * trusted — see embedFromIframe for why the destination, not the markup, is
+ * what matters. A refused src degrades to a plain link so the content isn't
+ * lost and the reader can still see where it points.
+ *
+ * Wrapped in `<span>`s because markdown puts inline HTML inside a `<p>`, where
+ * a `<div>` would be invalid nesting (same reason MarkdownImage uses spans).
+ */
+function MarkdownEmbed({ src, title }: { src?: string; title?: string }) {
+  if (!src) return null
+  const embed = embedFromIframe(src)
+
+  if (!embed) {
+    return (
+      <span className="my-4 block">
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="text-purple-400 underline underline-offset-2 hover:text-purple-300"
+        >
+          {title || src}
+        </a>
+      </span>
+    )
+  }
+
+  return (
+    <span className="my-4 block">
+      <LinkEmbed embed={title ? { ...embed, title } : embed} />
+    </span>
+  )
+}
+
 const components: Components = {
   p: ({ node, ...props }) => <p className="mb-3 leading-relaxed" {...props} />,
+  iframe: ({ node, src, title }) => <MarkdownEmbed src={src as string} title={title as string} />,
   a: ({ node, ...props }) => (
     <a
       target="_blank"
@@ -136,11 +176,25 @@ interface MarkdownProps {
 
 // Sanitize schema (GitHub's, hardened). rehype-sanitize runs AFTER rehype-raw,
 // so it cleans any embedded/raw HTML before it becomes React elements: scripts,
-// event handlers (onclick…), `javascript:`/`data:` URLs, <style>, <iframe>, etc.
-// are dropped. We keep the code-block language class so fenced code still
+// event handlers (onclick…), `javascript:`/`data:` URLs, <style>, etc. are
+// dropped. We keep the code-block language class so fenced code still
 // highlights, and let anchors carry href/title (our <a> component forces
 // target=_blank rel=noopener noreferrer nofollow regardless).
-const sanitizeSchema = defaultSchema
+//
+// `iframe` is allowed through with a deliberately tiny attribute list so authors
+// can paste a platform embed code. Note what is NOT allowed: `srcdoc` (which
+// would let arbitrary HTML — and script — run in the frame), `name`, `style`,
+// and every event handler. `src` survives sanitizing but is not trusted here;
+// MarkdownEmbed re-parses it and refuses any origin that isn't a known player,
+// so passing the sanitizer is necessary but not sufficient to get framed.
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), 'iframe'],
+  attributes: {
+    ...defaultSchema.attributes,
+    iframe: ['src', 'title', 'width', 'height', 'allow', 'allowfullscreen', 'allowFullScreen'],
+  },
+}
 
 /**
  * Renders user-authored markdown (mod bodies, blog posts) with GFM support,
