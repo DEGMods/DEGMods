@@ -45,14 +45,59 @@ function CodeBlock({ lang, code }: { lang?: string; code: string }) {
   )
 }
 
+const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i
+const AUDIO_EXT = /\.(mp3|ogg|oga|wav|m4a|flac)(\?|#|$)/i
+
+/** src of the first `<source>` child of a hast video/audio node, if any. */
+function firstChildSourceSrc(node: unknown): string | undefined {
+  const kids = (node as { children?: Array<{ tagName?: string; properties?: Record<string, unknown> }> })?.children
+  const s = kids?.find((c) => c.tagName === 'source' && typeof c.properties?.src === 'string')
+  return s?.properties?.src as string | undefined
+}
+
+/**
+ * A `<video>`/`<audio>` player for a media file in a post body.
+ *
+ * Reached two ways: a raw `<video>`/`<audio>` the author pasted, or image
+ * syntax whose src is a media file (`![](clip.mp4)`) — markdown has no video
+ * syntax, so that's the closest thing to a "markdown way" and it's upgraded
+ * here rather than rendered as a broken <img>.
+ *
+ * `preload="metadata"` so opening a post with several clips doesn't download
+ * them all — only the poster frame / duration is fetched until play. Only
+ * http(s) srcs are honored; a `javascript:`/`data:` src is dropped.
+ */
+function MarkdownMedia({ src, kind, poster }: { src: string; kind: 'video' | 'audio'; poster?: string }) {
+  if (!/^https?:\/\//i.test(src)) return null
+  if (kind === 'audio') {
+    return <audio controls preload="metadata" src={src} className="my-4 block w-full" />
+  }
+  return (
+    <video
+      controls
+      playsInline
+      preload="metadata"
+      poster={poster}
+      src={src}
+      className="my-4 block h-auto w-full rounded-lg border border-[#262626]"
+    />
+  )
+}
+
 /**
  * Image rendered inside markdown bodies: lazy-loaded, with a pulsing
  * skeleton while it loads and Blossom server failover (via BlossomImage).
  * Uses <span> elements (not <div>) because markdown images live inside <p>.
+ *
+ * A src that points at a video/audio file is played instead — markdown's image
+ * syntax is the only inline-media syntax it has, so `![](clip.mp4)` should show
+ * a player, not a broken image icon.
  */
 function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   const [loaded, setLoaded] = useState(false)
   if (!src) return null
+  if (VIDEO_EXT.test(src)) return <MarkdownMedia src={src} kind="video" />
+  if (AUDIO_EXT.test(src)) return <MarkdownMedia src={src} kind="audio" />
 
   return (
     <span
@@ -115,6 +160,18 @@ function MarkdownEmbed({ src, title }: { src?: string; title?: string }) {
 const components: Components = {
   p: ({ node, ...props }) => <p className="mb-3 leading-relaxed" {...props} />,
   iframe: ({ node, src, title }) => <MarkdownEmbed src={src as string} title={title as string} />,
+  // <video>/<audio> carry their url either as a src attribute or a <source>
+  // child, so both are checked. <source> renders nothing on its own — its
+  // parent consumes it.
+  video: ({ node, src, poster }) => {
+    const url = (src as string) || firstChildSourceSrc(node)
+    return url ? <MarkdownMedia src={url} kind="video" poster={poster as string} /> : null
+  },
+  audio: ({ node, src }) => {
+    const url = (src as string) || firstChildSourceSrc(node)
+    return url ? <MarkdownMedia src={url} kind="audio" /> : null
+  },
+  source: () => null,
   a: ({ node, ...props }) => (
     <a
       target="_blank"
@@ -189,10 +246,18 @@ interface MarkdownProps {
 // so passing the sanitizer is necessary but not sufficient to get framed.
 const sanitizeSchema = {
   ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames ?? []), 'iframe'],
+  tagNames: [...(defaultSchema.tagNames ?? []), 'iframe', 'video', 'audio', 'source'],
   attributes: {
     ...defaultSchema.attributes,
     iframe: ['src', 'title', 'width', 'height', 'allow', 'allowfullscreen', 'allowFullScreen'],
+    // Media plays a file, it doesn't execute a page, so this is close to the
+    // <img> risk profile the schema already accepts. The component ignores most
+    // of these and renders its own controlled player; they're listed so a pasted
+    // tag survives sanitizing to reach it. Event handlers (onerror…) and srcdoc
+    // are still dropped, since they're not on the list.
+    video: ['src', 'poster', 'controls', 'width', 'height', 'preload', 'loop', 'muted', 'playsinline'],
+    audio: ['src', 'controls', 'preload', 'loop'],
+    source: ['src', 'type'],
   },
 }
 
