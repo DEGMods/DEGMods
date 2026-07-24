@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Search, ChevronLeft, ChevronRight, Loader2, AlertTriangle } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Loader2, AlertTriangle, LayoutGrid, List } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { GameCard } from '@/components/game/GameCard'
+import { GameListRow } from '@/components/game/GameListRow'
+import { usePreferencesStore } from '@/stores/preferencesStore'
 import { useGamesDbStore, warmGamesDb } from '@/stores/gamesDbStore'
 import { useLegacyModsStore } from '@/stores/legacyModsStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -41,6 +43,8 @@ export function GamesPage() {
   const [search, setSearch] = useState('')
   const [modGameNames, setModGameNames] = useState<string[]>(() => modCountsCache?.names ?? [])
   const [page, setPage] = useState(1)
+  const gamesView = usePreferencesStore(s => s.gamesView)
+  const setGamesView = usePreferencesStore(s => s.setGamesView)
 
   // Ensure the games DB is fresh on mount. Usually a no-op here because it's
   // already warmed at app startup (see warmGamesDb) — hydration-gated and
@@ -202,7 +206,7 @@ export function GamesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-sm text-neutral-400">
             {allGames.length.toLocaleString()} game{allGames.length !== 1 ? 's' : ''}
@@ -226,6 +230,26 @@ export function GamesPage() {
             </span>
           )}
         </div>
+
+        {/* Grid / list view toggle */}
+        <div className="flex shrink-0 items-center rounded-lg border border-[#262626] p-0.5">
+          <button
+            onClick={() => setGamesView('grid')}
+            aria-label="Grid view"
+            aria-pressed={gamesView === 'grid'}
+            className={cn('rounded-md p-1.5 transition-colors', gamesView === 'grid' ? 'bg-[#262626] text-white' : 'text-neutral-500 hover:text-neutral-300')}
+          >
+            <LayoutGrid size={16} />
+          </button>
+          <button
+            onClick={() => setGamesView('list')}
+            aria-label="List view"
+            aria-pressed={gamesView === 'list'}
+            className={cn('rounded-md p-1.5 transition-colors', gamesView === 'list' ? 'bg-[#262626] text-white' : 'text-neutral-500 hover:text-neutral-300')}
+          >
+            <List size={16} />
+          </button>
+        </div>
       </div>
 
       {!ADMIN_PUBKEY && games.length === 0 && !loading && (
@@ -238,25 +262,41 @@ export function GamesPage() {
           genuinely have nothing yet. Background sync/mod-count refreshes are
           signalled by the progress indicator, not by blanking the grid. */}
       {loading && allGames.length === 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="space-y-2">
-              <Skeleton className="w-full rounded-xl" style={{ aspectRatio: '2 / 3' }} />
-              <Skeleton className="h-4 w-3/4" />
-            </div>
-          ))}
-        </div>
-      ) : pagedGames.length > 0 ? (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {pagedGames.map(game => (
-              <GameCard
-                key={game.name}
-                game={game}
-                modCount={combinedCounts[game.name]}
-              />
+        gamesView === 'list' ? (
+          <div className="space-y-2">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <Skeleton key={i} className="h-[76px] w-full rounded-md" />
             ))}
           </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="w-full rounded-xl" style={{ aspectRatio: '2 / 3' }} />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            ))}
+          </div>
+        )
+      ) : pagedGames.length > 0 ? (
+        <>
+          {gamesView === 'list' ? (
+            <div className="space-y-2">
+              {pagedGames.map(game => (
+                <GameListRow key={game.name} game={game} modCount={combinedCounts[game.name]} />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {pagedGames.map(game => (
+                <GameCard
+                  key={game.name}
+                  game={game}
+                  modCount={combinedCounts[game.name]}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

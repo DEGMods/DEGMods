@@ -30,6 +30,9 @@ interface PreferencesState {
    */
   showNsfwMedia: boolean
 
+  /** How the /games listing is laid out. Persisted so the choice sticks. */
+  gamesView: 'grid' | 'list'
+
   setRenderImages: (v: boolean) => void
   setRenderVideos: (v: boolean) => void
   setRenderAudio: (v: boolean) => void
@@ -37,6 +40,7 @@ interface PreferencesState {
   setSoftModeration: (v: boolean) => void
   setHardModeration: (v: boolean) => void
   setShowNsfwMedia: (v: boolean) => void
+  setGamesView: (v: 'grid' | 'list') => void
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -50,6 +54,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       softModeration: true,
       hardModeration: true,
       showNsfwMedia: false,
+      gamesView: 'grid',
 
       setRenderImages: (renderImages) => set({ renderImages }),
       setRenderVideos: (renderVideos) => set({ renderVideos }),
@@ -58,6 +63,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       setSoftModeration: (softModeration) => set({ softModeration }),
       setHardModeration: (hardModeration) => set({ hardModeration }),
       setShowNsfwMedia: (showNsfwMedia) => set({ showNsfwMedia }),
+      setGamesView: (gamesView) => set({ gamesView }),
     }),
     { name: 'deg-mods:preferences' },
   ),
