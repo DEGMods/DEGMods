@@ -71,11 +71,20 @@ export function FaqPage() {
                   {item.question}
                   <ChevronDown className={cn('h-4 w-4 shrink-0 text-neutral-500 transition-transform', isOpen && 'rotate-180')} />
                 </button>
-                {isOpen && (
-                  <div className="border-t border-[#262626] px-4 py-3 text-sm text-neutral-300">
-                    <Markdown content={item.answer} />
+                {/* Always rendered, height animated via grid-rows 0fr→1fr so an
+                    unknown answer height still transitions smoothly (same
+                    technique as the jam disclosures). overflow-hidden clips the
+                    content — and its top border — while collapsed. */}
+                <div
+                  className="grid transition-[grid-template-rows] duration-200 ease-out"
+                  style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
+                >
+                  <div className="overflow-hidden">
+                    <div className="border-t border-[#262626] px-4 py-3 text-sm text-neutral-300">
+                      <Markdown content={item.answer} />
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             )
           })}
