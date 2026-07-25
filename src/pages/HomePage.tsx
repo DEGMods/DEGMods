@@ -167,24 +167,25 @@ export function HomePage() {
         const resolve = (coords: string[]) =>
           coords.map(a => byATag.get(a)).filter((m): m is ModDetails => !!m)
 
-        // Curation is authoritative only when its query actually answered, and
-        // only when the coordinates it names could be fetched.
+        // Curation is authoritative only when its query actually answered with
+        // something, and only when the coordinates it names could be fetched.
         //
-        // Deriving from the latest mods is right for a site that curates
-        // nothing. It is badly wrong when curation exists but didn't arrive:
-        // the page then replaces a hand-picked lineup with whatever mods
-        // happened to come back, which reads as "the featured section is
-        // showing things I never chose". Both failures produce an empty list,
-        // so they have to be told apart by *why* it's empty.
-        //
-        // When we can't trust it, the previous lineup is left alone rather than
-        // replaced by a guess.
-        const curationAnswered = !!curationRaw
+        // A curation fetch that returns ZERO events is treated as "didn't
+        // answer", NOT as "this site curates nothing". A working deployment
+        // always has *some* curation (ads/banner at least), so an empty result
+        // is a flaky read — and taking it at face value is what let the featured
+        // sections swap the hand-picked lineup for whatever mods came back,
+        // including deleted and NSFW ones the admin never chose. When we can't
+        // trust the read, every section keeps its previous (cached) lineup.
+        const curationAnswered = !!curationRaw && curationRaw.length > 0
+
+        // Featured mods are admin-curated only — never derived from the latest
+        // mods. If curation names no slider coordinates, the slider shows
+        // nothing (the section hides itself) rather than inventing a lineup that
+        // could surface unchosen, deleted, or NSFW posts.
         const curatedSlider = resolve(sliderCoords)
         const sliderUsable = sliderCoords.length === 0 || curatedSlider.length > 0
-        const sliderVal = !curationAnswered || !sliderUsable
-          ? sliderMods
-          : (curatedSlider.length ? curatedSlider : allMods.slice(0, 5))
+        const sliderVal = !curationAnswered || !sliderUsable ? sliderMods : curatedSlider
         setSliderMods(sliderVal)
 
         const curatedGrid = resolve(gridCoords)
@@ -251,7 +252,7 @@ export function HomePage() {
         // is what made a bad load look like it had stuck. Curated coordinates
         // that didn't resolve count as incomplete: what's on screen is the
         // previous lineup, not a result worth saving.
-        if (!modEvents || !curationRaw || !sliderUsable || !gridUsable) return
+        if (!modEvents || !curationAnswered || !sliderUsable || !gridUsable) return
         writeHomeCache({
           at: Date.now(),
           // Only the latest few are shown ("Latest Mods"); cap the persisted
