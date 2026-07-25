@@ -5,6 +5,7 @@ import type { Event as NostrEvent } from 'nostr-tools'
 import { requestDelete, type DeleteStep } from '@/lib/nostr/publish'
 import { forgetCachedEvent } from '@/lib/nostr/eventCache'
 import { purgeFromModCaches } from '@/hooks/useProgressiveMods'
+import { purgeHomeCache } from '@/lib/homeCache'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -87,6 +88,9 @@ export function RequestDeleteDialog({ open, onOpenChange, event, title, noun, re
       if (dTag !== undefined) {
         forgetCachedEvent(`${event.kind}:${event.pubkey}:${dTag}`)
         purgeFromModCaches(event.pubkey, dTag)
+        // The landing page keeps its own snapshot of "Latest Mods"; without this
+        // a just-deleted mod lingers there until that cache ages out.
+        purgeHomeCache(event.pubkey, dTag)
       }
       toast.success(`Deletion requested for this ${noun}`)
       onDeleted()

@@ -27,10 +27,10 @@ import { beginRefresh, endRefresh } from '@/lib/ui/refreshToast'
 import type { ModDetails } from '@/types/mod'
 import type { BlogDetails } from '@/types/blog'
 import type { GameEntry } from '@/types/game'
+import { readHomeCache, writeHomeCache, peekHomeCache } from '@/lib/homeCache'
 
 const NIP78_KIND = 30078
 const HOME_TTL = 2 * 60 * 1000
-const HOME_CACHE_KEY = 'home-cache-v2'
 
 /**
  * There is deliberately no short `maxWait` on the first visit.
@@ -47,48 +47,6 @@ const HOME_CACHE_KEY = 'home-cache-v2'
  * own instead of by cutting queries short.
  */
 
-// Home data survives navigation AND full reloads (persisted to localStorage) so
-// returning is instant instead of re-fetching everything and flashing skeletons.
-// A stale cache still paints immediately, then refreshes in the background.
-interface HomeCache {
-  at: number
-  mods: ModDetails[]
-  sliderMods: ModDetails[]
-  featuredMods: ModDetails[]
-  games: GameEntry[]
-  blogs: BlogDetails[]
-  blogAuthors: Map<string, UserProfile>
-  banner: BannerData | null
-  ads: AdEntry[]
-}
-let homeCache: HomeCache | null = null
-
-// Read the cache once (in-memory first, else the sync localStorage copy). Sync so
-// the very first render can paint from it with no skeleton flash on reload.
-function readHomeCache(): HomeCache | null {
-  if (homeCache) return homeCache
-  try {
-    const raw = localStorage.getItem(HOME_CACHE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Omit<HomeCache, 'blogAuthors'> & { blogAuthors: [string, UserProfile][] }
-    homeCache = { ...parsed, blogAuthors: new Map(parsed.blogAuthors) }
-    return homeCache
-  } catch {
-    return null
-  }
-}
-
-function writeHomeCache(cache: HomeCache): void {
-  homeCache = cache
-  try {
-    localStorage.setItem(
-      HOME_CACHE_KEY,
-      JSON.stringify({ ...cache, blogAuthors: [...cache.blogAuthors] }),
-    )
-  } catch {
-    // quota / serialization failure is non-fatal — the in-memory copy still serves.
-  }
-}
 
 export function HomePage() {
   const getGameImages = useGamesDbStore(s => s.getGameImages)
@@ -115,10 +73,11 @@ export function HomePage() {
 
   useEffect(() => {
     let cancelled = false
-    const hasCache = !!homeCache
+    const cached = peekHomeCache()
+    const hasCache = !!cached
     // Fresh cache on a quick return: paint it and skip the network entirely.
     const settleAll = () => { setModsLoading(false); setCurationLoading(false); setBlogsLoading(false) }
-    if (homeCache && Date.now() - homeCache.at < HOME_TTL) { settleAll(); return }
+    if (cached && Date.now() - cached.at < HOME_TTL) { settleAll(); return }
     // Otherwise revalidate. With a cache to show, do it in the background (no
     // skeletons) behind a "Checking for updates…" toast, and update in place.
     const background = hasCache
