@@ -175,8 +175,12 @@ export default function BlogPostPage() {
   }, [rawEvent])
 
   const handleCopyNaddr = () => {
-    if (!naddr) return
-    navigator.clipboard.writeText(naddr)
+    // From the event, not the URL param: the address bar is rewritten to the
+    // short form once resolved, so copying the param would hand out the short
+    // code instead of the decentralized naddr.
+    if (!blog) return
+    const naddrStr = nip19.naddrEncode({ kind: KINDS.BLOG, pubkey: blog.pubkey, identifier: blog.dTag })
+    navigator.clipboard.writeText(naddrStr)
     toast.success('Note ID copied to clipboard')
   }
 

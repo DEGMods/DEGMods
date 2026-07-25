@@ -283,7 +283,14 @@ export function JamPage() {
   const hasVoting = jam.votingEnabled
   const votingOver = hasVoting && !!jam.votingEnd && now > jam.votingEnd
 
-  const copyNaddr = () => { if (naddr) { navigator.clipboard.writeText(naddr); toast.success('Note ID copied to clipboard') } }
+  // From the event, not the URL param: the bar is rewritten to the short form
+  // once resolved, so the param would be the short code, not the naddr.
+  const copyNaddr = () => {
+    if (!jam) return
+    const naddrStr = nip19.naddrEncode({ kind: KINDS.JAM, pubkey: jam.pubkey, identifier: jam.dTag })
+    navigator.clipboard.writeText(naddrStr)
+    toast.success('Note ID copied to clipboard')
+  }
   const copyNpub = () => { navigator.clipboard.writeText(nip19.npubEncode(jam.pubkey)); toast.success('Author npub copied to clipboard') }
   const copyRawJson = () => { if (rawJson) { navigator.clipboard.writeText(rawJson); toast.success(readableRaw ? 'Readable JSON copied to clipboard' : 'Raw JSON copied to clipboard') } }
 
