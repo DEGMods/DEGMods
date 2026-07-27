@@ -52,8 +52,7 @@ A game mod is published as a **Nostr addressable replaceable event** with kind `
     ["c", "graphics:reshade"],
     ["c", "visuals:lighting"],
     ["elsewhere", "https://www.nexusmods.com/cyberpunk2077/mods/1234"],
-    ["l", "jam-entry"],
-    ["a", "31143:3bf0c63f...:winter-survival-2026"]
+    ["a", "31143:3bf0c63f...:winter-survival-2026", "jam-entry"]
   ]
 }
 ```
@@ -439,36 +438,22 @@ For each chain the author enters, the event carries three kinds of tags, **all d
 
 ---
 
-### `l` — Type Label (NIP-32)
-
-```json
-["l", "jam-entry"]
-```
-
-- **Required:** No
-- **Repeatable:** Yes
-- **Value:** A bare NIP-32 label describing *what this release is*, beyond "a mod." A single-letter, relay-indexed tag, so values are directly filterable (`#l: ["jam-entry"]`).
-- **Purpose:** Classifies a mod's kind/purpose in an open-ended, extensible way without changing the event kind. The first use is **jam entries**:
-  - `"jam-entry"` — this mod is an entry in a jam. It appears alongside an `["a", "31143:<pubkey>:<d>"]` tag pointing at the jam (which jam), while `l` says *what it is*. See [jam-event.md](./jam-event.md#submissions--linking-an-entry-to-a-jam).
-- **No `L` namespace:** deliberately used bare (no NIP-32 `L` namespace tag), to avoid centralized/branded categorization. Values are plain, human-readable strings.
-- **Extensible:** the same `l` slot is reused by the future game event for release types (`"demo"`, `"dlc"`, `"playtest"`, …). It is *not* used to turn a mod into a game — mods and games are separate kinds; `l` only sub-classifies within a kind.
-
-**Query all jam entries (any jam):** `{ "kinds":[31142], "#l":["jam-entry"] }`
-**Query one jam's entries:** `{ "kinds":[31142], "#l":["jam-entry"], "#a":["31143:<pubkey>:<d>"] }`
-
----
-
 ### `a` — Linked Addressable Event
 
 ```json
-["a", "31143:<jam-pubkey>:<jam-d>"]
+["a", "31143:<jam-pubkey>:<jam-d>", "jam-entry"]
 ```
 
 - **Required:** No
 - **Repeatable:** Yes
-- **Format:** A standard addressable coordinate, `<kind>:<pubkey>:<d>`.
-- **Purpose:** Points at another addressable event this mod belongs to. `a` says **which**; the paired `l` says **what the link means** — neither is meaningful alone. The first (and currently only) use is jam entries: a mod carrying `["l","jam-entry"]` + `["a","31143:…"]` is an entry in that jam. See [jam-event.md](./jam-event.md#submissions--linking-an-entry-to-a-jam).
-- **Single-letter, so relay-indexed** — `#a` is directly filterable, which is what makes "fetch one jam's entries" a single query.
+- **Format:** `["a", "<kind>:<pubkey>:<d>", "<role>"]` — a standard addressable coordinate, followed by an optional **role** value describing *what the link means*. There is **no relay-hint value**; that slot holds the role.
+- **Purpose:** Points at another addressable event this mod is related to. The coordinate's **kind** already says *what type* is referenced (a jam is `31143`, a game is the game kind, another mod is `31142`); the **role** disambiguates links of the same kind, or names the relationship explicitly. Because `a` is repeatable, one event can reference several others.
+- **First use — jam entries:** a mod carrying `["a", "31143:<pubkey>:<d>", "jam-entry"]` is an entry in that jam. See [jam-event.md](./jam-event.md#submissions--linking-an-entry-to-a-jam).
+- **Single-letter, so relay-indexed** — `#a` is filterable by coordinate, which is what makes "fetch one jam's entries" a single query. The role is a non-indexed extra value: filter by the coordinate, then read the role client-side.
+
+**Query one jam's entries:** `{ "kinds":[31142], "#a":["31143:<pubkey>:<d>"] }` — on a mod, an `a` pointing at a jam means "entry", so the coordinate alone is enough.
+
+> **Legacy:** earlier jam entries used a separate `["l", "jam-entry"]` tag beside a bare `["a", "31143:…"]`. The client still reads that form; new entries write the role into the `a` tag as shown above.
 
 ---
 
@@ -511,6 +496,5 @@ For each chain the author enters, the event carries three kinds of tags, **all d
 | `f` | No | Yes | Segment string (anywhere index) | `reshade` |
 | `m` | No | No | Mod name, naddr, or link | `naddr1...` |
 | `dependencies` | No | Yes | `title` + value (name/naddr/link) | `["dependencies","ReShade","https://reshade.me/"]` |
-| `l` | No | Yes | Bare NIP-32 label | `jam-entry` (a jam submission; pairs with an `a` tag to the jam) |
-| `a` | No | Yes | `<kind>:<pubkey>:<d>` coordinate | `31143:<pk>:<d>` (which jam; pairs with `l`) |
+| `a` | No | Yes | `<kind>:<pubkey>:<d>` coordinate + optional role (no relay hint) | `["a","31143:<pk>:<d>","jam-entry"]` (which jam + that it's an entry) |
 | `elsewhere` | No | Yes (max 3) | Link (≤100 chars) | `https://www.nexusmods.com/…` |

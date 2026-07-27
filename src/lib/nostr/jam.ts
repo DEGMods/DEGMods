@@ -323,9 +323,13 @@ export function jamCountdownLabel(jam: JamDetails, now: number): string {
 
 // ─── Submission linking (a mod entered into a jam) ───────────────────
 
-/** The two tags a mod carries to become a jam entry. */
+/**
+ * The tag a mod carries to become a jam entry: a single `a` reference to the jam,
+ * with the role as its third value (no relay hint). Older entries used a separate
+ * `l=jam-entry` label alongside a bare `a`; isJamEntry still reads that form.
+ */
 export function submissionTags(jamCoordinate: string): string[][] {
-  return [['a', jamCoordinate], ['l', JAM_ENTRY_LABEL]]
+  return [['a', jamCoordinate, JAM_ENTRY_LABEL]]
 }
 
 /** Decode a jam naddr into its `31143:<pubkey>:<d>` coordinate (null if not a jam naddr). */
@@ -353,11 +357,16 @@ export function jamNaddrFromCoordinate(coordinate: string): string | null {
   }
 }
 
-/** Whether a mod event references this jam as an entry (has the a + l tags). */
+/**
+ * Whether a mod event references this jam as an entry: an `a` pointing at the jam
+ * whose role value is "jam-entry" (current form), or — for older entries — a bare
+ * `a` alongside a separate `l=jam-entry` label.
+ */
 export function isJamEntry(mod: NostrEvent, jamCoordinate: string): boolean {
-  const hasA = mod.tags.some((t) => t[0] === 'a' && t[1] === jamCoordinate)
-  const hasL = mod.tags.some((t) => t[0] === 'l' && t[1] === JAM_ENTRY_LABEL)
-  return hasA && hasL
+  const aTag = mod.tags.find((t) => t[0] === 'a' && t[1] === jamCoordinate)
+  if (!aTag) return false
+  if (aTag[2] === JAM_ENTRY_LABEL) return true
+  return mod.tags.some((t) => t[0] === 'l' && t[1] === JAM_ENTRY_LABEL) // legacy
 }
 
 /** Upper headroom on a submission's created_at — edits drift it up by +1 per revision. */

@@ -13,7 +13,7 @@ import { decodePostParam } from '@/lib/nostr/nipShort'
 import { fetchAllEvents, fetchEvents, fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { getCachedEvent, whenEventCacheReady } from '@/lib/nostr/eventCache'
 import { extractModData } from '@/lib/nostr/events'
-import { extractJam, isValidSubmission, jamStatus, submissionWindow, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
+import { extractJam, isValidSubmission, jamStatus, submissionWindow, type JamDetails } from '@/lib/nostr/jam'
 import { latestResults, rowsForEntry, type JamResults } from '@/lib/nostr/jamVoting'
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
@@ -93,7 +93,7 @@ export function JamSubmissionsPage() {
     const loadEntries = async (jamData: JamDetails) => {
       try {
         const { since, until } = submissionWindow(jamData)
-        const subEvents = await fetchAllEvents(relays, { kinds: [KINDS.MOD], '#a': [coordinate], '#l': [JAM_ENTRY_LABEL], since, until })
+        const subEvents = await fetchAllEvents(relays, { kinds: [KINDS.MOD], '#a': [coordinate], since, until })
         if (cancelled) return
         // Newest event per mod coordinate.
         const byCoord = new Map<string, typeof subEvents[number]>()
@@ -265,7 +265,7 @@ export function JamSubmissionsPage() {
           {jamCoordinate && (
             <AdvancedSearch
               subject="entry"
-              base={{ '#a': [jamCoordinate], '#l': [JAM_ENTRY_LABEL] }}
+              base={{ '#a': [jamCoordinate] }}
               active={!!advanced}
               onSearch={setAdvanced}
               onClear={() => setAdvanced(null)}

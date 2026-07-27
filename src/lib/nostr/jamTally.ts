@@ -13,7 +13,7 @@
  */
 import { fetchEvents } from '@/lib/nostr/relay-pool'
 import { KINDS } from '@/lib/constants'
-import { isValidSubmission, submissionWindow, JAM_ENTRY_LABEL, type JamDetails } from '@/lib/nostr/jam'
+import { isValidSubmission, submissionWindow, type JamDetails } from '@/lib/nostr/jam'
 import { extractModData } from '@/lib/nostr/events'
 import {
   extractBallot, isBallotCounted, judgeHexSet, ballotCriteria, aggregateResults,
@@ -28,8 +28,10 @@ export interface EntryTally {
 /** The jam's valid entries — newest per coordinate, bounded to the submission window. */
 export async function fetchEntries(relays: string[], jam: JamDetails) {
   const w = submissionWindow(jam)
+  // Query by the jam coordinate alone — on a mod, an `a` to a jam means "entry"
+  // (the role marker isn't indexed). isValidSubmission re-checks what returns.
   const events = await fetchEvents(relays, {
-    kinds: [KINDS.MOD], '#l': [JAM_ENTRY_LABEL], '#a': [jam.aTag], since: w.since, until: w.until,
+    kinds: [KINDS.MOD], '#a': [jam.aTag], since: w.since, until: w.until,
   })
   const byCoord = new Map<string, typeof events[number]>()
   for (const ev of events) {

@@ -326,11 +326,12 @@ export function extractModData(event: NostrEvent): ModDetails {
   // Deleted check
   const isDeleted = event.tags.some(t => t[0] === 'deleted' && t[1] === 'true')
 
-  // Jam entry: an `a` coordinate pointing at a jam (31143:…) paired with l=jam-entry.
-  const isJamEntry = event.tags.some(t => t[0] === 'l' && t[1] === JAM_ENTRY_LABEL)
-  const jamCoordinate = isJamEntry
-    ? event.tags.find(t => t[0] === 'a' && t[1]?.startsWith(`${KINDS.JAM}:`))?.[1]
-    : undefined
+  // Jam entry: an `a` coordinate pointing at a jam (31143:…) whose role value is
+  // "jam-entry". Older entries carried a separate l=jam-entry tag — still honoured.
+  const jamATag = event.tags.find(t => t[0] === 'a' && t[1]?.startsWith(`${KINDS.JAM}:`))
+  const hasLegacyLabel = event.tags.some(t => t[0] === 'l' && t[1] === JAM_ENTRY_LABEL)
+  const isJamEntry = !!jamATag && (jamATag[2] === JAM_ENTRY_LABEL || hasLegacyLabel)
+  const jamCoordinate = isJamEntry ? jamATag![1] : undefined
 
   const dTag = getTag('d')
 

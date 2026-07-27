@@ -64,7 +64,7 @@ export interface ModDetails {
   emulation: boolean      // mod targets an emulated version of the game
   emulatedPlatform?: string // platform the game is emulated from (e.g. "Xbox 360")
   forMod?: string         // m tag: this mod is for another mod (name, naddr, or link)
-  jamCoordinate?: string  // a tag (31143:…) when this mod is a jam entry (l=jam-entry)
+  jamCoordinate?: string  // a tag (31143:…) with role "jam-entry" when this mod is a jam entry
   elsewhere: string[]     // elsewhere tags: other places this mod is available
   dependencies: Dependency[] // dependencies tags (other mods/software/files)
   screenshots: string[]  // image URLs
