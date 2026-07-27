@@ -165,6 +165,24 @@ async function existingBlobUrl(serverUrl: string, hash: string, file: File | Blo
   }
 }
 
+/**
+ * Register the signer as an uploader of an already-present blob, without sending
+ * the bytes. Used when the dedup check above finds the file already on the server:
+ * the upload is skipped, but the node still needs to record this npub so the file
+ * shows in the user's uploads and they can retract it later. Best-effort — a node
+ * that doesn't support /claim (or any failure) is silently ignored.
+ */
+async function claimExistingBlob(serverUrl: string, hash: string, authHeader: string): Promise<void> {
+  try {
+    await fetch(`${serverUrl.replace(/\/$/, '')}/claim/${hash}`, {
+      method: 'PUT',
+      headers: { Authorization: authHeader },
+    })
+  } catch {
+    // ignore — claiming ownership is non-critical and not every server supports it
+  }
+}
+
 // ─── Upload to ALL Servers ──────────────────────────────────────────
 
 export async function uploadToAllServers(
@@ -196,6 +214,14 @@ export async function uploadToAllServers(
       if (existing) {
         results.push({ url: existing, hash, size: file.size, serverUrl: serverUrls[i] })
         onServerState?.(i, 'success', serverUrls[i])
+        // Bytes were already there, but still register this npub as an uploader so
+        // the file appears in the user's uploads and stays retractable. The auth is
+        // the same one an upload would use (cached, so at most one signer prompt).
+        // Best-effort: a rejected signature or unsupported server must not undo the
+        // success we already recorded above.
+        try {
+          await claimExistingBlob(serverUrls[i], hash, await getAuth())
+        } catch { /* claiming ownership is non-critical */ }
         return
       }
       const result = await uploadFile(file, serverUrls[i], await getAuth(), onProgress ? (p) => onProgress({ ...p, serverUrl: serverUrls[i], serverIndex: i }) : undefined)
