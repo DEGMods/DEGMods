@@ -174,12 +174,17 @@ async function existingBlobUrl(serverUrl: string, hash: string, file: File | Blo
  */
 async function claimExistingBlob(serverUrl: string, hash: string, authHeader: string): Promise<void> {
   try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
     await fetch(`${serverUrl.replace(/\/$/, '')}/claim/${hash}`, {
       method: 'PUT',
       headers: { Authorization: authHeader },
+      signal: controller.signal,
     })
+    clearTimeout(timer)
   } catch {
-    // ignore — claiming ownership is non-critical and not every server supports it
+    // ignore — claiming ownership is non-critical, and a slow/absent /claim (timed
+    // out via the abort above) must never hold up or fail the upload it follows
   }
 }
 
