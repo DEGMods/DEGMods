@@ -271,6 +271,7 @@ The decoded object:
   "title": "Emerald Nights v2.1.0 - Full Package",
   "hash": "a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
   "version": "2.1.0",
+  "gameVersion": "2.13",
   "note": "Includes both Standard and Performance presets.",
   "image": "https://image.nostr.build/download_preview.png",
   "scans": [
@@ -292,7 +293,8 @@ The decoded object:
 | `file` | **Yes** | The download URL. A direct user-provided link or a Blossom upload URL. When uploaded to Blossom, this is auto-populated with the Blossom link. |
 | `title` | No | Display name for this download variant (e.g., "Full Package", "Lite Version"). |
 | `hash` | No | SHA-256 hash of the file. Auto-populated when uploading to Blossom (the hash is in the Blossom URL). |
-| `version` | No | The mod version string (e.g., "2.1.0"). |
+| `version` | No | The mod's own version string (e.g., "2.1.0"). |
+| `gameVersion` | No | The game version this download is compatible with (e.g., "2.13", "1.6.1170"), so users can tell which build of the game it works with. |
 | `note` | No | A custom note for this download (compatibility, variant differences, install steps). |
 | `image` | No | A preview image for this download variant. |
 | `scans` | No | Array of malware-scan report links — see below. |

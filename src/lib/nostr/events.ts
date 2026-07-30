@@ -194,6 +194,7 @@ function buildDownloadTag(dl: DownloadEntry): string[] {
   if (dl.hash) obj.hash = dl.hash
   if (dl.filename) obj.filename = dl.filename
   if (dl.version) obj.version = dl.version
+  if (dl.gameVersion) obj.gameVersion = dl.gameVersion
   if (dl.note) obj.note = dl.note
   if (dl.image) obj.image = dl.image
   const scans = (dl.scans ?? []).filter((s) => s.label.trim() && s.url.trim())
@@ -237,6 +238,7 @@ function parseDownloadJson(value: string): DownloadEntry | null {
       hash: str(o.hash),
       filename: str(o.filename),
       version: str(o.version),
+      gameVersion: str(o.gameVersion),
       note: str(o.note),
       image: str(o.image),
       scans: scans && scans.length ? scans : undefined,

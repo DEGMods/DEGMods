@@ -388,6 +388,11 @@ function DownloadCard({ dl, root }: { dl: DownloadEntry; root?: NostrTarget }) {
               v{dl.version}
             </Badge>
           )}
+          {dl.gameVersion && (
+            <Badge variant="secondary" className="bg-[#212121] text-neutral-300 text-xs" title="Compatible game version">
+              Game: {dl.gameVersion}
+            </Badge>
+          )}
           {verify && (
             <Tooltip>
               <TooltipTrigger asChild>

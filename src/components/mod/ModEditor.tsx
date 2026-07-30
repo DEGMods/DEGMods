@@ -85,6 +85,7 @@ const LIMITS = {
   downloadUrl: 200,
   downloadTitle: 100,
   downloadVersion: 50,
+  downloadGameVersion: 50,
   downloadNote: 250,
   forMod: 200,
   emulatedPlatform: 50,
@@ -909,12 +910,22 @@ export function ModEditor({
                   <Input
                     value={dl.version || ''}
                     onChange={(e) => updateDownload(i, { version: e.target.value })}
-                    placeholder="Version (optional)"
+                    placeholder="Mod version (optional)"
                     maxLength={LIMITS.downloadVersion}
                     className={inputClass}
                   />
                   <Counter value={dl.version || ''} max={LIMITS.downloadVersion} />
                 </div>
+              </div>
+              <div>
+                <Input
+                  value={dl.gameVersion || ''}
+                  onChange={(e) => updateDownload(i, { gameVersion: e.target.value })}
+                  placeholder="Compatible game version (optional) — e.g. 1.6.1170"
+                  maxLength={LIMITS.downloadGameVersion}
+                  className={inputClass}
+                />
+                <Counter value={dl.gameVersion || ''} max={LIMITS.downloadGameVersion} />
               </div>
               <div>
                 <Input

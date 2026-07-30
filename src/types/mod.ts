@@ -19,7 +19,8 @@ export interface DownloadEntry {
   hash?: string          // SHA-256
   filename?: string      // original uploaded filename, restored on download
   scans?: ScanReport[]   // malware-scan report links
-  version?: string
+  version?: string       // the mod's own version
+  gameVersion?: string   // the game version this download is compatible with
   note?: string
   image?: string         // preview image URL
 }
