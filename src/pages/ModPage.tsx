@@ -475,8 +475,9 @@ export default function ModPage() {
         <LegacyMigrateBanner rawEvent={rawEvent as unknown as NostrEvent} mod={mod} />
       )}
 
-      {/* LEGACY: this legacy post has been migrated — send visitors to the new one */}
-      {mod.legacy && mod.legacyMigrated && <LegacyMigratedNotice mod={mod} />}
+      {/* LEGACY: this legacy post has been migrated — send visitors to the new one
+          (or, if the migrated post is missing, let the author republish it). */}
+      {mod.legacy && mod.legacyMigrated && <LegacyMigratedNotice mod={mod} isOwner={isOwner} />}
 
       {/* Title area */}
       <div className="flex items-start justify-between gap-3">

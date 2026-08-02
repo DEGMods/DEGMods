@@ -57,3 +57,16 @@ export async function migrateLegacyMod(
   onStep('done')
   return { naddr: migratedNaddr(mod) }
 }
+
+/**
+ * Re-run ONLY step 2 of migration: (re)publish the current-format mod post with
+ * the same d-tag. For recovering a migration where step 1 (marking the legacy
+ * post) succeeded but step 2 (publishing the new post) didn't land — leaving the
+ * author with a legacy post marked migrated but no migrated post to point at.
+ */
+export async function republishMigratedMod(mod: ModDetails): Promise<{ naddr: string }> {
+  const unsigned = { ...buildModEvent(legacyToForm(mod)), created_at: mod.createdAt }
+  const res = await signAndPublish(unsigned)
+  if (!res.success) throw new Error(res.error || 'Failed to publish the migrated mod')
+  return { naddr: migratedNaddr(mod) }
+}
