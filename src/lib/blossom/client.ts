@@ -90,10 +90,18 @@ export async function uploadFile(
     if (file instanceof File) {
       xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
     }
-    const timeout = setTimeout(() => {
-      xhr.abort()
-      reject(new Error(`Upload to ${serverUrl} timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
+    // Stall timeout, NOT a total deadline: abort only after timeoutMs with no
+    // progress. A large upload that keeps flowing never trips it (a fixed total
+    // deadline used to kill multi-minute uploads of big files); a dead connection
+    // still does. bump() is also called when the body finishes sending, to give
+    // the server that same window to finalise (hash + store) and respond.
+    let stalled = false
+    let timeout: ReturnType<typeof setTimeout>
+    const bump = () => {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => { stalled = true; xhr.abort() }, timeoutMs)
+    }
+    bump()
 
     // Let a caller (e.g. the "Skip server" button) abort THIS upload.
     const onAbort = () => xhr.abort()
@@ -101,10 +109,12 @@ export async function uploadFile(
     signal?.addEventListener('abort', onAbort, { once: true })
 
     xhr.upload.onprogress = (e) => {
+      bump() // bytes are flowing — push the stall deadline back
       if (e.lengthComputable && onProgress) {
         onProgress({ loaded: e.loaded, total: e.total, percentage: Math.round((e.loaded / e.total) * 100) })
       }
     }
+    xhr.upload.onload = bump // body fully sent — reset for the server's finalise + response
     xhr.onload = () => {
       cleanup()
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -117,7 +127,10 @@ export async function uploadFile(
       }
     }
     xhr.onerror = () => { cleanup(); reject(new Error(`Network error uploading to ${serverUrl}`)) }
-    xhr.onabort = () => { cleanup(); reject(new Error(`Upload to ${serverUrl} aborted`)) }
+    xhr.onabort = () => {
+      cleanup()
+      reject(new Error(stalled ? `Upload to ${serverUrl} stalled (no progress for ${timeoutMs}ms)` : `Upload to ${serverUrl} aborted`))
+    }
     xhr.send(file)
   })
 }
