@@ -252,4 +252,11 @@ async function main() {
   console.log(`sitemap: ${content.length} content urls (${listable(mods)} mods, ${listable(blogs)} blogs, ${listable(jams)} jams, minPow=${MIN_POW}, ${deleted.size} deletions pruned) across ${sitemapFiles.length} files → ${OUT_DIR}`)
 }
 
-main().catch(err => { console.error('sitemap generation failed:', err); process.exit(1) })
+// Exit explicitly instead of letting the process idle out. All output is written
+// synchronously (writeFileSync), so once main() resolves the sitemap is on disk;
+// what keeps the event loop alive is lingering relay sockets — a relay that spams
+// `keepalive` NOTICEs (e.g. relay.poster.place) isn't drained by pool.close(), so
+// without this the GitHub Actions step hangs until the job timeout.
+main()
+  .then(() => process.exit(0))
+  .catch(err => { console.error('sitemap generation failed:', err); process.exit(1) })
