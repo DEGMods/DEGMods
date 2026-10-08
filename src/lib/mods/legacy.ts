@@ -52,7 +52,14 @@ export function normalizeModCoord(coord: string): string {
 /** Merge legacy mods into a list and re-sort by publish date (newest first). */
 export function withLegacyMods(mods: ModDetails[], legacy: ModDetails[]): ModDetails[] {
   if (legacy.length === 0) return mods
-  return [...mods, ...legacy].sort((a, b) => b.publishedAt - a.publishedAt)
+  // Drop any legacy post superseded by a current mod at the same coordinate
+  // (<pubkey>:<d>): that current mod IS its migrated version, so the legacy one is
+  // hidden even when its own "legacy:yes" migration mark hasn't propagated to the
+  // relays we read from (the store's legacyMigrated filter alone would miss it).
+  const currentCoords = new Set(mods.map((m) => `${m.pubkey}:${m.dTag}`))
+  const kept = legacy.filter((m) => !currentCoords.has(`${m.pubkey}:${m.dTag}`))
+  if (kept.length === 0) return mods
+  return [...mods, ...kept].sort((a, b) => b.publishedAt - a.publishedAt)
 }
 
 interface LegacyDownloadUrl {
