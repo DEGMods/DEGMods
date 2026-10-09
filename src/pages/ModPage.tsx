@@ -232,9 +232,24 @@ export default function ModPage() {
   useEffect(() => {
     if (!rawEvent) return
     const ev = rawEvent as unknown as NostrEvent
-    const t = setTimeout(() => {
+    const fire = () =>
       import('@/lib/nostr/eventRedundancy').then(({ ensureEventPresent }) => ensureEventPresent(ev))
-    }, 8000)
+
+    // A migrated legacy post (kind 30402 + ["legacy","yes"]) shows a blocking
+    // "go to the migrated post" modal, so the visitor almost always navigates away
+    // before the 8s delay — which would cancel the timer and the mark would never
+    // get rebroadcast. Fire immediately for it: the mark IS the newest 30402
+    // revision, so propagating it keeps the post reliably hidden on relays still
+    // serving the pre-mark copy. The queue is module-level, so once enqueued the
+    // task finishes even though this page unmounts on the redirect.
+    const isMigratedLegacy =
+      ev.kind === LEGACY_MOD_KIND && ev.tags.some((t) => t[0] === 'legacy' && t[1] === 'yes')
+    if (isMigratedLegacy) {
+      void fire()
+      return
+    }
+
+    const t = setTimeout(fire, 8000)
     return () => clearTimeout(t)
   }, [rawEvent])
 
