@@ -6,25 +6,34 @@
  * we PUT a probe blob and then GET it back and verify the bytes hash to the
  * expected sha256. Accepted + served + hash matches → 'working', else 'broken'.
  *
- * The probe payload is FIXED (the bytes of a constant string), so it's
- * content-addressed to the SAME sha256 every time: re-probing is an idempotent
- * re-PUT of identical bytes and each server ends up holding exactly ONE tiny
- * ~28-byte blob forever — not a pile of random garbage. (A random blob per probe
- * would litter every server.)
+ * The probe payload is FIXED (a minimal valid ~100-byte ZIP), so it's content-
+ * addressed to the SAME sha256 every time: re-probing is an idempotent re-PUT of
+ * identical bytes and each server ends up holding exactly ONE tiny blob forever,
+ * not a pile of random garbage. A ZIP (not a text blob) because DEG Mods' own node
+ * only accepts archive uploads; see PROBE_BYTES.
  *
  * The kind-24242 upload auth commits to the blob HASH (not the server), so one
  * signature is valid for every server: it's signed ONCE per sweep and reused.
- * Signing needs the user's key, so probing is USER-INITIATED only (clicking a
- * badge or "Test again") — we never auto-prompt the signer on load. Logged out →
- * openSweep returns null → no label.
+ * Signing needs the user's key, so probing only runs while SIGNED IN (auto on
+ * Settings open, plus clicks); logged out, openSweep returns null → no label.
  */
 import { createHealthStore } from '@/lib/health/healthStore'
 import { createBlossomAuthEvent, computeArrayBufferHash } from '@/lib/blossom/client'
 import { signEvent, useAuthStore } from '@/stores/authStore'
 
 const OP_TIMEOUT = 8000
-// Constant probe payload → stable content hash → idempotent, litter-free re-PUTs.
-const PROBE_BYTES = new TextEncoder().encode('degmods-blossom-health-probe')
+// Constant probe payload → stable content hash → idempotent, litter-free re-PUTs
+// (each server ends up holding this one tiny blob, never a pile of random garbage).
+// It's a minimal valid ZIP (one empty entry): DEG Mods' own node is a mod-file
+// store that sniffs upload magic bytes and only accepts archive types, so a plain
+// text/octet blob is rejected there (it would read as broken) — general servers
+// accept the zip just as happily.
+const PROBE_BYTES = new Uint8Array([
+  80, 75, 3, 4, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 112,
+  80, 75, 1, 2, 20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 112, 80, 75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 47, 0, 0,
+  0, 31, 0, 0, 0, 0, 0,
+])
 
 let probeHashPromise: Promise<string> | null = null
 function probeHash(): Promise<string> {
@@ -60,7 +69,7 @@ async function probeBlossomOnce(url: string, ctx: Sweep): Promise<boolean> {
   try {
     const put = await fetch(`${base}/upload`, {
       method: 'PUT',
-      headers: { Authorization: ctx.auth, 'Content-Type': 'application/octet-stream' },
+      headers: { Authorization: ctx.auth, 'Content-Type': 'application/zip' },
       body: PROBE_BYTES,
       signal: AbortSignal.timeout(OP_TIMEOUT),
     })
