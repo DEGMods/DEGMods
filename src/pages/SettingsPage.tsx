@@ -155,11 +155,13 @@ function RelayRow({
       <span className={cn('text-sm flex-1 truncate', !relay.enabled && 'text-muted-foreground')}>
         {relay.url}
       </span>
-      <HealthPill
-        status={healthStatus}
-        progress={healthProgress}
-        onRecheck={() => useRelayHealthStore.getState().recheck(relay.url)}
-      />
+      {relay.read && relay.write && (
+        <HealthPill
+          status={healthStatus}
+          progress={healthProgress}
+          onRecheck={() => useRelayHealthStore.getState().recheck(relay.url)}
+        />
+      )}
       {nip50 && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -417,10 +419,15 @@ function NetworkSettings() {
   const [blossomWarnOpen, setBlossomWarnOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
 
-  // Every relay / Blossom server listed across the three tiers (deduped), for the
-  // health probes + the "Test again" buttons.
-  const allRelayUrls = useMemo(
-    () => [...new Set([...settings.clientRelays, ...settings.userRelays, ...settings.customRelays].map(r => r.url))],
+  // Health probes + "Test again" targets. Relays: only the read+write ones (the
+  // ones we both publish to and read from — a read-only indexer isn't something a
+  // write round-trip can judge). Blossom: every listed server.
+  const probeRelayUrls = useMemo(
+    () => [...new Set(
+      [...settings.clientRelays, ...settings.userRelays, ...settings.customRelays]
+        .filter(r => r.read && r.write)
+        .map(r => r.url),
+    )],
     [settings.clientRelays, settings.userRelays, settings.customRelays],
   )
   const allBlossomUrls = useMemo(
@@ -433,8 +440,8 @@ function NetworkSettings() {
   // health is NOT auto-probed — its probe must sign a Blossom auth, so it runs
   // only on an explicit click / "Test again" to avoid surprise signer prompts.
   useEffect(() => {
-    useRelayHealthStore.getState().refresh(allRelayUrls)
-  }, [allRelayUrls])
+    useRelayHealthStore.getState().refresh(probeRelayUrls)
+  }, [probeRelayUrls])
 
   // "Your list" publish is dirty when its membership differs from the last
   // published baseline. Local enable toggles don't count — they're client-only.
@@ -549,7 +556,7 @@ function NetworkSettings() {
             variant="outline"
             size="sm"
             className="shrink-0 text-xs"
-            onClick={() => useRelayHealthStore.getState().refreshAll(allRelayUrls)}
+            onClick={() => useRelayHealthStore.getState().refreshAll(probeRelayUrls)}
           >
             <RefreshCw size={12} className="mr-1.5" /> Test again
           </Button>
