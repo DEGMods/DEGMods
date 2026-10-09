@@ -204,10 +204,23 @@ function withNewDefaults<T extends { url: string }>(stored: T[], defaults: T[]):
  * saved — so retiring one has to be explicit. Users can still add any of these
  * back as a custom relay.
  */
-const RETIRED_CLIENT_RELAYS = new Set(['wss://relay.damus.io'])
+const RETIRED_CLIENT_RELAYS = new Set([
+  'wss://relay.damus.io',
+  'wss://nostrcheck.me',
+  'wss://nostr.novacisko.cz',
+  'wss://relay.nostr.band',
+])
 
-function withoutRetired<T extends { url: string }>(relays: T[]): T[] {
-  return relays.filter(r => !RETIRED_CLIENT_RELAYS.has(r.url.replace(/\/$/, '')))
+/** Client Blossom servers we used to ship and no longer do — same rationale as
+ *  RETIRED_CLIENT_RELAYS: dropping a default only affects fresh installs, so
+ *  removing one for existing users has to be explicit. Re-addable as custom. */
+const RETIRED_CLIENT_BLOSSOMS = new Set([
+  'https://blossom.band',
+  'https://nostr.hu',
+])
+
+function withoutRetired<T extends { url: string }>(relays: T[], retired: Set<string>): T[] {
+  return relays.filter(r => !retired.has(r.url.replace(/\/$/, '')))
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -493,11 +506,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const userRelays = loadJson<RelayConfig[]>(StorageKey.USER_RELAYS, [])
     const userBlossoms = loadJson<BlossomConfig[]>(StorageKey.USER_BLOSSOMS, [])
     set({
-      clientRelays: withoutRetired(withNewDefaults(loadJson(StorageKey.CLIENT_RELAYS, DEFAULT_RELAYS), DEFAULT_RELAYS)),
+      clientRelays: withoutRetired(withNewDefaults(loadJson(StorageKey.CLIENT_RELAYS, DEFAULT_RELAYS), DEFAULT_RELAYS), RETIRED_CLIENT_RELAYS),
       customRelays: loadJson(StorageKey.CUSTOM_RELAYS, []),
       userRelays,
       userRelaysBaseline: relayListSignature(userRelays),
-      clientBlossoms: withNewDefaults(loadJson(StorageKey.CLIENT_BLOSSOMS, DEFAULT_BLOSSOMS), DEFAULT_BLOSSOMS),
+      clientBlossoms: withoutRetired(withNewDefaults(loadJson(StorageKey.CLIENT_BLOSSOMS, DEFAULT_BLOSSOMS), DEFAULT_BLOSSOMS), RETIRED_CLIENT_BLOSSOMS),
       customBlossoms: loadJson(StorageKey.CUSTOM_BLOSSOMS, []),
       userBlossoms,
       userBlossomsBaseline: blossomListSignature(userBlossoms),

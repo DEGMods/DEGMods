@@ -148,8 +148,6 @@ export const DEFAULT_BLOSSOMS: BlossomConfig[] = [
   // reliably lands here; the public servers below handle media + add redundancy.
   { url: 'https://brs.degmods.com', enabled: true, pinned: true },
   { url: 'https://blossom.primal.net', enabled: true },
-  { url: 'https://blossom.band', enabled: true },
-  { url: 'https://nostr.hu', enabled: true },
   { url: 'https://blossom.data.haus', enabled: true },
   { url: 'https://nostr.download', enabled: true },
   { url: 'https://blossom.jumble.social', enabled: true },
