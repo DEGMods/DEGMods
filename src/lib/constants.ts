@@ -150,6 +150,12 @@ export const DEFAULT_BLOSSOMS: BlossomConfig[] = [
   { url: 'https://blossom.primal.net', enabled: true },
   { url: 'https://blossom.band', enabled: true },
   { url: 'https://nostr.hu', enabled: true },
+  { url: 'https://blossom.data.haus', enabled: true },
+  { url: 'https://nostr.download', enabled: true },
+  { url: 'https://blossom.jumble.social', enabled: true },
+  { url: 'https://blossom-01.uid.ovh', enabled: true },
+  { url: 'https://blossom-02.uid.ovh', enabled: true },
+  { url: 'https://blossom.ditto.pub', enabled: true },
 ]
 
 export const DEFAULT_DNN_NODES: DnnNodeConfig[] = [
