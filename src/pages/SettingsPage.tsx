@@ -155,7 +155,7 @@ function RelayRow({
       <span className={cn('text-sm flex-1 truncate', !relay.enabled && 'text-muted-foreground')}>
         {relay.url}
       </span>
-      {relay.read && relay.write && (
+      {(relay.read || relay.write) && (
         <HealthPill
           status={healthStatus}
           progress={healthProgress}
@@ -419,13 +419,13 @@ function NetworkSettings() {
   const [blossomWarnOpen, setBlossomWarnOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
 
-  // Health probes + "Test again" targets. Relays: only the read+write ones (the
-  // ones we both publish to and read from — a read-only indexer isn't something a
-  // write round-trip can judge). Blossom: every listed server.
+  // Health probes + "Test again" targets. Relays: every relay with at least one
+  // role (the probe tests each relay on the roles it has — read-only relays on
+  // read, read+write on both). Blossom: every listed server.
   const probeRelayUrls = useMemo(
     () => [...new Set(
       [...settings.clientRelays, ...settings.userRelays, ...settings.customRelays]
-        .filter(r => r.read && r.write)
+        .filter(r => r.read || r.write)
         .map(r => r.url),
     )],
     [settings.clientRelays, settings.userRelays, settings.customRelays],

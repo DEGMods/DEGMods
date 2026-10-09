@@ -1,13 +1,14 @@
 /**
- * Relay health — a read + write round-trip probe per relay.
- *
- * Only relays configured read AND write are probed (the ones we both publish to
- * and read from — the only ones whose health we act on). A relay is 'broken' only
- * when BOTH halves fail:
+ * Relay health — probe each relay on the roles it's actually configured for.
  *   - read:  a raw socket opens and the relay answers a REQ (any EVENT/EOSE/NOTICE/
  *            CLOSED reply = reachable and speaking Nostr). CLOSED counts too — a
  *            scoped relay like brs rejects an off-scope filter but is clearly up.
  *   - write: re-publish one already-signed event and read it straight back by id.
+ *
+ * A read+write relay runs BOTH and is 'broken' only when both fail (a relay that
+ * still serves reads isn't dead). A read-only relay (write:false, e.g. a NIP-50
+ * search indexer) is judged on READ alone — write-probing it would always read
+ * broken since it rejects writes by design.
  *
  * The write probe reuses the user's OWN most-recent MOD event for the sweep: a
  * mod (kind 31142) is an accepted kind on DEG Mods' scoped relays (a plain note
@@ -32,10 +33,21 @@ const READBACK_WAITS = [500, 1200, 1900]
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** A relay's configured roles, looked up across the three tiers (default: both). */
+function relayRole(url: string): { read: boolean; write: boolean } {
+  const s = useSettingsStore.getState()
+  for (const list of [s.clientRelays, s.userRelays, s.customRelays]) {
+    const r = list.find((x) => x.url === url)
+    if (r) return { read: r.read, write: r.write }
+  }
+  return { read: true, write: true }
+}
+
 /**
  * Resolve one event to write-probe every relay with this sweep. Prefer the user's
  * own recent MOD (accepted on scoped relays + carries PoW), then any authored
- * event, then any public note. Null → skip the sweep (no labels, not false broken).
+ * event, then any public note. May be null (logged out, nothing fetched) — then
+ * only the write half is skipped; read probes still run.
  */
 async function resolveProbeEvent(): Promise<NostrEvent | null> {
   const read = useSettingsStore.getState().getAllEnabledRelayUrls('read')
@@ -92,17 +104,26 @@ async function probeRelayWrite(url: string, event: NostrEvent): Promise<boolean>
   return false
 }
 
-/** One pass passes if EITHER read or write works — broken needs BOTH to fail. */
-async function probeRelayOnce(url: string, event: NostrEvent): Promise<boolean> {
-  const [readOk, writeOk] = await Promise.all([
-    probeRelayRead(url),
-    probeRelayWrite(url, event),
-  ])
-  return readOk || writeOk
+/** The probe event is resolved once per sweep and reused for every write probe. */
+interface Sweep { event: NostrEvent | null }
+
+/**
+ * Run the relay's configured roles in parallel; it passes this attempt if ANY
+ * enabled role works. So a read+write relay is 'broken' only when both read and
+ * write fail, and a read-only relay is judged on read alone. A write relay we
+ * couldn't resolve a probe event for simply can't pass on write (its read still can).
+ */
+async function probeRelayOnce(url: string, ctx: Sweep): Promise<boolean> {
+  const { read, write } = relayRole(url)
+  const tests: Promise<boolean>[] = []
+  if (read) tests.push(probeRelayRead(url))
+  if (write) tests.push(ctx.event ? probeRelayWrite(url, ctx.event) : Promise.resolve(false))
+  if (tests.length === 0) return false
+  return (await Promise.all(tests)).some(Boolean)
 }
 
-export const useRelayHealthStore = createHealthStore<NostrEvent>({
+export const useRelayHealthStore = createHealthStore<Sweep>({
   lsKey: 'deg-mods:relay-health',
-  openSweep: resolveProbeEvent,
+  openSweep: async () => ({ event: await resolveProbeEvent() }),
   probeOnce: probeRelayOnce,
 })
