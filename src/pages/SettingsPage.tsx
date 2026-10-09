@@ -21,6 +21,9 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useRelayCapabilityStore, isKnownSearchRelay } from '@/stores/relayCapabilityStore'
+import { useRelayHealthStore } from '@/stores/relayHealthStore'
+import { useBlossomHealthStore } from '@/stores/blossomHealthStore'
+import type { HealthStatus } from '@/lib/health/healthStore'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -58,6 +61,58 @@ function HealthDot({ status }: { status?: boolean }) {
   )
 }
 
+// ─── Health badge (write + read-back) ───────────────────────────────────
+//
+// dot/label semantics: this reports whether the endpoint actually WORKS for me
+// (accepts a write and serves it back), which a plain reachability ping can't
+// tell. Click to re-check just this one; shows "(pass/total)" while probing.
+
+function HealthPill({
+  status,
+  progress,
+  onRecheck,
+}: {
+  status?: HealthStatus
+  progress?: { pass: number; total: number }
+  onRecheck: () => void
+}) {
+  const checking = status === 'checking'
+  const label = checking
+    ? progress ? `Checking ${progress.pass}/${progress.total}` : 'Checking'
+    : status === 'working' ? 'Working'
+    : status === 'broken' ? 'Broken'
+    : 'Test'
+  const tip = status === 'working' ? 'Accepts a write and serves it back. Click to re-check.'
+    : status === 'broken' ? 'Responds but failed the write + read-back test. Click to re-check.'
+    : checking ? 'Testing write + read-back…'
+    : 'Test this endpoint (write + read-back)'
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); if (!checking) onRecheck() }}
+          disabled={checking}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors',
+            checking && 'border-zinc-500/40 bg-zinc-500/10 text-zinc-400',
+            status === 'working' && 'border-green-500/40 bg-green-500/10 text-green-400 hover:bg-green-500/20',
+            status === 'broken' && 'border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20',
+            !status && 'border-zinc-500/30 text-zinc-500 hover:bg-zinc-500/10 opacity-0 group-hover:opacity-100',
+          )}
+        >
+          {checking ? <Loader2 size={10} className="animate-spin" />
+            : status === 'working' ? <CheckCircle size={10} />
+            : status === 'broken' ? <XCircle size={10} />
+            : <Circle size={10} />}
+          {label}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 // ─── Read/Write badges ──────────────────────────────────────────────────
 
 function RWBadges({ read, write }: { read: boolean; write: boolean }) {
@@ -92,12 +147,19 @@ function RelayRow({
     if (isKnownSearchRelay(relay.url)) return true
     return ((s.capabilities[relay.url]?.supportedNips ?? []).includes(50))
   })
+  const healthStatus = useRelayHealthStore(s => s.statusOf(relay.url))
+  const healthProgress = useRelayHealthStore(s => s.progress[relay.url])
   return (
     <div className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-[#212121] transition-colors group">
       <Switch checked={relay.enabled} onCheckedChange={onToggle} />
       <span className={cn('text-sm flex-1 truncate', !relay.enabled && 'text-muted-foreground')}>
         {relay.url}
       </span>
+      <HealthPill
+        status={healthStatus}
+        progress={healthProgress}
+        onRecheck={() => useRelayHealthStore.getState().recheck(relay.url)}
+      />
       {nip50 && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -129,12 +191,19 @@ function BlossomRow({
   onToggle: () => void
   onRemove?: () => void
 }) {
+  const healthStatus = useBlossomHealthStore(s => s.statusOf(server.url))
+  const healthProgress = useBlossomHealthStore(s => s.progress[server.url])
   return (
     <div className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-[#212121] transition-colors group">
       <Switch checked={server.enabled} onCheckedChange={onToggle} />
       <span className={cn('text-sm flex-1 truncate', !server.enabled && 'text-muted-foreground')}>
         {server.url}
       </span>
+      <HealthPill
+        status={healthStatus}
+        progress={healthProgress}
+        onRecheck={() => useBlossomHealthStore.getState().recheck(server.url)}
+      />
       {onRemove && (
         <button onClick={onRemove} className="text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
           <Trash2 size={14} />
@@ -348,6 +417,25 @@ function NetworkSettings() {
   const [blossomWarnOpen, setBlossomWarnOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
 
+  // Every relay / Blossom server listed across the three tiers (deduped), for the
+  // health probes + the "Test again" buttons.
+  const allRelayUrls = useMemo(
+    () => [...new Set([...settings.clientRelays, ...settings.userRelays, ...settings.customRelays].map(r => r.url))],
+    [settings.clientRelays, settings.userRelays, settings.customRelays],
+  )
+  const allBlossomUrls = useMemo(
+    () => [...new Set([...settings.clientBlossoms, ...settings.userBlossoms, ...settings.customBlossoms].map(b => b.url))],
+    [settings.clientBlossoms, settings.userBlossoms, settings.customBlossoms],
+  )
+
+  // Relay health auto-probes on open (needs no signer); the 24h TTL inside the
+  // store means reopening Settings won't re-probe until results go stale. Blossom
+  // health is NOT auto-probed — its probe must sign a Blossom auth, so it runs
+  // only on an explicit click / "Test again" to avoid surprise signer prompts.
+  useEffect(() => {
+    useRelayHealthStore.getState().refresh(allRelayUrls)
+  }, [allRelayUrls])
+
   // "Your list" publish is dirty when its membership differs from the last
   // published baseline. Local enable toggles don't count — they're client-only.
   const relaysDirty = useMemo(
@@ -453,6 +541,19 @@ function NetworkSettings() {
 
       {/* ── Relays ── */}
       <TabsContent value="relays" className="space-y-6">
+        <div className="flex items-center justify-between gap-3 px-1">
+          <p className="text-xs text-muted-foreground">
+            Each relay is tested with a write + read-back round-trip — green means it actually accepts and serves your events, not just that it responds.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 text-xs"
+            onClick={() => useRelayHealthStore.getState().refreshAll(allRelayUrls)}
+          >
+            <RefreshCw size={12} className="mr-1.5" /> Test again
+          </Button>
+        </div>
         <SettingsBox>
         <div>
           <SectionHeader title="Client Default Relays" description="Built-in relays included with DEG MODS" />
@@ -555,6 +656,20 @@ function NetworkSettings() {
 
       {/* ── Blossom ── */}
       <TabsContent value="blossom" className="space-y-6">
+        <div className="flex items-center justify-between gap-3 px-1">
+          <p className="text-xs text-muted-foreground">
+            Testing uploads a tiny fixed probe file and reads it back. It signs a Blossom auth, so it runs only when you ask{!myPubkey && ' — sign in to test'}.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 text-xs"
+            disabled={!myPubkey}
+            onClick={() => useBlossomHealthStore.getState().refreshAll(allBlossomUrls)}
+          >
+            <RefreshCw size={12} className="mr-1.5" /> Test again
+          </Button>
+        </div>
         {/* Upload Limit */}
         <SettingsBox>
         <div>
