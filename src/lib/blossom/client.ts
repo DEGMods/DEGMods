@@ -211,6 +211,9 @@ export async function uploadToAllServers(
   limitMbOverride?: number,
   // Per-server lifecycle, so the UI can show one bar (with success/fail) per server.
   onServerState?: (serverIndex: number, state: 'uploading' | 'success' | 'error', serverUrl: string) => void,
+  // Stop once this many servers have accepted the file, walking the list and
+  // skipping (failing over past) any that fail. Omit to attempt every server.
+  targetSuccesses?: number,
 ): Promise<UploadResult[]> {
   // Enforce the size limit (caller override, else the user's media limit from settings).
   const { useSettingsStore } = await import('@/stores/settingsStore')
@@ -251,16 +254,20 @@ export async function uploadToAllServers(
     }
   }
 
+  // Default: attempt every server. With targetSuccesses, walk the list and stop
+  // once that many have accepted — failing over past any that error on the way.
+  const target = targetSuccesses ?? serverUrls.length
+
   if (useSettingsStore.getState().parallelBlossomUpload) {
     // Upload to up to 3 servers concurrently. Pre-sign the auth once so the
     // concurrent uploads don't each trigger a separate signer prompt.
     await getAuth()
     const BATCH = 3
-    for (let i = 0; i < serverUrls.length; i += BATCH) {
+    for (let i = 0; i < serverUrls.length && results.length < target; i += BATCH) {
       await Promise.all(serverUrls.slice(i, i + BATCH).map((_, j) => uploadOne(i + j)))
     }
   } else {
-    for (let i = 0; i < serverUrls.length; i++) await uploadOne(i)
+    for (let i = 0; i < serverUrls.length && results.length < target; i++) await uploadOne(i)
   }
 
   if (results.length === 0) throw new Error('All servers failed')

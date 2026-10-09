@@ -141,6 +141,9 @@ export interface SettingsState {
   // ─── Computed Helpers ──────────────────────────────────────
   getAllEnabledRelayUrls: (mode?: 'read' | 'write' | 'both') => string[]
   getAllEnabledBlossomUrls: () => string[]
+  /** Media (image/screenshot) upload targets: enabled servers EXCLUDING the pinned
+   *  mod-file node (which is archive-only and rejects media), in failover order. */
+  getMediaBlossomUrls: () => string[]
 
   // ─── Persistence ───────────────────────────────────────────
   loadFromStorage: () => void
@@ -461,6 +464,27 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     addList(s.userBlossoms)
     addList(s.customBlossoms)
     return out
+  },
+
+  getMediaBlossomUrls: () => {
+    const s = get()
+    const norm = (u: string) => u.trim().replace(/\/+$/, '')
+    const seen = new Set<string>()
+    const out: string[] = []
+    // Every enabled server EXCEPT the pinned mod-file node (brs), which only
+    // accepts archives — an image upload there always fails. No per-list 3-cap:
+    // the full set is returned so the upload can fail over past dead servers.
+    for (const list of [s.clientBlossoms, s.userBlossoms, s.customBlossoms]) {
+      for (const b of list) {
+        if (!b.enabled || b.pinned) continue
+        const clean = norm(b.url)
+        const key = clean.toLowerCase()
+        if (clean && !seen.has(key)) { seen.add(key); out.push(clean) }
+      }
+    }
+    // When capping is on, shuffle so the mirror targets vary per upload (the first
+    // few are the mirrors, the rest are failover order); otherwise keep list order.
+    return s.limitBlossomsPerList ? out.sort(() => Math.random() - 0.5) : out
   },
 
   // ─── Persistence ───────────────────────────────────────────

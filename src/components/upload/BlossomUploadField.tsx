@@ -22,6 +22,10 @@ interface BlossomUploadFieldProps {
   maxServers?: number
   /** Override the size limit (MB). Defaults to the user's media upload limit. */
   maxSizeMb?: number
+  /** Mod-file upload: use the full server set incl. the pinned mod-file node (brs).
+   *  Default (media) excludes brs — it's archive-only — and fails over past any
+   *  server that errors until `maxServers` mirrors succeed. */
+  modFile?: boolean
 }
 
 type Status = 'idle' | 'uploading' | 'success' | 'error'
@@ -40,6 +44,7 @@ export function BlossomUploadField({
   resetAfter,
   maxServers = 3,
   maxSizeMb,
+  modFile = false,
 }: BlossomUploadFieldProps) {
   const [status, setStatus] = useState<Status>('idle')
   const [fileName, setFileName] = useState('')
@@ -48,7 +53,13 @@ export function BlossomUploadField({
   const trackRef = useRef(createSpeedTracker())
 
   const handleFile = async (file: File) => {
-    const serverUrls = useSettingsStore.getState().getAllEnabledBlossomUrls().slice(0, maxServers)
+    const settings = useSettingsStore.getState()
+    // Mod file: the full set incl. the pinned mod-file node, mirror to all. Media:
+    // the non-pinned set, mirror to `maxServers` with failover past dead servers.
+    const serverUrls = modFile
+      ? settings.getAllEnabledBlossomUrls().slice(0, maxServers)
+      : settings.getMediaBlossomUrls()
+    const targetSuccesses = modFile ? undefined : maxServers
     if (serverUrls.length === 0) {
       toast.error('No Blossom servers configured')
       return
@@ -56,8 +67,23 @@ export function BlossomUploadField({
     setStatus('uploading')
     setError(undefined)
     setFileName(file.name)
-    setServers(serverUrls.map((url) => ({ url, status: 'pending', percentage: 0, speed: 0, slow: false })))
+    // Bars are created as servers are actually attempted (the media failover set
+    // can be longer than the number we end up mirroring to).
+    setServers([])
     trackRef.current = createSpeedTracker()
+
+    // Ensure a bar exists for index i (padding any earlier gaps as pending), then
+    // apply a merge — attempts always arrive in index order from 0.
+    const upsert = (i: number, fn: (s: ServerUpload) => ServerUpload) => {
+      setServers((prev) => {
+        const next = prev.slice()
+        while (next.length <= i) {
+          next.push({ url: serverUrls[next.length] ?? '', status: 'pending', percentage: 0, speed: 0, slow: false })
+        }
+        next[i] = fn(next[i])
+        return next
+      })
+    }
 
     try {
       const results = await uploadToAllServers(
@@ -67,18 +93,13 @@ export function BlossomUploadField({
         (p: Prog & { serverUrl: string; serverIndex: number }) => {
           const i = p.serverIndex
           const { speed, slow } = trackRef.current(i, p.loaded)
-          setServers((prev) => prev.map((s, idx) =>
-            idx === i ? { ...s, status: 'uploading', percentage: p.percentage, speed: speed > 0 ? speed : s.speed, slow } : s,
-          ))
+          upsert(i, (s) => ({ ...s, status: 'uploading', percentage: p.percentage, speed: speed > 0 ? speed : s.speed, slow }))
         },
         maxSizeMb,
         (i, state) => {
-          setServers((prev) => prev.map((s, idx) =>
-            idx === i
-              ? { ...s, status: state, percentage: state === 'success' ? 100 : s.percentage, slow: state === 'uploading' ? s.slow : false }
-              : s,
-          ))
+          upsert(i, (s) => ({ ...s, status: state, percentage: state === 'success' ? 100 : s.percentage, slow: state === 'uploading' ? s.slow : false }))
         },
+        targetSuccesses,
       )
       if (results.length === 0) throw new Error('All servers failed')
       // Carry the original filename so callers (e.g. the mod download field) can

@@ -860,6 +860,7 @@ export function ModEditor({
                 <Counter value={dl.file} max={LIMITS.downloadUrl} />
               </div>
               <BlossomUploadField
+                modFile
                 accept={MOD_FILE_UPLOAD_ACCEPT}
                 maxSizeMb={MOD_FILE_UPLOAD_LIMIT_MB}
                 label="Or upload file (mirrored to up to 3 servers)"

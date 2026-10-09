@@ -40,23 +40,29 @@ export function MultiImageUploadField({ accept, label, sublabel, onUploaded, max
   const patch = (id: string, p: Partial<Item>) =>
     setItems(prev => prev.map(it => (it.id === id ? { ...it, ...p } : it)))
 
-  const patchServer = (id: string, i: number, p: Partial<ServerUpload>) =>
-    setItems(prev => prev.map(it => (
-      it.id === id ? { ...it, servers: it.servers.map((s, idx) => (idx === i ? { ...s, ...p } : s)) } : it
-    )))
+  // Upsert a server bar for an item by index (padding earlier gaps as pending);
+  // attempts arrive in index order. Bars appear only for servers actually tried,
+  // so the media failover set (longer than the mirror count) doesn't show dead rows.
+  const upsertServer = (id: string, urls: string[], i: number, fn: (s: ServerUpload) => ServerUpload) =>
+    setItems(prev => prev.map(it => {
+      if (it.id !== id) return it
+      const servers = it.servers.slice()
+      while (servers.length <= i) servers.push({ url: urls[servers.length] ?? '', status: 'pending', percentage: 0, speed: 0, slow: false })
+      servers[i] = fn(servers[i])
+      return { ...it, servers }
+    }))
 
   const drain = async () => {
     if (runningRef.current) return
-    const serverUrls = useSettingsStore.getState().getAllEnabledBlossomUrls().slice(0, maxServers)
+    // Media: non-pinned servers (brs is archive-only), mirror to `maxServers` with
+    // failover past any that error.
+    const serverUrls = useSettingsStore.getState().getMediaBlossomUrls()
     if (serverUrls.length === 0) { toast.error('No Blossom servers configured'); return }
     runningRef.current = true
     try {
       while (queueRef.current.length > 0) {
         const { id, file } = queueRef.current.shift()!
-        patch(id, {
-          status: 'uploading',
-          servers: serverUrls.map(url => ({ url, status: 'pending', percentage: 0, speed: 0, slow: false })),
-        })
+        patch(id, { status: 'uploading', servers: [] })
         // Fresh tracker per file so speeds/slow-warnings don't leak across files.
         const track = createSpeedTracker()
         try {
@@ -66,14 +72,16 @@ export function MultiImageUploadField({ accept, label, sublabel, onUploaded, max
             signEvent,
             (p: Prog & { serverUrl: string; serverIndex: number }) => {
               const { speed, slow } = track(p.serverIndex, p.loaded)
-              patchServer(id, p.serverIndex, { status: 'uploading', percentage: p.percentage, speed, slow })
+              upsertServer(id, serverUrls, p.serverIndex, (s) => ({ ...s, status: 'uploading', percentage: p.percentage, speed: speed > 0 ? speed : s.speed, slow }))
             },
             undefined,
-            (i, state) => patchServer(id, i, {
+            (i, state) => upsertServer(id, serverUrls, i, (s) => ({
+              ...s,
               status: state,
-              ...(state === 'success' ? { percentage: 100 } : {}),
-              ...(state === 'uploading' ? {} : { slow: false }),
-            }),
+              percentage: state === 'success' ? 100 : s.percentage,
+              slow: state === 'uploading' ? s.slow : false,
+            })),
+            maxServers,
           )
           if (results.length === 0) throw new Error('All servers failed')
           patch(id, { status: 'success' })
@@ -92,8 +100,9 @@ export function MultiImageUploadField({ accept, label, sublabel, onUploaded, max
     const added = files.map(f => ({ id: crypto.randomUUID(), file: f }))
     queueRef.current.push(...added)
     // Seed the server rows up front so queued files read as "Waiting…" rather
-    // than sitting there bare until their turn in the queue.
-    const serverUrls = useSettingsStore.getState().getAllEnabledBlossomUrls().slice(0, maxServers)
+    // than sitting there bare until their turn in the queue (media set, capped to
+    // the mirror count — drain() replaces these with the real attempts).
+    const serverUrls = useSettingsStore.getState().getMediaBlossomUrls().slice(0, maxServers)
     setItems(prev => [
       ...prev,
       ...added.map(a => ({
