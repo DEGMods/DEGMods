@@ -435,13 +435,19 @@ function NetworkSettings() {
     [settings.clientBlossoms, settings.userBlossoms, settings.customBlossoms],
   )
 
-  // Relay health auto-probes on open (needs no signer); the 24h TTL inside the
-  // store means reopening Settings won't re-probe until results go stale. Blossom
-  // health is NOT auto-probed — its probe must sign a Blossom auth, so it runs
-  // only on an explicit click / "Test again" to avoid surprise signer prompts.
+  // Both auto-probe on open; the 24h TTL inside each store means reopening
+  // Settings won't re-probe until results go stale. Relay needs no signer. Blossom
+  // only runs while signed in — its probe uploads (the fixed content-addressed
+  // probe blob) under a kind-24242 auth that must be signed, so logged out it
+  // no-ops (openSweep returns null). When something is stale it signs ONCE per
+  // sweep and reuses that auth across every server.
   useEffect(() => {
     useRelayHealthStore.getState().refresh(probeRelayUrls)
   }, [probeRelayUrls])
+  useEffect(() => {
+    if (!myPubkey) return
+    useBlossomHealthStore.getState().refresh(allBlossomUrls)
+  }, [myPubkey, allBlossomUrls])
 
   // "Your list" publish is dirty when its membership differs from the last
   // published baseline. Local enable toggles don't count — they're client-only.
@@ -665,7 +671,7 @@ function NetworkSettings() {
       <TabsContent value="blossom" className="space-y-6">
         <div className="flex items-center justify-between gap-3 px-1">
           <p className="text-xs text-muted-foreground">
-            Testing uploads a tiny fixed probe file and reads it back. It signs a Blossom auth, so it runs only when you ask{!myPubkey && ' — sign in to test'}.
+            Testing uploads a tiny fixed probe file and reads it back{myPubkey ? ', and runs automatically while you’re signed in' : ' — sign in to test (it signs a Blossom auth, so it can’t run logged out)'}.
           </p>
           <Button
             variant="outline"
