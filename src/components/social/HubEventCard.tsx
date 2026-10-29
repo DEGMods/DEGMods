@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNsfwReveal } from '@/hooks/useNsfwReveal'
-import { nip19, type Event as NostrEvent } from 'nostr-tools'
+import { nip19 } from 'nostr-tools'
 import { Hash, Loader2, AlertTriangle, ShieldCheck, ExternalLink } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
@@ -9,9 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-
-/** DEN Chat hub (NIP-CHAT). Addressable, so one coordinate survives every edit. */
-export const HUB_KIND = 36942
+import { HUB_KIND, parseHubEvent, type Hub } from '@/lib/nostr/hubs'
 
 /** The hosted DEN Chat web client. */
 const DEFAULT_HUB_CLIENT = 'https://web.denchat.top/#hub/'
@@ -24,45 +22,6 @@ function hubUrl(base: string, naddr: string): string {
   if (!trimmed) return ''
   const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
   return withProtocol.endsWith('/') ? `${withProtocol}${naddr}` : `${withProtocol}/${naddr}`
-}
-
-interface Hub {
-  name: string
-  description?: string
-  icon?: string
-  banner?: string
-  topics: string[]
-  nsfw: boolean
-  minPow: number
-}
-
-/**
- * Read a hub event.
- *
- * Identity and moderation live in tags (`n` name, `t` topics, `content-warning`,
- * `w` minimum PoW) while presentation lives in the JSON content under
- * `settings`. Anything missing is simply absent — a hub that only has a name is
- * still a valid hub.
- */
-export function parseHubEvent(ev: NostrEvent): Hub {
-  let settings: Record<string, unknown> = {}
-  try {
-    const parsed = JSON.parse(ev.content) as { settings?: Record<string, unknown> }
-    settings = parsed?.settings ?? {}
-  } catch { /* content is optional and may be anything */ }
-
-  const tag = (k: string) => ev.tags.find((t) => t[0] === k)?.[1]
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined)
-
-  return {
-    name: tag('n') || tag('d') || 'Unnamed hub',
-    description: str(settings.description),
-    icon: str(settings.icon),
-    banner: str(settings.banner),
-    topics: ev.tags.filter((t) => t[0] === 't' && t[1]).map((t) => t[1]).slice(0, 6),
-    nsfw: ev.tags.some((t) => t[0] === 'content-warning'),
-    minPow: Number(tag('w')) || 0,
-  }
 }
 
 /**
@@ -195,7 +154,7 @@ export function HubEventCard({
  * uses — self-hosting is the norm here. So it offers the hosted client and
  * remembers whatever base URL the reader gives instead.
  */
-function OpenHubModal({
+export function OpenHubModal({
   open, onOpenChange, naddr,
 }: {
   open: boolean

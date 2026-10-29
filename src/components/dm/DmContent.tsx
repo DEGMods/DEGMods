@@ -1,7 +1,8 @@
 import { Fragment, useState } from 'react'
 import { nip19 } from 'nostr-tools'
 import { ImageIcon, Film, Music, ExternalLink } from 'lucide-react'
-import { HubEventCard, HUB_KIND } from '@/components/social/HubEventCard'
+import { HubEventCard } from '@/components/social/HubEventCard'
+import { HUB_KIND } from '@/lib/nostr/hubs'
 import { classifyMediaUrl } from '@/components/social/NoteContent'
 
 const TOKEN_RE = /(https?:\/\/[^\s]+)|(?:nostr:)?(naddr1[0-9a-z]+)/gi

@@ -28,6 +28,8 @@ import type { ModDetails } from '@/types/mod'
 import type { BlogDetails } from '@/types/blog'
 import type { GameEntry } from '@/types/game'
 import { readHomeCache, writeHomeCache, peekHomeCache } from '@/lib/homeCache'
+import { RecommendedHubs } from '@/components/home/RecommendedHubs'
+import { HUB_RECOMMENDATIONS_DTAG, parseHubRecommendations, type HubRec } from '@/lib/nostr/hubs'
 
 const NIP78_KIND = 30078
 const HOME_TTL = 2 * 60 * 1000
@@ -60,6 +62,7 @@ export function HomePage() {
   const [blogAuthors, setBlogAuthors] = useState<Map<string, UserProfile>>(() => cached0?.blogAuthors ?? new Map())
   const [banner, setBanner] = useState<BannerData | null>(() => cached0?.banner ?? null)
   const [ads, setAds] = useState<AdEntry[]>(() => cached0?.ads ?? [])
+  const [hubRecs, setHubRecs] = useState<HubRec[]>(() => cached0?.hubRecs ?? [])
   // One flag per query, not one for the page. A single flag meant clearing it
   // when the first query landed un-gated every other section too, so sections
   // whose data was still in flight rendered "No posts found" instead of a
@@ -95,7 +98,7 @@ export function HomePage() {
         const curationP = fetchEvents(relays, {
           kinds: [NIP78_KIND],
           authors: [ADMIN_PUBKEY],
-          '#d': ['home-featured-mods-slider', 'home-featured-mods', 'home-featured-games', FEATURED_BANNER_DTAG, ADS_DTAG],
+          '#d': ['home-featured-mods-slider', 'home-featured-mods', 'home-featured-games', FEATURED_BANNER_DTAG, ADS_DTAG, HUB_RECOMMENDATIONS_DTAG],
         }, 6000, 4500).catch(() => null)
 
         const modEvents = await modsP
@@ -202,6 +205,13 @@ export function HomePage() {
         const adsVal = adsEv ? extractAds(adsEv) : []
         setAds(adsVal)
 
+        // Recommended DEN Chat hubs (admin-curated). Only the first 5 render; keep
+        // the previous list on a flaky curation read, same as the other sections.
+        const hubRecsVal = curationAnswered
+          ? parseHubRecommendations(curationByD.get(HUB_RECOMMENDATIONS_DTAG)).slice(0, 5)
+          : hubRecs
+        setHubRecs(hubRecsVal)
+
         const curatedGameNames = curationTags('home-featured-games')
           .filter(t => t[0] === 'game' || t[0] === 'g').map(t => t[1])
         const gameNames = (curatedGameNames.length
@@ -259,7 +269,7 @@ export function HomePage() {
           // slice so the localStorage copy stays small and within quota.
           mods: allMods.slice(0, 24), sliderMods: sliderVal, featuredMods: featuredVal,
           games: gamesVal, blogs: parsedBlogs, blogAuthors: authors,
-          banner: bannerVal, ads: adsVal,
+          banner: bannerVal, ads: adsVal, hubRecs: hubRecsVal,
         })
       } catch {
         // silently fail
@@ -406,6 +416,9 @@ export function HomePage() {
 
       {/* Ads (up to 4; empty-state message when none) */}
       <HomeAds ads={ads} loading={curationLoading} />
+
+      {/* Recommended DEN Chat hubs (admin-curated; hidden when none) */}
+      <RecommendedHubs recs={hubRecs} />
     </div>
   )
 }

@@ -50,6 +50,7 @@ const ADMIN_CONFIG_DTAGS = [
   'home-featured-mods',
   'home-featured-games',
   'featured-mod-banner',
+  '36942-hub-recommendations',
 ]
 
 // ── Session dedup + sequential queue ──

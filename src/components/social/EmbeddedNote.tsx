@@ -8,7 +8,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { NoteContent } from './NoteContent'
-import { HubEventCard, HUB_KIND } from './HubEventCard'
+import { HubEventCard } from './HubEventCard'
+import { HUB_KIND } from '@/lib/nostr/hubs'
 
 export interface EmbedRef {
   id?: string

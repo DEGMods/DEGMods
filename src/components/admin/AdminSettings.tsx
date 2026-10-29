@@ -21,6 +21,10 @@ import {
   SUGGESTED_TAGS_DTAG, extractSuggestedTags,
   SUGGESTED_CATEGORIES_DTAG, extractSuggestedCategories, buildSuggestedCategoriesEvent,
 } from '@/lib/nostr/events'
+import {
+  HUB_KIND, HUB_RECOMMENDATIONS_DTAG, parseHubEvent, parseHubRecommendations,
+  parseHubNaddr, buildHubRecommendationsEvent,
+} from '@/lib/nostr/hubs'
 import { CategoryChainsEditor } from '@/components/search/ModFiltersBar'
 import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
 import { signAndPublish } from '@/lib/nostr/publish'
@@ -59,7 +63,7 @@ import {
   Upload, Trash2, FileText, Plus, Save, Pencil, SkipForward,
   AlertTriangle, X, Link2, Eye, GripVertical, ShieldAlert, EyeOff,
   Image as ImageIcon, HelpCircle, BookOpen, Joystick, Flag, Copy, ExternalLink, ChevronDown, Lightbulb,
-  HardDrive, Radio, BarChart3, ScrollText, Tag, Repeat2, HandCoins,
+  HardDrive, Radio, BarChart3, ScrollText, Tag, Repeat2, HandCoins, Hash,
 } from 'lucide-react'
 import { BlossomsTab } from './BlossomsTab'
 import { RelaysTab } from './RelaysTab'
@@ -972,6 +976,7 @@ function FeaturedTab() {
         desc="Games featured on the home page."
       />
       <FeaturedBannerSection />
+      <HubRecommendationsSection />
     </div>
   )
 }
@@ -1261,6 +1266,157 @@ function FeaturedModSection({
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-neutral-200 truncate">
                   {it.resolving ? 'Resolving…' : (it.title || <span className="text-neutral-500 italic">Unknown / not found</span>)}
+                </p>
+                <p className="text-[10px] text-neutral-600 font-mono truncate">{it.coord}</p>
+              </div>
+              <button onClick={() => removeItem(it.coord)} className="text-neutral-500 hover:text-red-400 shrink-0" aria-label="Remove">
+                <X size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={publish} disabled={publishing || !dirty} className="bg-purple-600 hover:bg-purple-700 text-xs">
+          {publishing ? <Loader2 size={12} className="mr-1.5 animate-spin" /> : <Save size={12} className="mr-1.5" />}
+          Publish
+        </Button>
+        {dirty && <span className="text-[11px] text-yellow-500/80">Unpublished changes</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Recommended Hubs (DEN Chat, kind 36942) ──
+
+interface HubItem {
+  coord: string
+  pubkey: string
+  dTag: string
+  relayHint?: string
+  name?: string
+  resolving?: boolean
+}
+
+function HubRecommendationsSection() {
+  const dTag = HUB_RECOMMENDATIONS_DTAG
+  const [items, setItems] = useState<HubItem[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [publishing, setPublishing] = useState(false)
+  const [dirty, setDirty] = useState(false)
+
+  const resolveName = useCallback(async (rec: { pubkey: string; dTag: string; relayHint?: string }): Promise<string | undefined> => {
+    const read = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    const urls = [...new Set([...(rec.relayHint ? [rec.relayHint] : []), ...read])]
+    const event = await fetchEvent(urls, { kinds: [HUB_KIND], authors: [rec.pubkey], '#d': [rec.dTag] })
+    return event ? parseHubEvent(event).name : undefined
+  }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+      const event = await fetchEvent(relays, { kinds: [KINDS.GAME_DB], authors: [ADMIN_PUBKEY], '#d': [dTag] })
+      const recs = parseHubRecommendations(event)
+      setItems(recs.map(r => ({ ...r, resolving: true })))
+      setDirty(false)
+      recs.forEach(async r => {
+        const name = await resolveName(r).catch(() => undefined)
+        setItems(prev => prev.map(it => it.coord === r.coord ? { ...it, name, resolving: false } : it))
+      })
+    } catch {
+      toast.error('Failed to load recommended hubs')
+    } finally {
+      setLoading(false)
+    }
+  }, [dTag, resolveName])
+
+  useEffect(() => { load() }, [load])
+
+  const addItem = async () => {
+    const result = parseHubNaddr(input)
+    if ('error' in result) { toast.error(result.error); return }
+    if (items.some(it => it.coord === result.coord)) { toast.error('Already in the list'); return }
+    const newItem: HubItem = { ...result, resolving: true }
+    setItems(prev => [...prev, newItem])
+    setInput('')
+    setDirty(true)
+    const name = await resolveName(result).catch(() => undefined)
+    setItems(prev => prev.map(it => it.coord === newItem.coord ? { ...it, name, resolving: false } : it))
+  }
+
+  const removeItem = (coord: string) => { setItems(prev => prev.filter(it => it.coord !== coord)); setDirty(true) }
+  const { dragIndex, itemProps } = useDragReorder(setItems, () => setDirty(true))
+
+  const publish = async () => {
+    setPublishing(true)
+    try {
+      const unsigned = buildHubRecommendationsEvent(items.map(it => ({ coord: it.coord, relayHint: it.relayHint })))
+      const result = await signAndPublish(unsigned, (status) => {
+        if (status === 'mining') toast.loading('Processing proof of work…', { id: dTag })
+        if (status === 'signing') toast.loading('Signing…', { id: dTag })
+        if (status === 'publishing') toast.loading('Publishing…', { id: dTag })
+      })
+      if (result.success) { toast.success(`Recommended hubs published (${items.length})`, { id: dTag }); setDirty(false) }
+      else toast.error(result.error || 'Publish failed', { id: dTag })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Publish failed', { id: dTag })
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  return (
+    <div className="p-4 rounded-lg border border-[#262626] bg-[#1c1c1c] space-y-3">
+      <div className="flex items-center gap-2">
+        <Hash size={14} className="text-purple-400" />
+        <h4 className="text-sm font-medium text-white">Recommended Hubs</h4>
+        <code className="ml-auto text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">d:{dTag}</code>
+      </div>
+      <p className="text-[11px] text-neutral-500">
+        DEN Chat hubs shown at the bottom of the home page. Order matters — the first is the priority (full-width) hub.
+        Only the first 5 render on the landing page, but you can list more. Paste a hub's <strong>naddr</strong> to add it.
+      </p>
+
+      <div className="flex gap-2">
+        <Input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem() } }}
+          placeholder="naddr1… (DEN Chat hub)"
+          className="bg-[#212121] border-[#262626] text-white text-xs font-mono"
+        />
+        <Button size="sm" onClick={addItem} disabled={!input.trim()} className="bg-purple-600 hover:bg-purple-700 shrink-0">
+          <Plus size={14} className="mr-1" /> Add
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500 py-2">
+          <Loader2 size={14} className="animate-spin" /> Loading current selection…
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-neutral-600 py-2">No hubs recommended yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((it, i) => (
+            <li
+              key={it.coord}
+              {...itemProps(i)}
+              className={cn(
+                'flex items-center gap-2 rounded-md border border-[#262626] bg-[#212121] px-2.5 py-1.5',
+                dragIndex === i && 'opacity-40',
+              )}
+            >
+              <GripVertical size={14} className="text-neutral-600 cursor-grab shrink-0" />
+              <span className="text-[10px] text-neutral-600 w-4 shrink-0">{i + 1}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-neutral-200 truncate">
+                  {it.resolving ? 'Resolving…' : (it.name || <span className="text-neutral-500 italic">Unknown / not found</span>)}
+                  {i === 0 && <span className="ml-1.5 text-[10px] text-purple-400">priority</span>}
+                  {i > 4 && <span className="ml-1.5 text-[10px] text-neutral-600">(not shown)</span>}
                 </p>
                 <p className="text-[10px] text-neutral-600 font-mono truncate">{it.coord}</p>
               </div>

@@ -12,6 +12,7 @@ import type { GameEntry } from '@/types/game'
 import type { BlogDetails } from '@/types/blog'
 import type { UserProfile } from '@/stores/userStore'
 import type { FeaturedBanner as BannerData, AdEntry } from '@/lib/nostr/events'
+import type { HubRec } from '@/lib/nostr/hubs'
 
 export const HOME_CACHE_KEY = 'home-cache-v2'
 
@@ -28,6 +29,9 @@ export interface HomeCache {
   blogAuthors: Map<string, UserProfile>
   banner: BannerData | null
   ads: AdEntry[]
+  /** Recommended-hub coordinates (resolved to hub cards client-side). Optional so
+   *  pre-existing cached blobs without it still load. */
+  hubRecs?: HubRec[]
 }
 
 let homeCache: HomeCache | null = null
