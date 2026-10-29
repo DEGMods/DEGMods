@@ -30,7 +30,7 @@ export function useImageSizeGate(url: string | undefined): ImageGate {
     if (!url || limitMb <= 0) return
     if (getCachedSize(url) !== undefined) return
     let cancelled = false
-    checkImageSize(url).finally(() => { if (!cancelled) bump(n => n + 1) })
+    checkImageSize(url, limitMb * 1024 * 1024).finally(() => { if (!cancelled) bump(n => n + 1) })
     return () => { cancelled = true }
   }, [url, limitMb])
 
