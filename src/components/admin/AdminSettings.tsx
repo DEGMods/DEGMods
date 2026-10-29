@@ -1376,8 +1376,9 @@ function HubRecommendationsSection() {
         <code className="ml-auto text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">d:{dTag}</code>
       </div>
       <p className="text-[11px] text-neutral-500">
-        DEN Chat hubs shown at the bottom of the home page. Order matters — the first is the priority (full-width) hub.
-        Only the first 5 render on the landing page, but you can list more. Paste a hub's <strong>naddr</strong> to add it.
+        DEN Chat hubs shown at the bottom of the home page. Order matters — the first is the priority hub (shown beside the
+        DEN Chat promo), the next four render below it. Only the first 5 render on the landing page, but you can list more.
+        Paste a hub's <strong>naddr</strong> to add it.
       </p>
 
       <div className="flex gap-2">
