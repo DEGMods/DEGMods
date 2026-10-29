@@ -214,8 +214,8 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* The profile owner's recommended DEN Chat community hub */}
-          {targetPubkey && <AuthorHubs pubkey={targetPubkey} />}
+          {/* The profile owner's recommended DEN Chat community hub (manageable when it's your own) */}
+          {targetPubkey && <AuthorHubs pubkey={targetPubkey} allowManage />}
         </div>
       </div>
     </div>
