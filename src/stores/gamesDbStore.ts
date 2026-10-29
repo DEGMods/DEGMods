@@ -17,6 +17,11 @@ type SyncPhase = 'idle' | 'checking' | 'downloading' | 'done' | 'error'
 
 interface GamesDbState {
   games: GameEntry[]
+  /** Parsed entries grouped by their source CSV blob hash, so a changed shard can
+   *  be swapped without touching (or re-downloading) the others. Derived `games`
+   *  is the flattened, name-deduped union. */
+  byHash: Record<string, GameEntry[]>
+  /** Current CSV hashes in event order (doubles as the dedup precedence order). */
   csvHashes: string[]
   lastUpdated: number
   loading: boolean
@@ -58,6 +63,20 @@ function parseCsv(text: string): GameEntry[] {
   return results
 }
 
+/** Flatten the per-shard groups into one list, deduped by name. Shards are applied
+ *  in `order` (the event's CSV-tag order), so a later shard overrides an earlier
+ *  one on a name collision — deterministic, unlike concatenation order. */
+function flatten(byHash: Record<string, GameEntry[]>, order: string[]): GameEntry[] {
+  const map = new Map<string, GameEntry>()
+  const add = (h: string) => {
+    const entries = byHash[h]
+    if (entries) for (const g of entries) map.set(g.name.toLowerCase(), g)
+  }
+  for (const h of order) add(h)
+  for (const h of Object.keys(byHash)) if (!order.includes(h)) add(h) // defensive
+  return Array.from(map.values())
+}
+
 async function downloadCsvFromBlossom(
   hash: string,
   blossomUrls: string[]
@@ -78,6 +97,7 @@ export const useGamesDbStore = create<GamesDbState>()(
   persist(
     (set, get) => ({
       games: [],
+      byHash: {},
       csvHashes: [],
       lastUpdated: 0,
       loading: false,
@@ -119,92 +139,64 @@ export const useGamesDbStore = create<GamesDbState>()(
           const newHashes = event.tags
             .filter((t) => t[0] === 'csv')
             .map((t) => t[1])
+            .filter(Boolean)
 
-          const currentHashes = get().csvHashes
-          const changedHashes = newHashes.filter(
-            (h) => !currentHashes.includes(h)
-          )
-          const removedHashes = currentHashes.filter(
-            (h) => !newHashes.includes(h)
-          )
+          const byHash = get().byHash
+          // A changed shard gets a NEW content hash, so "updated" == a hash we don't
+          // have yet. Everything already in byHash and still listed is reused as-is —
+          // no re-download. Hashes no longer listed are simply dropped.
+          const toDownload = newHashes.filter((h) => !byHash[h])
+          const removed = Object.keys(byHash).filter((h) => !newHashes.includes(h))
 
-          // If nothing changed, just update timestamp
-          if (changedHashes.length === 0 && removedHashes.length === 0) {
-            set({ loading: false, lastUpdated: Date.now(), syncPhase: 'done' })
+          if (toDownload.length === 0 && removed.length === 0) {
+            // Same shards — nothing to fetch. Re-flatten in case only the order changed.
+            set({
+              loading: false,
+              lastUpdated: Date.now(),
+              syncPhase: 'done',
+              csvHashes: newHashes,
+              games: flatten(byHash, newHashes),
+            })
             return
           }
 
-          // Download changed CSVs in parallel. A single unreachable CSV must NOT
-          // abort the whole sync — skip it (it stays untracked so it's retried
-          // next sync) and load everything else. Track progress as each resolves.
-          set({ syncPhase: 'downloading', syncTotal: changedHashes.length, syncDone: 0 })
+          // Download only the new/changed shards (in parallel, with per-CSV blossom
+          // failover inside downloadCsvFromBlossom). A single unreachable shard must
+          // NOT abort the sync — skip it (it stays untracked so it's retried next
+          // sync) and keep everything else. Track progress as each resolves.
+          set({ syncPhase: 'downloading', syncTotal: toDownload.length, syncDone: 0 })
           const bumpDone = () => set((s) => ({ syncDone: s.syncDone + 1 }))
-          const newCsvTexts = (await Promise.all(
-            changedHashes.map(async (hash) => {
+          const downloaded = (await Promise.all(
+            toDownload.map(async (hash) => {
               try { return { hash, text: await downloadCsvFromBlossom(hash, blossomUrls) } }
               catch (e) { console.warn(`games-db: CSV ${hash.slice(0, 8)}… unreachable, skipping`, e); return null }
               finally { bumpDone() }
             }),
           )).filter((x): x is { hash: string; text: string } => x !== null)
-          const okChangedHashes = newCsvTexts.map((f) => f.hash)
 
-          // Parse new CSV entries
-          const newEntries = newCsvTexts.flatMap((f) => parseCsv(f.text))
+          // Rebuild the shard map: reuse unchanged shards verbatim, drop removed ones,
+          // add the freshly downloaded ones. Any shard we failed to download is left
+          // out so it's retried next sync (rather than assumed present).
+          const nextByHash: Record<string, GameEntry[]> = {}
+          for (const h of newHashes) if (byHash[h]) nextByHash[h] = byHash[h]
+          for (const d of downloaded) nextByHash[d.hash] = parseCsv(d.text)
+          const loadedOrder = newHashes.filter((h) => nextByHash[h])
 
-          // Keep entries from unchanged hashes
-          const unchangedHashes = currentHashes.filter(
-            (h) => !removedHashes.includes(h) && !changedHashes.includes(h)
-          )
-
-          // For unchanged hashes we keep the existing games.
-          // Re-download would be wasteful, so we keep existing entries
-          // and merge with new ones, deduplicating by name.
-          const existingGames = get().games
-          const allEntries = [...existingGames, ...newEntries]
-
-          // Deduplicate by name (case-insensitive), last occurrence wins
-          const deduped = new Map<string, GameEntry>()
-          for (const entry of allEntries) {
-            deduped.set(entry.name.toLowerCase(), entry)
-          }
-
-          // If hashes were removed, re-filter: only keep games that
-          // came from still-valid CSVs. Since we don't track per-game
-          // source, on removal we rebuild from all current hashes.
-          let finalGames: GameEntry[]
-          let okKeptHashes = unchangedHashes
-          if (removedHashes.length > 0) {
-            // Re-download unchanged hashes to rebuild (parallel, skip unreachable).
-            set((s) => ({ syncTotal: s.syncTotal + unchangedHashes.length }))
-            const keptTexts = (await Promise.all(
-              unchangedHashes.map(async (hash) => {
-                try { return { hash, text: await downloadCsvFromBlossom(hash, blossomUrls) } }
-                catch (e) { console.warn(`games-db: CSV ${hash.slice(0, 8)}… unreachable, skipping`, e); return null }
-                finally { bumpDone() }
-              }),
-            )).filter((x): x is { hash: string; text: string } => x !== null)
-            okKeptHashes = keptTexts.map((f) => f.hash)
-            const keptEntries = keptTexts.flatMap((f) => parseCsv(f.text))
-            const merged = [...keptEntries, ...newEntries]
-            const rebuiltMap = new Map<string, GameEntry>()
-            for (const entry of merged) {
-              rebuiltMap.set(entry.name.toLowerCase(), entry)
-            }
-            finalGames = Array.from(rebuiltMap.values())
-          } else {
-            finalGames = Array.from(deduped.values())
-          }
-
-          // Only track hashes we actually loaded, so skipped/unreachable CSVs
-          // are retried on the next sync rather than assumed present.
           set({
-            games: finalGames,
-            csvHashes: [...okKeptHashes, ...okChangedHashes],
+            byHash: nextByHash,
+            csvHashes: loadedOrder,
+            games: flatten(nextByHash, loadedOrder),
             lastUpdated: Date.now(),
             loading: false,
             error: null,
             syncPhase: 'done'
           })
+
+          // Help keep the CSV blobs replicated across Blossom servers (logged-in
+          // only — re-mirroring needs a signed auth). Fire-and-forget.
+          import('@/lib/blossom/blobRedundancy')
+            .then((m) => m.ensureBlobsReplicated(loadedOrder))
+            .catch(() => { /* non-critical */ })
         } catch (err) {
           const message =
             err instanceof Error ? err.message : 'Failed to sync games database'
@@ -237,12 +229,26 @@ export const useGamesDbStore = create<GamesDbState>()(
     }),
     {
       name: 'deg-mods-games-db',
+      version: 1,
       storage: createJSONStorage(() => idbStorage), // IndexedDB — localStorage is too small for ~170k games
+      // Persist the per-shard groups + hash order; `games` is derived from them on
+      // rehydrate (below), so we don't store the flattened union twice.
       partialize: (state) => ({
-        games: state.games,
+        byHash: state.byHash,
         csvHashes: state.csvHashes,
         lastUpdated: state.lastUpdated
-      })
+      }),
+      migrate: (persisted, version) => {
+        if (version < 1) {
+          // v0 stored a flat { games, csvHashes } with no per-shard grouping, so
+          // byHash can't be reconstructed. Start empty and force one full resync.
+          return { byHash: {}, csvHashes: [], lastUpdated: 0 } as Partial<GamesDbState>
+        }
+        return persisted as Partial<GamesDbState>
+      },
+      onRehydrateStorage: () => (state) => {
+        if (state) state.games = flatten(state.byHash ?? {}, state.csvHashes ?? [])
+      }
     }
   )
 )
@@ -254,7 +260,7 @@ const GAMES_SYNC_TTL = 5 * 60 * 1000
  * the /games page). It's idempotent: hydration-gated (won't sync against empty
  * pre-hydration state), throttled (skips if we synced within GAMES_SYNC_TTL),
  * and no-ops while a sync is already running. The heavy CSV download only
- * happens on the first ever load or when the DB actually changes; after that
+ * happens on the first ever load or when a shard actually changes; after that
  * it's a single cheap event fetch — so calling it on every startup is fine.
  *
  * Kicking this off at startup (regardless of route) means the games are usually
