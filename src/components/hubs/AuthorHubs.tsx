@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Hash, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { parseHubRecommendations, HUB_RECOMMENDATIONS_DTAG, type HubRec } from '@/lib/nostr/hubs'
@@ -31,7 +31,7 @@ export function AuthorHubs({ pubkey }: { pubkey: string }) {
   return (
     <section className="space-y-3">
       <h2 className="flex items-center gap-2 text-lg font-semibold text-neutral-200">
-        <Hash className="h-5 w-5 text-purple-400" />
+        <img src="/denchat-logo.svg" alt="" className="h-5 w-5" />
         Community hub
       </h2>
       {recs === null ? (
