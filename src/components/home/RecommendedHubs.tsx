@@ -159,7 +159,7 @@ function HubCard({ rec }: { rec: HubRec }) {
           ))}
         </div>
 
-        <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+        <div className="mt-auto flex items-center gap-2 pt-1">
           {hideMedia && (
             <button
               onClick={() => reveal()}
@@ -172,13 +172,13 @@ function HubCard({ rec }: { rec: HubRec }) {
             <>
               <button
                 onClick={() => setOpenOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-purple-700"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-purple-700"
               >
                 <ExternalLink className="h-3.5 w-3.5" /> Open hub
               </button>
               <button
                 onClick={copy}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-[#404040]"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#262626] px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-[#404040]"
                 aria-label="Copy hub address"
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />} Copy
