@@ -60,7 +60,7 @@ export function HubCard({ rec }: { rec: HubRec }) {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center gap-2 rounded-xl border border-[#262626] bg-[#1c1c1c] px-3 py-6 text-xs text-neutral-500">
+      <div className="flex h-full min-h-[96px] items-center justify-center gap-2 rounded-xl border border-[#262626] bg-[#1c1c1c] px-3 py-6 text-xs text-neutral-500">
         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading hub…
       </div>
     )
