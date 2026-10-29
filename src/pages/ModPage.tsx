@@ -36,6 +36,7 @@ import { ModPermissions } from '@/components/mod/ModPermissions'
 import { PublisherCard } from '@/components/mod/PublisherCard'
 import { SidebarAd } from '@/components/mod/SidebarAd'
 import { AuthorSocialPosts } from '@/components/social/AuthorSocialPosts'
+import { AuthorHubs } from '@/components/hubs/AuthorHubs'
 import { ReactionButton } from '@/components/social/ReactionButton'
 import { ZapButton } from '@/components/social/ZapButton'
 import { CommentSection } from '@/components/social/CommentSection'
@@ -836,6 +837,9 @@ export default function ModPage() {
 
           {/* Author's latest social posts */}
           <AuthorSocialPosts pubkey={mod.pubkey} />
+
+          {/* The author's recommended DEN Chat community hub */}
+          <AuthorHubs pubkey={mod.pubkey} />
 
           {/* Rotating sponsored ad */}
           <SidebarAd />

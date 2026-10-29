@@ -38,6 +38,7 @@ import { PoopIcon } from '@/components/icons/PoopIcon'
 import { PublisherCard } from '@/components/mod/PublisherCard'
 import { SidebarAd } from '@/components/mod/SidebarAd'
 import { AuthorSocialPosts } from '@/components/social/AuthorSocialPosts'
+import { AuthorHubs } from '@/components/hubs/AuthorHubs'
 import { AuthorBlogPosts } from '@/components/blog/AuthorBlogPosts'
 import type { NostrTarget } from '@/lib/nostr/social'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -421,6 +422,9 @@ export default function BlogPostPage() {
 
           {/* Author's latest social posts */}
           <AuthorSocialPosts pubkey={blog.pubkey} />
+
+          {/* The author's recommended DEN Chat community hub */}
+          <AuthorHubs pubkey={blog.pubkey} />
 
           {/* Rotating sponsored ad */}
           <SidebarAd />

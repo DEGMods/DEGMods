@@ -32,6 +32,7 @@ import type { BlogDetails } from '@/types/blog'
 import { ModCard } from '@/components/mod/ModCard'
 import { BlogPostCard } from '@/components/blog/BlogPostCard'
 import { PublisherCard } from '@/components/mod/PublisherCard'
+import { AuthorHubs } from '@/components/hubs/AuthorHubs'
 import { SocialPost } from '@/components/social/SocialPost'
 import { Pagination } from '@/components/shared/Pagination'
 import { Button } from '@/components/ui/button'
@@ -199,7 +200,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Right column: author card */}
-        <div className="lg:sticky lg:top-20 self-start">
+        <div className="lg:sticky lg:top-20 self-start space-y-6">
           {targetPubkey && !profileLoading ? (
             <PublisherCard pubkey={targetPubkey} />
           ) : (
@@ -212,6 +213,9 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+
+          {/* The profile owner's recommended DEN Chat community hub */}
+          {targetPubkey && <AuthorHubs pubkey={targetPubkey} />}
         </div>
       </div>
     </div>
