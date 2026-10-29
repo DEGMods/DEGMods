@@ -49,11 +49,11 @@ export function RecommendedHubs({ recs }: { recs: HubRec[] }) {
 function DenChatPromo() {
   return (
     <div className="flex flex-1 flex-col rounded-xl border border-[#262626] bg-[#1c1c1c] p-5 md:p-6">
-      <div className="flex items-center gap-2.5">
-        <img src="/denchat-logo.svg" alt="" className="h-9 w-9 shrink-0" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">DEN Chat</span>
+      <div className="flex items-center gap-3">
+        <img src="/denchat-logo.svg" alt="" className="h-12 w-12 shrink-0" />
+        <span className="text-2xl font-bold text-white">DEN Chat</span>
       </div>
-      <h3 className="mt-3 text-lg font-bold text-white">Start your own community hub</h3>
+      <h3 className="mt-4 text-lg font-bold text-white">Start your own community hub</h3>
       <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-neutral-400">
         Running a mod or a community? Spin up your own hub on DEN Chat — decentralized,
         encrypted group chat on Nostr that no one can take down.
