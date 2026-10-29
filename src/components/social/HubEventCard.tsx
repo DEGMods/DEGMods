@@ -4,7 +4,7 @@ import { nip19 } from 'nostr-tools'
 import { Hash, Loader2, AlertTriangle, ShieldCheck, ExternalLink } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
-import { SafeImage } from '@/components/shared/SafeImage'
+import { BlossomImage } from '@/components/shared/BlossomImage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -83,14 +83,14 @@ export function HubEventCard({
     <div className="my-2 max-w-md overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c]">
       {hub.banner && (
         <div className="relative aspect-[3/1] w-full bg-[#212121]">
-          <SafeImage src={hub.banner} alt="" className={cn('h-full w-full object-cover', hideMedia && 'blur-lg')} />
+          <BlossomImage src={hub.banner} alt="" className={cn('h-full w-full object-cover', hideMedia && 'blur-lg')} />
         </div>
       )}
 
       <div className="space-y-2 p-3">
         <div className="flex items-center gap-2.5">
           {hub.icon ? (
-            <SafeImage src={hub.icon} alt="" className={cn('h-9 w-9 shrink-0 rounded-lg object-cover', hideMedia && 'blur-md')} />
+            <BlossomImage src={hub.icon} alt="" className={cn('h-9 w-9 shrink-0 rounded-lg object-cover', hideMedia && 'blur-md')} />
           ) : (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
               <Hash className="h-4 w-4" />
