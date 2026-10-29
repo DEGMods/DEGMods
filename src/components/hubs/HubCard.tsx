@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Hash, Loader2, AlertTriangle, ExternalLink, Copy, Check } from 'lucide-react'
+import { Loader2, AlertTriangle, ExternalLink, Copy, Check } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
 import { useNsfwReveal } from '@/hooks/useNsfwReveal'
@@ -71,20 +71,20 @@ export function HubCard({ rec }: { rec: HubRec }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c]">
-      {hub.banner && (
-        <div className="relative aspect-[3/1] w-full bg-[#212121]">
+      <div className="relative aspect-[3/1] w-full bg-[#212121]">
+        {hub.banner ? (
           <BlossomImage src={hub.banner} alt="" className={cn('h-full w-full object-cover', hideMedia && 'blur-lg')} />
-        </div>
-      )}
+        ) : (
+          <img src="/hub-banner-placeholder.jpg" alt="" className="h-full w-full object-cover" />
+        )}
+      </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div className="flex items-center gap-2.5">
           {hub.icon ? (
             <BlossomImage src={hub.icon} alt="" className={cn('h-9 w-9 shrink-0 rounded-lg object-cover', hideMedia && 'blur-md')} />
           ) : (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
-              <Hash className="h-4 w-4" />
-            </span>
+            <img src="/hub-icon-placeholder.png" alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover grayscale" />
           )}
           <p className="min-w-0 flex-1 truncate text-sm font-semibold text-neutral-100">{hub.name}</p>
         </div>
