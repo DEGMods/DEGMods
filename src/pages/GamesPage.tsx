@@ -10,6 +10,7 @@ import { useGamesDbStore, warmGamesDb } from '@/stores/gamesDbStore'
 import { useLegacyModsStore } from '@/stores/legacyModsStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
+import { rankByQuery } from '@/lib/search'
 import { constructModListFromEvents } from '@/lib/nostr/events'
 import { KINDS, ADMIN_PUBKEY } from '@/lib/constants'
 import { cn } from '@/lib/utils'
@@ -158,11 +159,14 @@ export function GamesPage() {
     return sorted
   }, [games, combinedNames, combinedCounts])
 
-  // Cheap per-search filter — preserves the base order, so no re-sort on typing.
+  // Per-search filter + rank: substring matches, with the closest (prefix) matches
+  // floated to the top — same ordering as the /submit-mod autocomplete. No tiebreak
+  // is passed, so within the prefix and non-prefix groups the base order is kept
+  // (games-with-mods first, then alphabetical). Uses plain prefix comparisons, no
+  // localeCompare, so it stays cheap even on a broad query over the ~170k set.
   const allGames = useMemo(() => {
     if (!search.trim()) return sortedBase
-    const q = search.toLowerCase()
-    return sortedBase.filter(g => g.name.toLowerCase().includes(q))
+    return rankByQuery(sortedBase, search, g => g.name)
   }, [sortedBase, search])
 
   // Reset page when search or data changes

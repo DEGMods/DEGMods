@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Input } from '@/components/ui/input'
+import { rankByQuery, alphabetical } from '@/lib/search'
 
 interface SuggestInputProps {
   value: string
@@ -31,18 +32,14 @@ export function SuggestInput({
 
   const suggestions = useMemo(() => {
     if (q.length < minChars) return []
-    const matches = q ? items.filter((i) => i.toLowerCase().includes(q)) : items.slice()
-    return matches
-      .sort((a, b) => {
-        if (q) {
-          const aStarts = a.toLowerCase().startsWith(q)
-          const bStarts = b.toLowerCase().startsWith(q)
-          if (aStarts !== bStarts) return aStarts ? -1 : 1
-        }
-        return a.localeCompare(b, undefined, { sensitivity: 'base' })
-      })
-      .slice(0, 50)
-  }, [q, items, minChars])
+    // Empty query (minChars 0): show everything, alphabetical. Otherwise rank
+    // closest (prefix) matches first, then alphabetical — the shared game-search
+    // ordering, so /games and the admin search match this input exactly.
+    const ranked = q
+      ? rankByQuery(items, value, (x) => x, alphabetical)
+      : items.slice().sort(alphabetical)
+    return ranked.slice(0, 50)
+  }, [q, value, items, minChars])
 
   const show = open && suggestions.length > 0
 

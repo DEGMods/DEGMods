@@ -12,6 +12,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
 import { downloadFile } from '@/lib/blossom/client'
 import { parseCsvLine } from '@/lib/csv'
+import { rankByQuery, alphabetical } from '@/lib/search'
 
 type SyncPhase = 'idle' | 'checking' | 'downloading' | 'done' | 'error'
 
@@ -206,10 +207,9 @@ export const useGamesDbStore = create<GamesDbState>()(
 
       searchGames: (query) => {
         if (!query.trim()) return []
-        const q = query.toLowerCase()
-        return get()
-          .games.filter((g) => g.name.toLowerCase().includes(q))
-          .slice(0, 20)
+        // Closest (prefix) matches first, then alphabetical — same ordering as the
+        // /games page and the /submit-mod autocomplete.
+        return rankByQuery(get().games, query, (g) => g.name, (a, b) => alphabetical(a.name, b.name)).slice(0, 20)
       },
 
       getGameImages: (name) => {
