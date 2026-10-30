@@ -14,7 +14,7 @@ import { useUserStore, type UserProfile } from '@/stores/userStore'
 import { useBlockStore, type BlockType } from '@/stores/blockStore'
 import { useDnnStore } from '@/stores/dnnStore'
 import { IdentityLine } from '@/components/social/IdentityLine'
-import { SafeImage } from '@/components/shared/SafeImage'
+import { BlossomImage } from '@/components/shared/BlossomImage'
 import { ZapButton } from '@/components/social/ZapButton'
 import { FollowButton } from '@/components/social/FollowButton'
 import { BlockTypeModal } from '@/components/social/BlockTypeModal'
@@ -170,7 +170,7 @@ export function PublisherCard({ pubkey }: PublisherCardProps) {
       <Link to={profileHref} className="block">
         <div className="relative h-35 w-full bg-gradient-to-br from-purple-900/40 to-[#212121]">
           {profile?.banner && (
-            <SafeImage src={profile.banner as string} alt="" className="h-full w-full object-cover" />
+            <BlossomImage src={profile.banner as string} alt="" className="h-full w-full object-cover" />
           )}
         </div>
       </Link>
