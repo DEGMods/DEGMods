@@ -918,7 +918,7 @@ export default function ModPage() {
 
       {/* Raw Event dialog */}
       <Dialog open={showRawDialog} onOpenChange={setShowRawDialog}>
-        <DialogContent className="bg-[#1c1c1c] border-[#262626] max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogContent className="bg-[#1c1c1c] border-[#262626] max-w-2xl max-h-[80vh] grid-rows-[auto_auto_minmax(0,1fr)_auto]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-neutral-100">
               <FileJson className="h-5 w-5 text-purple-400" />
@@ -932,7 +932,7 @@ export default function ModPage() {
             <span className="text-xs text-neutral-400">Readable</span>
             <Switch checked={readableRaw} onCheckedChange={setReadableRaw} />
           </label>
-          <div className="flex-1 overflow-auto rounded-lg bg-[#171717] border border-[#262626] p-4">
+          <div className="min-h-0 overflow-auto rounded-lg bg-[#171717] border border-[#262626] p-4">
             <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap break-all">
               <code>{rawJson}</code>
             </pre>
