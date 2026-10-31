@@ -869,7 +869,7 @@ export default function ModPage() {
 
       {/* Available elsewhere dialog */}
       <Dialog open={showElsewhereDialog} onOpenChange={setShowElsewhereDialog}>
-        <DialogContent className="bg-[#1c1c1c] border-[#262626]">
+        <DialogContent className="bg-[#1c1c1c] border-[#262626] max-h-[80vh] grid-rows-[auto_minmax(0,1fr)]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-neutral-100">
               <ExternalLink className="h-5 w-5 text-purple-400" />
@@ -880,7 +880,7 @@ export default function ModPage() {
               doesn&apos;t vet them.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="min-h-0 space-y-2 overflow-y-auto">
             {mod.elsewhere.map((entry, i) =>
               isHttpUrl(entry) ? (
                 <a
