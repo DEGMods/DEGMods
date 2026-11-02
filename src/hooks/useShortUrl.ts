@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useDnnStore } from '@/stores/dnnStore'
-import { shareableShortAddress, shortCodeOf, verifiedShortAddress } from '@/lib/nostr/nipShort'
+import { shareableShortAddress, shortCodeOf, toKey36, verifiedShortAddress } from '@/lib/nostr/nipShort'
 import { reportCanonicalPath } from '@/hooks/useAnalytics'
 
 /**
@@ -14,8 +14,8 @@ import { reportCanonicalPath } from '@/hooks/useAnalytics'
  * meaningless extra entry in the back stack for a URL change the reader never
  * asked for.
  *
- * A verified DNN ID is preferred over the npub because it's dramatically
- * shorter (`snAbandonAbility2DH1f4c2a` vs the 63-character npub form), which is
+ * A verified DNN ID is preferred over the key36 because it's dramatically
+ * shorter (`snAbandonAbility2DH1f4c2a` vs the 50-character key36 form), which is
  * the entire point of the short address.
  *
  * Silent on every failure. A missing `s` tag, an unreachable relay during the
@@ -42,7 +42,7 @@ export function useShortUrl(event: NostrEvent | null | undefined, basePath: stri
     if (!event || !shortCodeOf(event)) return
     let cancelled = false
 
-    const authority = dnnId || nip19.npubEncode(event.pubkey)
+    const authority = dnnId || toKey36(event.pubkey)
     // Stays on the page's own path — /mod/<short>, not a separate resolver route
     // — so the URL keeps saying what it points at and a reload lands here.
     const set = (address: string) => {

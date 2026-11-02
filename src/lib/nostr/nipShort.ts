@@ -3,7 +3,8 @@
  *
  *   s<authority><code>[-<selector>]
  *
- * `authority` is the author (an `npub1…`, or a DNN ID which resolves to one),
+ * `authority` is the author — a `key36` (the pubkey in base 36, 50 chars) in the
+ * current form, or, in links already out in the world, an `npub1…` or a DNN ID.
  * `code` is the first 6 hex characters of SHA-256 over a canonical input, and
  * the optional `-selector` continues that same hash to break a collision.
  *
@@ -19,11 +20,43 @@ import { bytesToHex } from '@noble/hashes/utils'
 import { nip19, verifyEvent, type Event as NostrEvent } from 'nostr-tools'
 import { KINDS } from '@/lib/constants'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
+import { dnnService } from '@/lib/dnn/dnnService'
 
 export const SHORT_CODE_LENGTH = 6
+/** The author component of a v2 address: a pubkey in base 36, always this wide. */
+export const KEY36_LENGTH = 50
 
 const CODE_RE = /^[0-9a-f]{6}$/
 const SUFFIX_RE = /^[0-9a-f]+$/
+const KEY36_RE = /^[0-9a-z]{50}$/
+
+// ─── Author key encoding (key36) ────────────────────────────────────
+//
+// The v2 address carries the author as the 32-byte pubkey written in base 36 —
+// the same information as the hex pubkey or the npub, in 50 characters against
+// 64 and 63, and with no `npub1` prefix or checksum to spend length on. It is
+// address-only: the signed `s` code never depends on it (see Derivation).
+
+/** 64-char hex pubkey → its 50-char lowercase base-36 form. */
+export function toKey36(pubkeyHex: string): string {
+  return BigInt('0x' + pubkeyHex).toString(36).padStart(KEY36_LENGTH, '0')
+}
+
+/**
+ * key36 → 64-char hex pubkey, or null when the string isn't a valid key36 —
+ * wrong shape, or a value of 2²⁵⁶ or greater (which maps to no pubkey). The
+ * conversion is exact and lossless, so a mistyped key36 simply decodes to a
+ * different, effectively unowned pubkey and resolves to nothing rather than
+ * erroring.
+ */
+export function key36ToPubkey(key36: string): string | null {
+  const k = key36.toLowerCase()
+  if (!KEY36_RE.test(k)) return null
+  let n = 0n
+  for (const c of k) n = n * 36n + BigInt(parseInt(c, 36))
+  if (n >= 1n << 256n) return null
+  return n.toString(16).padStart(64, '0')
+}
 
 /** The identity-determining fields a code is derived from. Never tags. */
 export interface CodeSource {
@@ -89,8 +122,12 @@ export function formatShortAddress(authority: string, code: string, suffix = '')
 /**
  * Parse `s<authority><code>[-selector]`.
  *
- * The authority is variable-length and the code is fixed, so the code is peeled
- * off the *end* — there is no delimiter between them to split on.
+ * Two authority forms coexist. The current (v2) form writes the author as a
+ * fixed 50-char key36, so the head is exactly 56 characters — recognized by its
+ * width and a valid key36 decode, since the base-36 alphabet overlaps hex and
+ * can't be told from the code by scanning. The legacy (v1) form wrote the author
+ * in full (an npub or a DNN id) with no delimiter, so the fixed-width code is
+ * peeled off the *end*; it's still parsed so links already shared keep working.
  */
 export function parseShortAddress(input: string): ShortAddress | null {
   const raw = input.trim().replace(/^nostr:/i, '')
@@ -102,6 +139,16 @@ export function parseShortAddress(input: string): ShortAddress | null {
   const suffix = dash === -1 ? '' : body.slice(dash + 1).toLowerCase()
   if (suffix && !SUFFIX_RE.test(suffix)) return null
 
+  // v2: 50-char key36 author + 6-hex code. Only a head of exactly this width
+  // whose first 50 chars decode to a real pubkey is treated as key36; otherwise
+  // it falls through to the legacy peel below.
+  if (head.length === KEY36_LENGTH + SHORT_CODE_LENGTH) {
+    const key36 = head.slice(0, KEY36_LENGTH).toLowerCase()
+    const code = head.slice(KEY36_LENGTH).toLowerCase()
+    if (CODE_RE.test(code) && key36ToPubkey(key36)) return { authority: key36, code, suffix }
+  }
+
+  // v1 (legacy): author written in full, code peeled off the end.
   const code = head.slice(-SHORT_CODE_LENGTH).toLowerCase()
   const authority = head.slice(0, -SHORT_CODE_LENGTH)
   if (!CODE_RE.test(code) || !authority) return null
@@ -118,7 +165,11 @@ export function looksLikeShortAddress(input: string): boolean {
   return parseShortAddress(input) !== null
 }
 
-/** Hex pubkey for an authority, or null when it isn't an npub we can decode. */
+/**
+ * Hex pubkey for an authority with no network: a key36 (v2) or an npub (legacy).
+ * A DNN id isn't decodable on its own — it returns null here and is handled by
+ * the DNN resolver passed to `resolveShortAddress`.
+ */
 export function authorityToPubkey(authority: string): string | null {
   if (/^npub1/i.test(authority)) {
     try {
@@ -126,6 +177,9 @@ export function authorityToPubkey(authority: string): string | null {
       return d.type === 'npub' ? (d.data as string) : null
     } catch { return null }
   }
+  // v2 key36 — a fixed 50-char base-36 key. DNN ids are far shorter, so the
+  // width tells them apart; anything that isn't a valid key36 returns null.
+  if (KEY36_RE.test(authority)) return key36ToPubkey(authority)
   return null
 }
 
@@ -145,7 +199,7 @@ export function authorityToPubkey(authority: string): string | null {
 export function verifiedShortAddress(event: NostrEvent, authority?: string): string | null {
   const stored = shortCodeOf(event)
   if (!stored || stored !== computeShortCode(event)) return null
-  return formatShortAddress(authority || nip19.npubEncode(event.pubkey), stored)
+  return formatShortAddress(authority || toKey36(event.pubkey), stored)
 }
 
 /**
@@ -162,7 +216,7 @@ export async function shareableShortAddress(
 ): Promise<string | null> {
   const code = shortCodeOf(event) ?? computeShortCode(event)
   if (!CODE_RE.test(code)) return null
-  const auth = authority || nip19.npubEncode(event.pubkey)
+  const auth = authority || toKey36(event.pubkey)
 
   let others: NostrEvent[] = []
   try {
@@ -197,6 +251,22 @@ export async function shareableShortAddress(
  * resolved event is returned too, so the caller doesn't refetch what we just had
  * in hand.
  */
+/**
+ * Resolve a DNN-id authority to a hex pubkey via the DNN nodes.
+ *
+ * Only reached for a legacy DNN-form address — key36 and npub authorities decode
+ * locally in `authorityToPubkey` and never get here. This is what keeps DNN
+ * short links resolvable now that the current form writes key36 instead.
+ */
+async function dnnAuthorityToPubkey(authority: string): Promise<string | null> {
+  try {
+    const res = await dnnService.resolve(authority)
+    if (!res?.npub) return null
+    const d = nip19.decode(res.npub)
+    return d.type === 'npub' ? (d.data as string) : null
+  } catch { return null }
+}
+
 export interface PostCoordinate { kind: number; pubkey: string; identifier: string; event?: NostrEvent }
 
 /** The coordinate of a resolved event, in the shape callers already use. */
@@ -214,7 +284,7 @@ export async function decodePostParam(
   relays: string[],
 ): Promise<PostCoordinate | { candidates: NostrEvent[] } | null> {
   if (looksLikeShortAddress(param)) {
-    const res = await resolveShortAddress(relays, param)
+    const res = await resolveShortAddress(relays, param, dnnAuthorityToPubkey)
     // Ambiguity is handed back rather than swallowed — the link points at
     // something real, and only the reader can say which one.
     if (res.status === 'ambiguous') return { candidates: res.candidates }
@@ -267,7 +337,7 @@ export async function decodeNoteParam(
   fetchById: (id: string) => Promise<NostrEvent | null>,
 ): Promise<{ event: NostrEvent } | { candidates: NostrEvent[] } | null> {
   if (looksLikeShortAddress(param)) {
-    const res = await resolveShortAddress(relays, param)
+    const res = await resolveShortAddress(relays, param, dnnAuthorityToPubkey)
     // Ambiguity is surfaced rather than swallowed: two of an author's events
     // share a code and the address carried no selector, so only the reader can
     // say which one was meant.

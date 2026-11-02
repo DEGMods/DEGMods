@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useDnnStore } from '@/stores/dnnStore'
-import { shareableShortAddress, shortCodeOf, verifiedShortAddress } from '@/lib/nostr/nipShort'
+import { shareableShortAddress, shortCodeOf, toKey36, verifiedShortAddress } from '@/lib/nostr/nipShort'
 import { reportCanonicalPath } from '@/hooks/useAnalytics'
 
 /**
@@ -15,7 +15,7 @@ export async function noteAddress(event: NostrEvent): Promise<string> {
   if (!shortCodeOf(event)) return nevent
   try {
     const dnnId = useDnnStore.getState().getVerifiedDnnId(event.pubkey)
-    const authority = dnnId || nip19.npubEncode(event.pubkey)
+    const authority = dnnId || toKey36(event.pubkey)
     const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
     return (await shareableShortAddress(relays, event, authority)) || nevent
   } catch {
@@ -51,7 +51,7 @@ export function useNoteUrl(open: boolean, event: NostrEvent | null | undefined) 
     // bar for seconds, which is exactly when someone copies it. A collision is
     // rare; when there is one the background check appends the selector below.
     const dnnId = useDnnStore.getState().getVerifiedDnnId(event.pubkey)
-    const authority = dnnId || nip19.npubEncode(event.pubkey)
+    const authority = dnnId || toKey36(event.pubkey)
     const optimistic = verifiedShortAddress(event, authority)
     set(optimistic ?? nevent)
 
