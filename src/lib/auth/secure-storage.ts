@@ -2,7 +2,7 @@
  * Secure Storage: Web-only stub
  *
  * All desktop-only functions (Tauri keyring) are no-ops on web.
- * Auth on web is via external signers only (NIP-07, NIP-46, PC55, UPV2).
+ * Auth on web is via external signers only (NIP-07, NIP-46, NIP-LRS, UPV2).
  */
 
 export interface StoredAccount {

@@ -13,7 +13,7 @@
 
 import { useAuthStore, type AuthMethod, type ISigner } from '@/stores/authStore'
 import { StorageKey, SECURE_KEYS } from '@/lib/constants'
-import { Nip07Signer, BunkerSigner, PC55Signer } from '@/lib/auth'
+import { Nip07Signer, BunkerSigner, reconnectLocalSigner } from '@/lib/auth'
 import { secureGet, secureRemove } from '@/lib/storage/secureStore'
 import upv2Service, { type UPV2Session } from '@/services/upv2.service'
 
@@ -53,10 +53,16 @@ async function doRestore(): Promise<void> {
         await signer.login(bunkerString, false)
         setSigner(signer as unknown as ISigner)
       }
-    } else if (method === 'pc55') {
-      const signer = new PC55Signer()
-      await signer.init()
-      setSigner(signer as unknown as ISigner)
+    } else if (method === 'lrs') {
+      // Find the pinned signer (last-known port, then a rescan) and reconnect
+      // with the stored client key — no fresh approval. Null means it's offline;
+      // leave the session marker so signing recovers when it returns.
+      const conn = await reconnectLocalSigner()
+      if (conn) setSigner(conn.signer as unknown as ISigner)
+    } else if ((method as string) === 'pc55') {
+      // Legacy local-signer sessions (pre-NIP-LRS) can't be restored; drop them
+      // so the user re-pairs through the new discovery flow.
+      useAuthStore.getState().logout()
     } else if (method === 'upv2') {
       const session = await secureGet<UPV2Session>(SECURE_KEYS.UPV2_SESSION)
       if (session && session.signerPubkey === pubkey && session.expiresAt > Date.now()) {

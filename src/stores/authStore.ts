@@ -5,9 +5,10 @@
 import { create } from 'zustand'
 import { StorageKey, SECURE_KEYS } from '@/lib/constants'
 import { secureRemove } from '@/lib/storage/secureStore'
+import { clearLrsPin } from '@/lib/auth/lrs'
 import upv2Service from '@/services/upv2.service'
 
-export type AuthMethod = 'nip07' | 'nip46' | 'pc55' | 'upv2' | null
+export type AuthMethod = 'nip07' | 'nip46' | 'lrs' | 'upv2' | null
 
 export interface ISigner {
   getPublicKey(): Promise<string>
@@ -59,7 +60,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.removeItem(StorageKey.AUTH_METHOD)
     localStorage.removeItem(StorageKey.BUNKER_KEY)
     localStorage.removeItem(StorageKey.BUNKER_STRING)
-    localStorage.removeItem(StorageKey.PC55_CLIENT_KEY)
+    // Forget the active local-signer session, but keep the per-signer client-key
+    // map (StorageKey.LRS_CLIENT_KEYS): re-logging in reuses the key the signer
+    // already approved, so it resumes silently instead of piling up a duplicate
+    // connection and re-prompting.
+    clearLrsPin()
     set({
       isAuthenticated: false,
       pubkey: null,
@@ -92,7 +97,7 @@ function accountMismatchError(expected: string, active: string): Error {
 
 // Helper: sign an event using the current signer.
 //
-// Remote signers (browser extensions, NIP-46 bunkers, PC55) can switch the
+// Remote signers (browser extensions, NIP-46 bunkers, local relay signers) can switch the
 // active account out from under us. We pin signing to the account you logged in
 // with: before signing we check the signer's active pubkey (a silent read, no
 // approval prompt) and refuse early if it differs — so the wrong account is

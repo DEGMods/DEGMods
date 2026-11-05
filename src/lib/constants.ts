@@ -25,7 +25,8 @@ export const StorageKey = {
   AUTH_METHOD: 'deg-mods:auth-method',
   BUNKER_KEY: 'deg-mods:bunker-key',
   BUNKER_STRING: 'deg-mods:bunker-string',
-  PC55_CLIENT_KEY: 'deg-mods:pc55-client-key',
+  LRS_CLIENT_KEYS: 'deg-mods:lrs-client-keys', // { [transportPubkey]: clientSecretHex } — kept across logout
+  LRS_PIN: 'deg-mods:lrs-pin', // { transportPubkey, accountPubkey, lastPort }
   CLIENT_RELAYS: 'deg-mods:client-relays',
   CLIENT_BLOSSOMS: 'deg-mods:client-blossoms',
   USER_RELAYS: 'deg-mods:user-relays',

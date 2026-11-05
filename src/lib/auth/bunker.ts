@@ -35,9 +35,21 @@ export class BunkerSigner {
    * Login with a bunker:// URL.
    * @param bunker - bunker:// URL string
    * @param isInitialConnection - whether to send connect handshake
+   * @param opts.metadata - app metadata `{name, url, image}` to label the
+   *   connection in the signer's UI. There's no `nostrconnect://` URI on the
+   *   bunker/discovery path, so the `connect` request is the only place to send
+   *   it — appended as an extra param (nostr-tools' `connect()` has fixed params,
+   *   so we call `sendRequest` directly). First connect only; a reconnect keeps
+   *   the name the signer stored.
+   * @param opts.connectTimeoutMs - override the handshake timeout (a local signer
+   *   that waits on in-app approval needs a longer one).
    * @returns The user's Nostr pubkey
    */
-  async login(bunker: string, isInitialConnection = true): Promise<string> {
+  async login(
+    bunker: string,
+    isInitialConnection = true,
+    opts?: { metadata?: Record<string, unknown>; connectTimeoutMs?: number },
+  ): Promise<string> {
     const bunkerPointer = await parseBunkerInput(bunker)
     if (!bunkerPointer) {
       throw new Error('Invalid bunker URL')
@@ -50,9 +62,20 @@ export class BunkerSigner {
     })
 
     if (isInitialConnection) {
+      const connectTimeout = opts?.connectTimeoutMs ?? CONNECT_TIMEOUT_MS
+      // With metadata, send `connect` by hand so the app name rides along; the
+      // signer locates it by scanning the params for a JSON object with a name,
+      // so its position past [pubkey, secret] doesn't matter.
+      const handshake = opts?.metadata
+        ? this.signer.sendRequest('connect', [
+            bunkerPointer.pubkey,
+            bunkerPointer.secret ?? '',
+            JSON.stringify(opts.metadata),
+          ]).then(() => undefined)
+        : this.signer.connect()
       await withTimeout(
-        this.signer.connect(),
-        CONNECT_TIMEOUT_MS,
+        handshake,
+        connectTimeout,
         'Signer did not respond — make sure it is online and approve the connection request',
       )
     }

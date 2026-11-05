@@ -9,7 +9,10 @@ export {
   secureStore, secureRetrieve, secureDelete,
   type StoredAccount, type StoredSeed,
 } from './secure-storage'
-export { discover, PC55Signer, type DiscoverResult } from './pc55'
+export {
+  scanForSigners, connectLocalSigner, reconnectLocalSigner, clearLrsPin, lrsFingerprint,
+  type LocalSigner, type LrsConnection,
+} from './lrs'
 export { BunkerSigner } from './bunker'
 export { NostrConnectSigner, generateNostrConnectDetails } from './nostr-connect'
 export { Nip07Signer, hasNip07Extension } from './nip07'
