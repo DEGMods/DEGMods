@@ -34,10 +34,12 @@ const PROBE_TIMEOUT_MS = 1200
 const PROBE_RETRIES = 2
 const SCAN_ROUNDS = 3
 
-// First connect blocks on the user approving it in the signer's own window —
-// there's no pairing secret and no web auth-URL redirect on the scan path — so
-// the handshake gets a generous window, not the remote-bunker default.
-const LRS_CONNECT_TIMEOUT_MS = 120_000
+// Per-request timeout for the local signer (nostr-tools arms one on every
+// request; default 30s). First connect blocks on the user approving it in the
+// signer's own window — there's no pairing secret and no web auth-URL redirect on
+// the scan path — so it needs a generous window. Loopback requests return in
+// milliseconds, so this long ceiling only ever bounds a genuinely dead signer.
+const LRS_REQUEST_TIMEOUT_MS = 120_000
 
 const HEX64 = /^[0-9a-f]{64}$/i
 
@@ -217,7 +219,7 @@ export async function connectLocalSigner(info: LocalSigner): Promise<LrsConnecti
   const signer = new BunkerSigner(clientKey)
   const pubkey = await signer.login(bunkerUrlFor(info), true, {
     metadata: appMetadata(),
-    connectTimeoutMs: LRS_CONNECT_TIMEOUT_MS,
+    timeout: LRS_REQUEST_TIMEOUT_MS,
   })
   savePin({ transportPubkey: info.transportPubkey, accountPubkey: pubkey, lastPort: info.port })
   return { signer, pubkey }
@@ -249,8 +251,9 @@ export async function reconnectLocalSigner(): Promise<LrsConnection | null> {
   const clientKey = getOrCreateClientKey(pin.transportPubkey)
   const signer = new BunkerSigner(clientKey)
   // Not an initial connection: the stored client key is already approved, so no
-  // metadata and no fresh handshake prompt.
-  const pubkey = await signer.login(bunkerUrlFor(info), false)
+  // metadata and no fresh handshake prompt. Keep the long request timeout in case
+  // the signer no longer recognizes the key and re-prompts for approval.
+  const pubkey = await signer.login(bunkerUrlFor(info), false, { timeout: LRS_REQUEST_TIMEOUT_MS })
   if (pubkey !== pin.accountPubkey) {
     // The signer answered as a different account than we logged in with; keep the
     // connection but let the caller's account-mismatch guard handle it.

@@ -7,20 +7,8 @@
  */
 
 import { generateSecretKey, getPublicKey } from 'nostr-tools'
-import { BunkerSigner as NBunkerSigner, parseBunkerInput } from 'nostr-tools/nip46'
+import { BunkerSigner as NBunkerSigner, parseBunkerInput, type ClientMetadata } from 'nostr-tools/nip46'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
-
-// Cap the initial handshake so an unreachable relay or an offline/unapproved
-// signer surfaces an error instead of spinning "Connecting…" forever.
-const CONNECT_TIMEOUT_MS = 30_000
-const PUBKEY_TIMEOUT_MS = 15_000
-
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
-  ])
-}
 
 export class BunkerSigner {
   signer: NBunkerSigner | null = null
@@ -34,21 +22,23 @@ export class BunkerSigner {
   /**
    * Login with a bunker:// URL.
    * @param bunker - bunker:// URL string
-   * @param isInitialConnection - whether to send connect handshake
+   * @param isInitialConnection - whether to send the connect handshake
    * @param opts.metadata - app metadata `{name, url, image}` to label the
-   *   connection in the signer's UI. There's no `nostrconnect://` URI on the
-   *   bunker/discovery path, so the `connect` request is the only place to send
-   *   it — appended as an extra param (nostr-tools' `connect()` has fixed params,
-   *   so we call `sendRequest` directly). First connect only; a reconnect keeps
-   *   the name the signer stored.
-   * @param opts.connectTimeoutMs - override the handshake timeout (a local signer
-   *   that waits on in-app approval needs a longer one).
+   *   connection in the signer's UI. nostr-tools 2.26's `connect()` takes this
+   *   natively (sent only on this first connect; a reconnect keeps the name the
+   *   signer already stored).
+   * @param opts.timeout - per-request timeout in ms. nostr-tools arms one on every
+   *   request (default 30s); an unreachable relay or an unresponsive signer now
+   *   rejects instead of hanging. The local-signer path passes a longer value
+   *   because its first connect waits on the user approving in the signer's own
+   *   window — and a loopback signer's routine requests return in milliseconds, so
+   *   the long ceiling only ever bounds a genuinely dead signer.
    * @returns The user's Nostr pubkey
    */
   async login(
     bunker: string,
     isInitialConnection = true,
-    opts?: { metadata?: Record<string, unknown>; connectTimeoutMs?: number },
+    opts?: { metadata?: ClientMetadata; timeout?: number },
   ): Promise<string> {
     const bunkerPointer = await parseBunkerInput(bunker)
     if (!bunkerPointer) {
@@ -59,32 +49,24 @@ export class BunkerSigner {
       onauth: (url) => {
         window.open(url, '_blank')
       },
+      timeout: opts?.timeout, // undefined → nostr-tools' 30s default
     })
 
     if (isInitialConnection) {
-      const connectTimeout = opts?.connectTimeoutMs ?? CONNECT_TIMEOUT_MS
-      // With metadata, send `connect` by hand so the app name rides along; the
-      // signer locates it by scanning the params for a JSON object with a name,
-      // so its position past [pubkey, secret] doesn't matter.
-      const handshake = opts?.metadata
-        ? this.signer.sendRequest('connect', [
-            bunkerPointer.pubkey,
-            bunkerPointer.secret ?? '',
-            JSON.stringify(opts.metadata),
-          ]).then(() => undefined)
-        : this.signer.connect()
-      await withTimeout(
-        handshake,
-        connectTimeout,
-        'Signer did not respond — make sure it is online and approve the connection request',
-      )
+      try {
+        await this.signer.connect(opts?.metadata)
+      } catch (err) {
+        // Turn nostr-tools' raw per-request timeout message into the actionable
+        // one the UI expects.
+        const msg = err instanceof Error ? err.message : String(err)
+        if (/timeout/i.test(msg)) {
+          throw new Error('Signer did not respond — make sure it is online and approve the connection request')
+        }
+        throw err
+      }
     }
 
-    this.pubkey = await withTimeout(
-      this.signer.getPublicKey(),
-      PUBKEY_TIMEOUT_MS,
-      'Signer connected but did not return your public key in time',
-    )
+    this.pubkey = await this.signer.getPublicKey()
     return this.pubkey
   }
 
