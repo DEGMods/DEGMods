@@ -23,8 +23,9 @@ export const SOCIAL_UPLOAD_ACCEPT = `${IMAGE_UPLOAD_ACCEPT},.mp4,.webm,.mov,.m4v
 export const StorageKey = {
   CURRENT_ACCOUNT: 'deg-mods:current-account',
   AUTH_METHOD: 'deg-mods:auth-method',
-  BUNKER_KEY: 'deg-mods:bunker-key',
+  BUNKER_KEY: 'deg-mods:bunker-key', // active session's client key (for restore)
   BUNKER_STRING: 'deg-mods:bunker-string',
+  BUNKER_CLIENT_KEYS: 'deg-mods:bunker-client-keys', // { [signerPubkey]: clientSecretHex } — kept across logout
   LRS_CLIENT_KEYS: 'deg-mods:lrs-client-keys', // { [transportPubkey]: clientSecretHex } — kept across logout
   LRS_PIN: 'deg-mods:lrs-pin', // { transportPubkey, accountPubkey, lastPort }
   CLIENT_RELAYS: 'deg-mods:client-relays',

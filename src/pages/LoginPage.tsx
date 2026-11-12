@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import { StorageKey, SECURE_KEYS } from '@/lib/constants'
+import { StorageKey, SECURE_KEYS, CLIENT_NAME } from '@/lib/constants'
 import { secureSet } from '@/lib/storage/secureStore'
 import {
   Nip07Signer, hasNip07Extension,
-  BunkerSigner,
+  BunkerSigner, getOrCreateBunkerClientKey,
   NostrConnectSigner, generateNostrConnectDetails,
   scanForSigners, connectLocalSigner, lrsFingerprint,
   type LocalSigner,
@@ -119,8 +119,14 @@ export function LoginPage({ onClose }: { onClose?: () => void } = {}) {
     }
     setLoading('bunker')
     try {
-      const signer = new BunkerSigner()
-      const pubkey = await signer.login(bunkerUrl.trim())
+      // Reuse the saved client key for this signer (kept across logout) so the
+      // signer resumes the same connection instead of registering a duplicate and
+      // re-prompting. A stable app name is a secondary display/dedup hint.
+      const clientKey = await getOrCreateBunkerClientKey(bunkerUrl.trim())
+      const signer = new BunkerSigner(clientKey)
+      const pubkey = await signer.login(bunkerUrl.trim(), true, {
+        metadata: { name: CLIENT_NAME, url: window.location.origin },
+      })
       localStorage.setItem(StorageKey.BUNKER_KEY, signer.getClientSecretKey())
       // store bunker URL for session restore
       localStorage.setItem(StorageKey.BUNKER_STRING, bunkerUrl.trim())

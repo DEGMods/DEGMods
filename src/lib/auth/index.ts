@@ -13,7 +13,7 @@ export {
   scanForSigners, connectLocalSigner, reconnectLocalSigner, clearLrsPin, lrsFingerprint,
   type LocalSigner, type LrsConnection,
 } from './lrs'
-export { BunkerSigner } from './bunker'
+export { BunkerSigner, getOrCreateBunkerClientKey } from './bunker'
 export { NostrConnectSigner, generateNostrConnectDetails } from './nostr-connect'
 export { Nip07Signer, hasNip07Extension } from './nip07'
 export {

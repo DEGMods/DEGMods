@@ -9,6 +9,47 @@
 import { generateSecretKey, getPublicKey } from 'nostr-tools'
 import { BunkerSigner as NBunkerSigner, parseBunkerInput, type ClientMetadata } from 'nostr-tools/nip46'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
+import { StorageKey } from '@/lib/constants'
+
+const HEX64 = /^[0-9a-f]{64}$/i
+
+/**
+ * One client key per remote signer, keyed by the signer pubkey the bunker URL
+ * addresses, in storage that SURVIVES logout.
+ *
+ * In NIP-46 a connection and its approval policy are keyed by the CLIENT pubkey,
+ * not by the bunker string (which only carries the signer's pubkey/relays/secret).
+ * So minting a fresh client key each login makes the signer see a brand-new client
+ * every time — a duplicate connection entry and a fresh approval prompt — even for
+ * the same account. Reusing the saved key lets the signer recognize the client and
+ * resume the same connection (no re-approval, no duplicate). The LRS path does the
+ * same, keyed by transport pubkey; this is the bunker:// equivalent.
+ */
+export async function getOrCreateBunkerClientKey(bunkerUrl: string): Promise<string> {
+  const bp = await parseBunkerInput(bunkerUrl)
+  if (!bp) throw new Error('Invalid bunker URL')
+
+  let map: Record<string, string> = {}
+  try {
+    const raw = localStorage.getItem(StorageKey.BUNKER_CLIENT_KEYS)
+    const parsed = raw ? JSON.parse(raw) : {}
+    if (parsed && typeof parsed === 'object') map = parsed as Record<string, string>
+  } catch {
+    /* ignore */
+  }
+
+  const existing = map[bp.pubkey]
+  if (existing && HEX64.test(existing)) return existing
+
+  const key = bytesToHex(generateSecretKey())
+  map[bp.pubkey] = key
+  try {
+    localStorage.setItem(StorageKey.BUNKER_CLIENT_KEYS, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+  return key
+}
 
 export class BunkerSigner {
   signer: NBunkerSigner | null = null
