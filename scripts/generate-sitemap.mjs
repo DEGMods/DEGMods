@@ -31,7 +31,6 @@
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SimplePool, useWebSocketImplementation } from 'nostr-tools/pool'
 import { nip19 } from 'nostr-tools'
 
 // Default relays come from the same file the app uses, so they can't drift.
@@ -39,18 +38,69 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_RELAYS = JSON.parse(readFileSync(join(HERE, '../src/lib/relays.json'), 'utf8'))
   .filter((r) => r.read).map((r) => r.url)
 
-// nostr-tools needs a WebSocket impl in Node. Node 22 ships a global one; on
-// older Node fall back to the optional `ws` package.
+// A WebSocket impl for Node. Node 22 ships a global one; on older Node fall back
+// to the optional `ws` package.
+let WS
 if (typeof globalThis.WebSocket !== 'undefined') {
-  useWebSocketImplementation(globalThis.WebSocket)
+  WS = globalThis.WebSocket
 } else {
   try {
-    const { WebSocket } = await import('ws')
-    useWebSocketImplementation(WebSocket)
+    ({ WebSocket: WS } = await import('ws'))
   } catch {
     console.error('No WebSocket available — use Node ≥22 or `npm i -D ws`.')
     process.exit(1)
   }
+}
+
+// A minimal relay query, deliberately NOT nostr-tools' SimplePool.
+//
+// nostr-tools' pool (2.25+) calls ws.close() from inside its own connect-timeout
+// and onerror handlers, which in Node is unsafe: undici's WebSocket re-dispatches
+// the error event on close() → onerror → close() → "Maximum call stack size
+// exceeded", and the `ws` package throws an unhandled "closed before established"
+// error. Both crash this build step whenever a relay connection fails (which it
+// routinely does in CI). This fetch owns its socket lifecycle instead: a single
+// idempotent `done()` closes once and never re-enters, so a failing socket just
+// resolves empty.
+function queryRelay(url, filter, timeoutMs) {
+  return new Promise((resolve) => {
+    const events = []
+    let settled = false
+    let ws
+    const done = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try { ws?.close() } catch { /* already closing/closed */ }
+      resolve(events)
+    }
+    const timer = setTimeout(done, timeoutMs)
+    try {
+      ws = new WS(url)
+    } catch {
+      done()
+      return
+    }
+    const subId = 'sm-' + Math.random().toString(36).slice(2, 10)
+    ws.onopen = () => { try { ws.send(JSON.stringify(['REQ', subId, filter])) } catch { done() } }
+    ws.onmessage = (msg) => {
+      let data
+      try { data = JSON.parse(typeof msg.data === 'string' ? msg.data : msg.data.toString()) } catch { return }
+      if (!Array.isArray(data)) return
+      if (data[0] === 'EVENT' && data[1] === subId && data[2]) events.push(data[2])
+      else if (data[0] === 'EOSE' && data[1] === subId) done()
+    }
+    ws.onerror = () => done()
+    ws.onclose = () => done()
+  })
+}
+
+/** Fetch a filter from all relays in parallel, deduped by event id. */
+async function querySync(relays, filter, timeoutMs) {
+  const perRelay = await Promise.all(relays.map((r) => queryRelay(r, filter, timeoutMs)))
+  const byId = new Map()
+  for (const evs of perRelay) for (const ev of evs) if (ev?.id && !byId.has(ev.id)) byId.set(ev.id, ev)
+  return [...byId.values()]
 }
 
 const SITE_URL = (process.env.SITE_URL || 'https://degmods.com').replace(/\/+$/, '')
@@ -109,12 +159,12 @@ function countLeadingZeroBits(hex) {
  * stable original-publication tag) as the history anchor — created_at is reset
  * on edit by some clients, so it's only trustworthy for <lastmod> (freshness).
  */
-async function fetchKind(pool, kind) {
+async function fetchKind(kind) {
   const byCoord = new Map() // coord -> { created_at, published_at, pubkey, identifier }
   let until = Math.floor(Date.now() / 1000)
 
   while (byCoord.size < MAX_PER_KIND) {
-    const events = await pool.querySync(RELAYS, { kinds: [kind], until, limit: PAGE }, { maxWait: QUERY_TIMEOUT })
+    const events = await querySync(RELAYS, { kinds: [kind], until, limit: PAGE }, QUERY_TIMEOUT)
     if (!events.length) break
 
     let oldest = until
@@ -150,10 +200,10 @@ async function fetchKind(pool, kind) {
 }
 
 /** Best-effort: recent kind-5 deletions referencing addressable coordinates. */
-async function fetchDeletedCoords(pool) {
+async function fetchDeletedCoords() {
   const deleted = new Set()
   try {
-    const events = await pool.querySync(RELAYS, { kinds: [5], limit: PAGE }, { maxWait: QUERY_TIMEOUT })
+    const events = await querySync(RELAYS, { kinds: [5], limit: PAGE }, QUERY_TIMEOUT)
     for (const ev of events) {
       for (const t of ev.tags) if (t[0] === 'a' && t[1]) deleted.add(t[1])
     }
@@ -184,18 +234,16 @@ async function main() {
     return
   }
 
-  const pool = new SimplePool()
-
   // Sequential, not Promise.all. Each walk paginates against the same 15
   // relays, and running them together made slow relays miss the per-query
   // deadline — the jam walk came back with 1 of 3 events, so a live jam was
   // silently left out of the sitemap. Partial results are the one failure this
   // script must not have: a missing URL looks identical to a deleted one.
   // Build time is irrelevant here; it runs on a 6-hourly cron.
-  const mods = await fetchKind(pool, MOD_KIND)
-  const blogs = await fetchKind(pool, BLOG_KIND)
-  const jams = await fetchKind(pool, JAM_KIND)
-  const deleted = await fetchDeletedCoords(pool)
+  const mods = await fetchKind(MOD_KIND)
+  const blogs = await fetchKind(BLOG_KIND)
+  const jams = await fetchKind(JAM_KIND)
+  const deleted = await fetchDeletedCoords()
 
   /** Coordinate map → sitemap url entries. */
   const toEntries = (map, kind) => {
@@ -245,7 +293,6 @@ async function main() {
   // robots.txt with the sitemap pointer.
   writeFileSync(join(OUT_DIR, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`)
 
-  pool.close(RELAYS)
   // Counted after the listable filter, so the numbers match what was written
   // rather than how many coordinates were seen.
   const listable = (map) => [...map.values()].filter(i => i.listable).length
@@ -254,9 +301,9 @@ async function main() {
 
 // Exit explicitly instead of letting the process idle out. All output is written
 // synchronously (writeFileSync), so once main() resolves the sitemap is on disk;
-// what keeps the event loop alive is lingering relay sockets — a relay that spams
-// `keepalive` NOTICEs (e.g. relay.poster.place) isn't drained by pool.close(), so
-// without this the GitHub Actions step hangs until the job timeout.
+// what keeps the event loop alive is any relay socket still settling (each query
+// closes its own, but a straggler or pending timer can linger), so this makes the
+// GitHub Actions step end promptly instead of hanging until the job timeout.
 main()
   .then(() => process.exit(0))
   .catch(err => { console.error('sitemap generation failed:', err); process.exit(1) })
