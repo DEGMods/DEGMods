@@ -90,7 +90,7 @@ export function MarketResearchPage() {
           <p className="mt-0.5 flex items-center gap-2 text-lg font-semibold text-purple-400">
             <BarChart3 size={18} /> Most wanted mods
           </p>
-          <p className="mt-1 max-w-prose text-sm text-neutral-400">
+          <p className="mt-1 text-sm text-neutral-400">
             Mods people want for {game}, based on observed market reactions and posts.
           </p>
         </div>
