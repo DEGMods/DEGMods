@@ -82,7 +82,7 @@ export function MarketResearchPage() {
           <img
             src={boxart}
             alt={game}
-            className="h-20 w-20 shrink-0 rounded-lg border border-[#262626] object-cover"
+            className="aspect-[2/3] w-20 shrink-0 rounded-lg border border-[#262626] object-cover"
           />
         )}
         <div className="min-w-0">
