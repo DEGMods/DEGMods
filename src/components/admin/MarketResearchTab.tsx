@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Plus, Save, X, Search, ExternalLink } from 'lucide-react'
+import { Loader2, Plus, Save, X, Search, ExternalLink, GripVertical } from 'lucide-react'
 import type { Filter } from 'nostr-tools'
 import { ADMIN_PUBKEY, KINDS } from '@/lib/constants'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
@@ -12,6 +12,7 @@ import {
   MR_TITLE_MAX, MR_DESC_MAX, MR_NOTE_MAX, MR_MAX_ENTRIES,
   type MarketResearchEntry,
 } from '@/lib/nostr/events'
+import { useDragReorder } from '@/hooks/useDragReorder'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -68,6 +69,9 @@ export function MarketResearchTab() {
   const update = (id: string, patch: Partial<EditEntry>) =>
     setEntries((p) => p.map((e) => (e.id === id ? { ...e, ...patch } : e)))
   const remove = (id: string) => setEntries((p) => p.filter((e) => e.id !== id))
+  // Reorder marks dirty automatically (serialize changes); the handle is the drag
+  // source and the card the drop target, so the text inputs stay editable.
+  const { dragIndex, itemProps } = useDragReorder(setEntries, () => {})
   const add = () => setEntries((p) => (p.length >= MR_MAX_ENTRIES ? p : [...p, { id: crypto.randomUUID(), title: '', description: '', note: '' }]))
 
   const publish = async () => {
@@ -169,10 +173,28 @@ export function MarketResearchTab() {
 
           {entries.length === 0 && <p className="py-6 text-center text-sm text-neutral-500">No mods listed yet.</p>}
 
-          {entries.map((it, idx) => (
-            <div key={it.id} className="space-y-2 rounded-lg border border-[#262626] bg-[#1c1c1c] p-4">
+          {entries.map((it, idx) => {
+            const dp = itemProps(idx)
+            return (
+            <div
+              key={it.id}
+              onDragOver={dp.onDragOver}
+              onDrop={dp.onDrop}
+              className={cn('space-y-2 rounded-lg border border-[#262626] bg-[#1c1c1c] p-4', dragIndex === idx && 'opacity-40')}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-neutral-300">Mod #{idx + 1}</span>
+                <div className="flex items-center gap-2">
+                  <span
+                    draggable={dp.draggable}
+                    onDragStart={dp.onDragStart}
+                    onDragEnd={dp.onDragEnd}
+                    className="cursor-grab text-neutral-600 hover:text-neutral-400"
+                    aria-label="Drag to reorder"
+                  >
+                    <GripVertical size={14} />
+                  </span>
+                  <span className="text-xs font-semibold text-neutral-300">Mod #{idx + 1}</span>
+                </div>
                 <button onClick={() => remove(it.id)} className="text-neutral-500 hover:text-red-400" aria-label="Remove"><X size={16} /></button>
               </div>
               <Input
@@ -202,7 +224,8 @@ export function MarketResearchTab() {
               />
               <Counter value={it.note ?? ''} max={MR_NOTE_MAX} />
             </div>
-          ))}
+            )
+          })}
 
           <Button onClick={publish} disabled={!dirty || publishing} className="w-full">
             {publishing ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />}
