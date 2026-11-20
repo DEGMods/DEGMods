@@ -854,6 +854,7 @@ export const MARKET_RESEARCH_TAG = 'q'
 export const MR_TITLE_MAX = 100
 export const MR_DESC_MAX = 500
 export const MR_NOTE_MAX = 300
+export const MR_IMAGE_MAX = 200
 export const MR_MAX_ENTRIES = 50
 
 export interface MarketResearchEntry {
@@ -861,6 +862,8 @@ export interface MarketResearchEntry {
   description: string
   /** Optional: why this mod is wanted (the reason or issue it addresses). */
   note?: string
+  /** Optional featured image URL. */
+  image?: string
 }
 
 export function buildMarketResearchEvent(
@@ -870,10 +873,12 @@ export function buildMarketResearchEvent(
 ): UnsignedEvent {
   const clean = entries.slice(0, MR_MAX_ENTRIES).map((e) => {
     const note = e.note?.trim().slice(0, MR_NOTE_MAX)
+    const image = e.image?.trim().slice(0, MR_IMAGE_MAX)
     return {
       title: e.title.trim().slice(0, MR_TITLE_MAX),
       description: e.description.trim().slice(0, MR_DESC_MAX),
       ...(note ? { note } : {}),
+      ...(image ? { image } : {}),
     }
   })
   return {
@@ -894,6 +899,7 @@ export function extractMarketResearch(event: NostrEvent): MarketResearchEntry[] 
         title: typeof i?.title === 'string' ? i.title : '',
         description: typeof i?.description === 'string' ? i.description : '',
         note: typeof i?.note === 'string' && i.note.trim() ? i.note : undefined,
+        image: typeof i?.image === 'string' && i.image.trim() ? i.image : undefined,
       }))
       .filter((e) => e.title.trim() || e.description.trim())
       .slice(0, MR_MAX_ENTRIES)

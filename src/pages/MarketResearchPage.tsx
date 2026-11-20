@@ -8,6 +8,7 @@ import { extractMarketResearch, MARKET_RESEARCH_TAG, type MarketResearchEntry } 
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useGamesDbStore } from '@/stores/gamesDbStore'
 import { useSeoMeta } from '@/hooks/useSeoMeta'
+import { SkeletonImage } from '@/components/shared/SkeletonImage'
 
 /**
  * /game/<game>/mr — "Most wanted mods" for a game: an admin-curated list of mods
@@ -107,19 +108,31 @@ export function MarketResearchPage() {
       ) : (
         <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {entries.map((e, i) => (
-            <li key={i} className="flex h-full flex-col rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
-              <div className="flex items-baseline gap-2.5">
-                <span className="font-mono text-xs text-neutral-600">{String(i + 1).padStart(2, '0')}</span>
-                <h2 className="min-w-0 text-base font-semibold text-neutral-100">{e.title}</h2>
+            <li key={i} className="flex h-full flex-col overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c]">
+              {/* Featured image — same aspect + fallback as mod cards. */}
+              <div className="relative aspect-video w-full overflow-hidden bg-[#212121]">
+                {e.image ? (
+                  <SkeletonImage src={e.image} alt={e.title} className="absolute inset-0 h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <span className="text-sm text-neutral-600">No image</span>
+                  </div>
+                )}
               </div>
-              {e.description && (
-                <p className="mt-1.5 mb-2.5 whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{e.description}</p>
-              )}
-              {e.note && (
-                <p className="mt-auto rounded-r-lg border-l-2 border-purple-500/40 bg-purple-500/5 px-3 py-2 text-xs leading-relaxed text-neutral-400">
-                  <span className="font-medium text-purple-400">Why: </span>{e.note}
-                </p>
-              )}
+              <div className="flex flex-1 flex-col p-4">
+                <div className="flex items-baseline gap-2.5">
+                  <span className="font-mono text-xs text-neutral-600">{String(i + 1).padStart(2, '0')}</span>
+                  <h2 className="min-w-0 text-base font-semibold text-neutral-100">{e.title}</h2>
+                </div>
+                {e.description && (
+                  <p className="mt-1.5 mb-2.5 whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{e.description}</p>
+                )}
+                {e.note && (
+                  <p className="mt-auto rounded-r-lg border-l-2 border-purple-500/40 bg-purple-500/5 px-3 py-2 text-xs leading-relaxed text-neutral-400">
+                    <span className="font-medium text-purple-400">Why: </span>{e.note}
+                  </p>
+                )}
+              </div>
             </li>
           ))}
         </ol>

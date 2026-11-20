@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useGamesDbStore } from '@/stores/gamesDbStore'
 import {
   buildMarketResearchEvent, extractMarketResearch, MARKET_RESEARCH_TAG,
-  MR_TITLE_MAX, MR_DESC_MAX, MR_NOTE_MAX, MR_MAX_ENTRIES,
+  MR_TITLE_MAX, MR_DESC_MAX, MR_NOTE_MAX, MR_IMAGE_MAX, MR_MAX_ENTRIES,
   type MarketResearchEntry,
 } from '@/lib/nostr/events'
 import { useDragReorder } from '@/hooks/useDragReorder'
@@ -22,7 +22,7 @@ interface EditEntry extends MarketResearchEntry { id: string }
 
 const inputClass = 'bg-[#212121] border-[#262626] text-white text-sm'
 const serialize = (list: EditEntry[]) =>
-  JSON.stringify(list.map((e) => ({ title: e.title, description: e.description, note: e.note ?? '' })))
+  JSON.stringify(list.map((e) => ({ title: e.title, description: e.description, note: e.note ?? '', image: e.image ?? '' })))
 
 /**
  * Admin editor for the per-game "Most wanted mods" list rendered at
@@ -72,13 +72,13 @@ export function MarketResearchTab() {
   // Reorder marks dirty automatically (serialize changes); the handle is the drag
   // source and the card the drop target, so the text inputs stay editable.
   const { dragIndex, itemProps } = useDragReorder(setEntries, () => {})
-  const add = () => setEntries((p) => (p.length >= MR_MAX_ENTRIES ? p : [...p, { id: crypto.randomUUID(), title: '', description: '', note: '' }]))
+  const add = () => setEntries((p) => (p.length >= MR_MAX_ENTRIES ? p : [...p, { id: crypto.randomUUID(), title: '', description: '', note: '', image: '' }]))
 
   const publish = async () => {
     if (!game) return
     setPublishing(true)
     try {
-      const clean: MarketResearchEntry[] = entries.map((e) => ({ title: e.title, description: e.description, note: e.note }))
+      const clean: MarketResearchEntry[] = entries.map((e) => ({ title: e.title, description: e.description, note: e.note, image: e.image }))
       const result = await signAndPublish(buildMarketResearchEvent(game, clean, dTag), (s) => {
         if (s === 'mining') toast.loading('Processing proof of work…', { id: 'mr' })
         if (s === 'publishing') toast.loading('Publishing…', { id: 'mr' })
@@ -205,6 +205,13 @@ export function MarketResearchTab() {
                 className={inputClass}
               />
               <Counter value={it.title} max={MR_TITLE_MAX} />
+              <Input
+                value={it.image ?? ''}
+                onChange={(e) => update(it.id, { image: e.target.value })}
+                placeholder="Featured image URL (optional)"
+                maxLength={MR_IMAGE_MAX}
+                className={inputClass}
+              />
               <Textarea
                 value={it.description}
                 onChange={(e) => update(it.id, { description: e.target.value })}
