@@ -65,13 +65,14 @@ import {
   HardDrive, Radio, BarChart3, ScrollText, Tag, Repeat2, HandCoins, Hash,
 } from 'lucide-react'
 import { BlossomsTab } from './BlossomsTab'
+import { MarketResearchTab } from './MarketResearchTab'
 import { RelaysTab } from './RelaysTab'
 import { fetchEvents } from '@/lib/nostr/relay-pool'
 import type { BlogDetails } from '@/types/blog'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-type AdminTab = 'games-db' | 'featured' | 'announcements' | 'ads' | 'supporters' | 'faq' | 'tos' | 'guides' | 'suggestions' | 'moderation' | 'blossoms' | 'relays'
+type AdminTab = 'games-db' | 'featured' | 'announcements' | 'ads' | 'supporters' | 'faq' | 'tos' | 'guides' | 'suggestions' | 'moderation' | 'blossoms' | 'relays' | 'market-research'
 
 interface CsvFileEntry {
   hash: string
@@ -108,6 +109,7 @@ function truncateUrl(url: string, maxLen = 40): string {
 
 const adminTabs: { id: AdminTab; label: string; icon: typeof Database }[] = [
   { id: 'games-db', label: 'Games Database', icon: Database },
+  { id: 'market-research', label: 'Market Research', icon: BarChart3 },
   { id: 'featured', label: 'Featured Content', icon: Star },
   { id: 'announcements', label: 'Announcements', icon: Megaphone },
   { id: 'ads', label: 'Ads', icon: ImageIcon },
@@ -149,6 +151,7 @@ export default function AdminSettings() {
 
       {/* Tab content */}
       {activeTab === 'games-db' && <GamesDbTab />}
+      {activeTab === 'market-research' && <MarketResearchTab />}
       {activeTab === 'featured' && <FeaturedTab />}
       {activeTab === 'announcements' && <AnnouncementsTab />}
       {activeTab === 'ads' && <AdsTab />}

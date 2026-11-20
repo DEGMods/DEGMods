@@ -842,6 +842,66 @@ export function extractFaq(event: NostrEvent): FaqItem[] {
   }
 }
 
+// ─── Market Research / Most Wanted Mods (kind 30078) ────────────────
+//
+// One event per game, admin-authored. The `d` tag is a random uuid (so edits
+// replace by reusing it), and a single-letter `q` tag carries the game name so a
+// game's list is a one-filter lookup: {kinds:[30078], authors:[ADMIN], '#q':[game]}.
+// Rendered at /game/<game>/mr. Limits keep an event well under the 64 KB cap.
+
+/** The queryable one-letter tag whose value is the game name. */
+export const MARKET_RESEARCH_TAG = 'q'
+export const MR_TITLE_MAX = 100
+export const MR_DESC_MAX = 500
+export const MR_NOTE_MAX = 300
+export const MR_MAX_ENTRIES = 50
+
+export interface MarketResearchEntry {
+  title: string
+  description: string
+  /** Optional: why this mod is wanted (the reason or issue it addresses). */
+  note?: string
+}
+
+export function buildMarketResearchEvent(
+  game: string,
+  entries: MarketResearchEntry[],
+  dTag: string,
+): UnsignedEvent {
+  const clean = entries.slice(0, MR_MAX_ENTRIES).map((e) => {
+    const note = e.note?.trim().slice(0, MR_NOTE_MAX)
+    return {
+      title: e.title.trim().slice(0, MR_TITLE_MAX),
+      description: e.description.trim().slice(0, MR_DESC_MAX),
+      ...(note ? { note } : {}),
+    }
+  })
+  return {
+    kind: KINDS.GAME_DB,
+    content: JSON.stringify(clean),
+    tags: [['d', dTag], [MARKET_RESEARCH_TAG, game]],
+    created_at: Math.floor(Date.now() / 1000),
+    pubkey: '',
+  }
+}
+
+export function extractMarketResearch(event: NostrEvent): MarketResearchEntry[] {
+  try {
+    const arr = JSON.parse(event.content)
+    if (!Array.isArray(arr)) return []
+    return arr
+      .map((i): MarketResearchEntry => ({
+        title: typeof i?.title === 'string' ? i.title : '',
+        description: typeof i?.description === 'string' ? i.description : '',
+        note: typeof i?.note === 'string' && i.note.trim() ? i.note : undefined,
+      }))
+      .filter((e) => e.title.trim() || e.description.trim())
+      .slice(0, MR_MAX_ENTRIES)
+  } catch {
+    return []
+  }
+}
+
 // ─── Terms of Use (kind 30078, d: terms-of-use) ─────────────────────
 
 export const TOS_DTAG = 'terms-of-use'

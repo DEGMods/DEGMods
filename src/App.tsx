@@ -22,6 +22,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import ProfilePage from '@/pages/ProfilePage'
 import { GamesPage } from '@/pages/GamesPage'
 import { GamePage } from '@/pages/GamePage'
+import { MarketResearchPage } from '@/pages/MarketResearchPage'
 import { ModsPage } from '@/pages/ModsPage'
 import { ModJamsPage } from '@/pages/ModJamsPage'
 import { JamSubmitPage } from '@/pages/JamSubmitPage'
@@ -168,6 +169,7 @@ export default function App() {
           <Route path="/profile/:npub" element={<ProfilePage />} />
           <Route path="/games" element={<GamesPage />} />
           <Route path="/game/:name" element={<GamePage />} />
+          <Route path="/game/:name/mr" element={<MarketResearchPage />} />
           <Route path="/mods" element={<ModsPage />} />
           <Route path="/mod-jams" element={<ModJamsPage />} />
           <Route path="/submit-mod-jam" element={<JamSubmitPage />} />
