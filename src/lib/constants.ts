@@ -12,8 +12,12 @@ import relaysData from './relays.json'
 export const MOD_FILE_UPLOAD_LIMIT_MB = 500
 /** Accepted image upload formats. SVG is excluded — it can carry scripts (XSS). */
 export const IMAGE_UPLOAD_ACCEPT = '.jpg,.jpeg,.png,.webp,.gif,.avif'
-/** Accepted mod file upload formats. ZIP only — it's the one we can preview contents of (central directory). */
-export const MOD_FILE_UPLOAD_ACCEPT = '.zip'
+/**
+ * Accepted mod file upload formats. ZIP is still preferred — its central directory
+ * lets us cheaply list contents, and the node rejects encrypted zips. 7z is also
+ * accepted (the node recognises it by magic bytes) but is NOT encryption-checked.
+ */
+export const MOD_FILE_UPLOAD_ACCEPT = '.zip,.7z'
 /**
  * Accepted attachments on a social post: images plus short video/audio.
  * Same SVG exclusion as above — it can carry scripts.

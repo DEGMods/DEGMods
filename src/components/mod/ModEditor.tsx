@@ -864,7 +864,7 @@ export function ModEditor({
                 accept={MOD_FILE_UPLOAD_ACCEPT}
                 maxSizeMb={MOD_FILE_UPLOAD_LIMIT_MB}
                 label="Or upload file (mirrored to up to 3 servers)"
-                sublabel={`.ZIP only · max ${MOD_FILE_UPLOAD_LIMIT_MB} MB`}
+                sublabel={`.ZIP or .7z · max ${MOD_FILE_UPLOAD_LIMIT_MB} MB`}
                 onUploaded={(r) => updateDownload(i, { file: r.url, hash: r.hash, filename: r.filename })}
               />
 
