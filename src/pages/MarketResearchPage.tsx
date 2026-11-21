@@ -106,7 +106,7 @@ export function MarketResearchPage() {
           No most-wanted mods listed for {game} yet.
         </p>
       ) : (
-        <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {entries.map((e, i) => (
             <li key={i} className="flex h-full flex-col overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c]">
               {/* Featured image — same aspect + fallback as mod cards. */}
