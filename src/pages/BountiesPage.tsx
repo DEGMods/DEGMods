@@ -4,7 +4,7 @@ import type { Filter } from 'nostr-tools'
 import { Search, Plus, Gamepad2, CheckCircle2, CircleDashed, Gift, PackagePlus } from 'lucide-react'
 import { KINDS } from '@/lib/constants'
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
-import { constructBountyListFromEvents, type BountyDetails } from '@/lib/nostr/bounty'
+import { constructBountyListFromEvents, MOD_BOUNTY_TYPE, type BountyDetails } from '@/lib/nostr/bounty'
 import { applyBountyFilters } from '@/lib/nostr/filterBounties'
 import { useBountyFiltersStore } from '@/stores/bountyFiltersStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -51,7 +51,7 @@ export function BountiesPage() {
     useBountyFiltersStore.getState().applyExcludedTagsDefaults(moderationDefaults)
   }, [moderationDefaults])
 
-  const filter = useMemo<Filter>(() => ({ kinds: [KINDS.BOUNTY] }), [])
+  const filter = useMemo<Filter>(() => ({ kinds: [KINDS.BOUNTY], '#b': [MOD_BOUNTY_TYPE] }), [])
   const { events, loading, loadingMore, reachedEnd, loadMore } = useProgressiveEvents(filter, BATCH)
   const bounties = useMemo(() => constructBountyListFromEvents(events), [events])
 

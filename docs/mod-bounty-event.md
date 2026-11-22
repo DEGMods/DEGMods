@@ -4,6 +4,8 @@ A **mod bounty** is a public request for a mod that does not exist yet: someone 
 
 It is published as a **Nostr addressable replaceable event** with kind `31144`. Because it uses a `d` tag with a UUID v4 identifier, the author can update it in-place by re-publishing with the same `d` tag — the relay replaces the old version. That replaceability is what lets the author mark a winner after the fact.
 
+Kind `31144` is a **general-purpose bounty kind**: a [`b` (type) tag](#b--bounty-type) distinguishes what the bounty is for, so other Nostr clients can reuse the same kind for their own bounty boards. DEG Mods only writes and only lists `b=game-mod` bounties; everything below describes that type.
+
 The two kinds in the bounty family:
 
 | Kind | Name | Author | Purpose |
@@ -33,8 +35,9 @@ The two kinds in the bounty family:
     ["summary", "A cockpit/first-person camera for all vehicles, with a toggle."],
 
     ["g", "Grand Theft Auto VI"],
+    ["b", "game-mod"],
 
-    ["reward", "50,000 sats", "Lightning zap on release"],
+    ["reward", "$100", "PayPal on release"],
 
     ["t", "camera"],
     ["t", "vehicles"],
@@ -111,6 +114,17 @@ These behave as in the [mod event](./game-mod-event.md):
 - **Required:** **Yes** (exactly one).
 - **Why mandatory:** a bounty is intrinsically "a mod request *for a game*." The game scopes the bounty, drives the listing (`#g` is a relay-indexed single-letter tag), and is matched against a fulfilling mod's own `g` (see [Fulfilment](#fulfilment--winner-selection)).
 - Unlike jams (which allow 0..n games), a bounty has exactly one game.
+
+### `b` — Bounty type
+
+```json
+["b", "game-mod"]
+```
+
+- **Required:** Yes (exactly one).
+- **Why it exists:** kind `31144` is a **general-purpose bounty kind** - the `b` tag says what *kind* of thing is being requested, so other Nostr clients can reuse the same kind for their own bounty boards (`art`, `code`, `general`, ...). It's the direct analogue of the jam `j` (jam type) tag.
+- **Value:** DEG Mods writes and recognises only **`game-mod`** (a request for a game mod). It is single-letter and relay-indexed, so a client filters to its own type with `"#b": ["game-mod"]`.
+- **Matching is strict, allowlist-style** (like `isModJam`): DEG Mods lists a bounty only when `b === "game-mod"`. A bounty with a different `b`, or no `b` at all, is treated as "not mine" and ignored by the listing - so a generic bounty from another client never leaks into the mod site. (The `g` game tag is still required for a `game-mod` bounty; a different bounty type would define its own required fields.)
 
 ### `reward` — Offered Reward *(what + how)*
 
@@ -247,6 +261,7 @@ A third party cannot edit someone else's bounty, so an **additional** reward off
 | `image` | No | No | Image URL | Optional card cover |
 | `summary` | No | No | Text | Falls back to first line of `content` |
 | `g` | **Yes (exactly 1)** | No | Game name | The game the mod is wanted for |
+| `b` | **Yes (exactly 1)** | No | Bounty type | `game-mod` for DEG Mods; a general-purpose discriminator (relay-indexed), strict-matched like jam `j` |
 | `reward` | No | No | `what` + optional `how` | Descriptive only |
 | `t` | No | Yes | Keyword | Lowercase |
 | `content-warning` | No | No | Reason string | NIP-36 NSFW flag (toggle; value usually `nsfw`) |

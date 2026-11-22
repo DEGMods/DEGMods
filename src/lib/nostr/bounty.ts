@@ -18,6 +18,13 @@ export const BOUNTY_FULFILLMENT_LABEL = 'bounty-fulfillment'
 /** Bare `l` label on a third-party reward-pledge event (kind 31244). */
 export const BOUNTY_REWARD_LABEL = 'bounty-reward'
 
+// The bounty's `b` (type) tag. Kind 31144 is a general-purpose bounty kind; the
+// `b` tag says what the bounty is for. DEG Mods is a game-mod client, so it only
+// writes and only lists `b=game-mod` bounties - other clients can reuse the kind
+// for their own types (`art`, `code`, `general`, ...). Allowlisted on the one
+// value we handle, like isModJam, rather than enumerating the ones we don't.
+export const MOD_BOUNTY_TYPE = 'game-mod'
+
 export type BountyStatus = 'unfulfilled' | 'fulfilled'
 
 /** A bounty's offered reward: what it is, and (optionally) how it's delivered. */
@@ -40,6 +47,7 @@ export interface BountyDetails {
   summary: string
   content: string
   game: string // the single `g` - the game the mod is wanted for
+  bountyType: string // raw `b` tag value; DEG Mods only handles 'game-mod' (see isModBounty)
   tags: string[] // t
   contentWarning: string | null // NIP-36 reason, or null when not NSFW
   reward: BountyReward | null
@@ -85,6 +93,7 @@ export function buildBountyEvent(form: BountyFormState): UnsignedEvent {
     ['published_at', publishedAt.toString()],
     ['title', form.title],
     ['g', form.game],
+    ['b', MOD_BOUNTY_TYPE],
   ]
 
   if (form.featuredImageUrl.trim()) tags.push(['image', form.featuredImageUrl.trim()])
@@ -156,6 +165,7 @@ export function extractBounty(event: NostrEvent): BountyDetails | null {
     summary: get('summary'),
     content: event.content,
     game: get('g'),
+    bountyType: get('b'),
     tags: all('t').map((t) => t[1]).filter(Boolean),
     contentWarning,
     reward,
@@ -167,9 +177,15 @@ export function extractBounty(event: NostrEvent): BountyDetails | null {
   }
 }
 
+/** DEG Mods is a game-mod client: it only lists `b=game-mod` bounties. Mirrors isModJam. */
+export function isModBounty(b: Pick<BountyDetails, 'bountyType'>): boolean {
+  return b.bountyType === MOD_BOUNTY_TYPE
+}
+
 /**
  * Newest event per coordinate → BountyDetails (relays may return stale revisions).
- * Drops anything without a title or a game (a bounty must name its game).
+ * Drops anything without a title or a game, and anything that isn't a game-mod
+ * bounty (other clients may reuse kind 31144 for other bounty types).
  */
 export function constructBountyListFromEvents(events: NostrEvent[]): BountyDetails[] {
   const byCoord = new Map<string, NostrEvent>()
@@ -182,7 +198,7 @@ export function constructBountyListFromEvents(events: NostrEvent[]): BountyDetai
   }
   return [...byCoord.values()]
     .map(extractBounty)
-    .filter((b): b is BountyDetails => !!b && !!b.title && !!b.game)
+    .filter((b): b is BountyDetails => !!b && !!b.title && !!b.game && isModBounty(b))
 }
 
 // ─── Coordinate helpers ──────────────────────────────────────────────
