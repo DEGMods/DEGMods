@@ -41,6 +41,7 @@ export interface BountyDetails {
   naddr: string
   createdAt: number
   publishedAt: number
+  updatedAt: number | null // wall-clock time of the last edit (display only), or null if never edited
 
   title: string
   image: string
@@ -84,9 +85,13 @@ export interface BountyFormState {
 }
 
 export function buildBountyEvent(form: BountyFormState): UnsignedEvent {
-  const now = Math.floor(Date.now() / 1000)
-  const createdAt = form.isEdit && form.previousCreatedAt ? form.previousCreatedAt + 1 : now
-  const publishedAt = form.publishedAt ?? now
+  // `created_at` is a logical +1 counter per edit (never wall-clock, so it can't
+  // jump an edit to the top of "latest"); `published_at` is set once; `updated_at`
+  // is the real wall-clock time of an edit, for a "last edited" display only.
+  const wall = Math.floor(Date.now() / 1000)
+  const editing = !!form.isEdit && form.previousCreatedAt !== undefined
+  const createdAt = editing ? form.previousCreatedAt! + 1 : wall
+  const publishedAt = form.publishedAt ?? wall
 
   const tags: string[][] = [
     ['d', form.dTag],
@@ -108,6 +113,8 @@ export function buildBountyEvent(form: BountyFormState): UnsignedEvent {
   for (const t of form.tags.map((s) => s.trim()).filter(Boolean)) tags.push(['t', t.toLowerCase()])
 
   if (form.contentWarning) tags.push(['content-warning', form.contentWarningReason.trim() || 'nsfw'])
+
+  if (editing) tags.push(['updated_at', String(wall)])
 
   // Winner selection + derived status. The presence of the winner `a` tag is the
   // single source of truth; `v` is recomputed from it so the two can't drift.
@@ -160,6 +167,7 @@ export function extractBounty(event: NostrEvent): BountyDetails | null {
     naddr,
     createdAt: event.created_at,
     publishedAt: Number(get('published_at')) || event.created_at,
+    updatedAt: Number(get('updated_at')) || null,
     title: get('title'),
     image: get('image'),
     summary: get('summary'),

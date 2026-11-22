@@ -69,7 +69,7 @@ Once the requester picks a winner, the event is re-published with the fulfilment
 - **Type:** Unix timestamp (seconds)
 - **Required:** Yes (set automatically)
 - **On first publish:** Current Unix timestamp.
-- **On edit:** `previous_created_at + 1`. Like mods, blogs, and jams, this keeps an edited bounty from jumping to the top of "latest" feeds. Original ordering comes from `published_at`.
+- **On edit:** `previous_created_at + 1`. Like mods, blogs, and jams, this keeps an edited bounty from jumping to the top of "latest" feeds. It is a logical counter, **not** a usable "last edited" time - use `updated_at` for that. Original ordering comes from `published_at`.
 
 ---
 
@@ -92,6 +92,16 @@ Once the requester picks a winner, the event is re-published with the fulfilment
 
 - **Required:** Yes
 - **Value:** Unix timestamp string, set once on first publish, preserved on edits. Use for display/ordering (never changes, unlike `created_at`).
+
+### `updated_at` — Last-Edit Timestamp
+
+```json
+["updated_at", "1769040000"]
+```
+
+- **Required:** No (written only on edits).
+- **Value:** The real **wall-clock** unix time of the edit. Written whenever the bounty is re-published as an edit (including when the requester picks a winner); absent on a never-edited bounty.
+- **For display only** ("Edited <date>"). It is **not** relay-indexed and MUST NOT be used to select revisions - `created_at` (the +1 counter) remains the authority for which revision is newest. This mirrors the `updated_at` convention from NIP-PS (Permissionless Standards).
 
 ### `title` / `image` / `summary` / `t` / `content-warning`
 
@@ -257,6 +267,7 @@ A third party cannot edit someone else's bounty, so an **additional** reward off
 |---|---|---|---|---|
 | `d` | Yes | No | UUID v4 | Coordinate identifier |
 | `published_at` | Yes | No | Unix ts string | Set once |
+| `updated_at` | No | No | Unix ts string | Wall-clock time of an edit; display only, not indexed |
 | `title` | Yes | No | Text | |
 | `image` | No | No | Image URL | Optional card cover |
 | `summary` | No | No | Text | Falls back to first line of `content` |

@@ -286,6 +286,7 @@ export function BountyPage() {
           <section className="space-y-2">
             <h2 className="text-lg font-semibold text-neutral-200">Posted</h2>
             <p className="text-sm text-neutral-400">{fmt(bounty.publishedAt)}</p>
+            {bounty.updatedAt && <p className="text-xs text-neutral-500">Edited {fmt(bounty.updatedAt)}</p>}
             {bounty.client && <p className="text-xs text-neutral-500">on {bounty.client}</p>}
           </section>
 
