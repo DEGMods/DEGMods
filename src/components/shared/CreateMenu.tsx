@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Package, BookOpen, ChevronRight } from 'lucide-react'
+import { Package, BookOpen, ChevronRight, Target } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
@@ -17,6 +17,7 @@ const OPTIONS = [
   { to: '/submit-mod', icon: Package, title: 'Mod post', desc: 'Publish your mod for others to download' },
   { to: '/submit-blog', icon: BookOpen, title: 'Blog post', desc: 'Publish a blog post for your people to read' },
   { to: '/submit-mod-jam', icon: JamIcon, title: 'Mod jam', desc: 'Set up a Mod Jam event to entice creators' },
+  { to: '/submit-mod-bounty', icon: Target, title: 'Mod bounty', desc: 'Request a mod you want, with an optional reward' },
 ] as const
 
 export function CreateMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {

@@ -102,6 +102,8 @@ export const KINDS = {
   JAM: 31143, // mod/game jam event
   JAM_BALLOT: 31243, // one voter's scores for one jam entry
   JAM_RESULT: 31343, // creator's published tally (paged)
+  BOUNTY: 31144, // mod bounty / request event — see docs/mod-bounty-event.md
+  BOUNTY_REWARD: 31244, // third-party reward pledge on a bounty (later phase)
   GAME_DB: 30078, // NIP-78 app-specific data (d tag: games-db)
   PAYTO: 10133, // NIP-A3 payment targets (replaceable, one per author)
   MODERATION_TAG: 30985, // addressable tag overlay applied to someone else's post

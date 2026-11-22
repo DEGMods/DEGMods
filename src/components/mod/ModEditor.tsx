@@ -29,6 +29,7 @@ import {
   Boxes,
   RotateCcw,
   ExternalLink,
+  BarChart3,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,6 +53,11 @@ import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
 import { JamIcon } from '@/components/shared/JamIcon'
 import { ScreenshotsEditor } from '@/components/shared/ScreenshotsEditor'
 import { JamSubmissionField } from '@/components/mod/JamSubmissionField'
+import { BountyFulfillmentField } from '@/components/mod/BountyFulfillmentField'
+import { KINDS } from '@/lib/constants'
+import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { extractJam, jamCoordinateFromNaddr } from '@/lib/nostr/jam'
+import { extractBounty, bountyCoordinateFromNaddr } from '@/lib/nostr/bounty'
 import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
 import { Markdown } from '@/components/shared/Markdown'
 import type {
@@ -118,6 +124,8 @@ interface ModEditorProps {
   isEdit?: boolean
   /** Jam naddr from the submit flow (?jam=…): forces the "for a mod jam" section on. */
   prefillJam?: string
+  /** Bounty naddr from the submit flow (?bounty=…): forces the "fulfils a bounty" section on. */
+  prefillBounty?: string
   onPublish: (form: ModFormState) => Promise<void>
   publishing?: boolean
 }
@@ -215,10 +223,47 @@ function PermissionRow({
   )
 }
 
+/**
+ * Validate the mod's bounty/jam submission links before publishing. The linked
+ * event must resolve, and its game must match this mod's game (a jam with no games
+ * is "general" and matches anything). Returns an error message, or null if OK.
+ */
+async function validateSubmissionLinks(form: ModFormState): Promise<string | null> {
+  const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+  const game = form.game.trim()
+
+  if (form.bountyEnabled && form.bountyNaddr.trim()) {
+    const coord = bountyCoordinateFromNaddr(form.bountyNaddr)
+    if (!coord) return 'The bounty address is not a valid mod bounty (naddr).'
+    const [, pubkey, ...idParts] = coord.split(':')
+    const ev = await fetchLatestEvent(relays, { kinds: [KINDS.BOUNTY], authors: [pubkey], '#d': [idParts.join(':')] })
+    const bounty = ev ? extractBounty(ev) : null
+    if (!bounty) return 'That bounty could not be found on your relays — remove the link or try again.'
+    if (bounty.game && game && bounty.game !== game) {
+      return `This bounty is for “${bounty.game}”, but your mod is for “${game}”. The games must match.`
+    }
+  }
+
+  if (form.jamEnabled && form.jamNaddr.trim()) {
+    const coord = jamCoordinateFromNaddr(form.jamNaddr)
+    if (!coord) return 'The jam address is not a valid mod jam (naddr).'
+    const [, pubkey, ...idParts] = coord.split(':')
+    const ev = await fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [idParts.join(':')] })
+    const jam = ev ? extractJam(ev) : null
+    if (!jam) return 'That jam could not be found on your relays — remove the link or try again.'
+    if (jam.games.length && game && !jam.games.includes(game)) {
+      return `This jam is for ${jam.games.join(', ')}, but your mod is for “${game}”. The games must match.`
+    }
+  }
+
+  return null
+}
+
 export function ModEditor({
   initialState,
   isEdit = false,
   prefillJam,
+  prefillBounty,
   onPublish,
   publishing = false,
 }: ModEditorProps) {
@@ -280,6 +325,14 @@ export function ModEditor({
     setForm((prev) => ({ ...prev, jamEnabled: true, jamNaddr: prefillJam }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillJam])
+
+  // Came here from a bounty's "Fulfil this bounty" button (?bounty=…): force the
+  // bounty-fulfilment section on with that address.
+  useEffect(() => {
+    if (!prefillBounty) return
+    setForm((prev) => ({ ...prev, bountyEnabled: true, bountyNaddr: prefillBounty }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillBounty])
 
   // Auto-save as the user edits (skipping the initial render).
   useEffect(() => {
@@ -449,6 +502,13 @@ export function ModEditor({
       return
     }
     setErrors({})
+    // Guard the submission links (bounty / jam): the linked event must exist and its
+    // game must match this mod's game. Blocks spraying unrelated mods at a bounty/jam.
+    const linkError = await validateSubmissionLinks(form)
+    if (linkError) {
+      toast.error(linkError)
+      return
+    }
     try {
       await onPublish(form)
       // Clear the draft only after a successful publish.
@@ -566,6 +626,30 @@ export function ModEditor({
                 inputClass={inputClass}
               />
               <p className="text-xs text-neutral-500">Paste the mod jam’s address (from its page’s share button). Your mod is linked to that jam as a submission. Only mods published during the jam’s window count as valid entries.</p>
+            </>
+          )}
+        </div>
+      </Section>
+
+      {/* ── 1d. Fulfils a bounty ────────────────────────────────── */}
+      <Section icon={BarChart3} label="Fulfils a bounty" step={1} order={5}>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <Switch
+              checked={form.bountyEnabled}
+              onCheckedChange={(v) => updateField('bountyEnabled', v)}
+            />
+            <span className="text-sm text-neutral-300">This mod fulfils a mod bounty</span>
+          </label>
+          {form.bountyEnabled && (
+            <>
+              <BountyFulfillmentField
+                value={form.bountyNaddr}
+                onChange={(v) => updateField('bountyNaddr', v)}
+                modGame={form.game}
+                inputClass={inputClass}
+              />
+              <p className="text-xs text-neutral-500">Paste the bounty’s address (from its page). Your mod is linked to that bounty as a fulfilment. The bounty must be for the same game as this mod.</p>
             </>
           )}
         </div>

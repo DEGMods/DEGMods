@@ -180,6 +180,8 @@ export function legacyToForm(mod: ModDetails): ModFormState {
     forMod: '',
     jamEnabled: false,
     jamNaddr: '',
+    bountyEnabled: false,
+    bountyNaddr: '',
     elsewhere: [],
     dependenciesEnabled: false,
     dependencies: [],

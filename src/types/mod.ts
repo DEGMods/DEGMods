@@ -66,6 +66,7 @@ export interface ModDetails {
   emulatedPlatform?: string // platform the game is emulated from (e.g. "Xbox 360")
   forMod?: string         // m tag: this mod is for another mod (name, naddr, or link)
   jamCoordinate?: string  // a tag (31143:…) with role "jam-entry" when this mod is a jam entry
+  bountyCoordinate?: string // a tag (31144:…) with role "bounty-fulfillment" when this mod fulfils a bounty
   elsewhere: string[]     // elsewhere tags: other places this mod is available
   dependencies: Dependency[] // dependencies tags (other mods/software/files)
   screenshots: string[]  // image URLs
@@ -108,6 +109,8 @@ export interface ModFormState {
   forMod: string
   jamEnabled: boolean
   jamNaddr: string
+  bountyEnabled: boolean
+  bountyNaddr: string
   /** Other places this mod is available (links). */
   elsewhere: string[]
   dependenciesEnabled: boolean
@@ -185,6 +188,8 @@ export function createEmptyFormState(): ModFormState {
     forMod: '',
     jamEnabled: false,
     jamNaddr: '',
+    bountyEnabled: false,
+    bountyNaddr: '',
     elsewhere: [],
     dependenciesEnabled: false,
     dependencies: [{ title: '', value: '' }],

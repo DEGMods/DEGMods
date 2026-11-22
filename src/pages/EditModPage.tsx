@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ModEditor } from '@/components/mod/ModEditor'
 import { buildModEvent, extractModData } from '@/lib/nostr/events'
 import { jamNaddrFromCoordinate } from '@/lib/nostr/jam'
+import { bountyNaddrFromCoordinate } from '@/lib/nostr/bounty'
 import { signAndPublish } from '@/lib/nostr/publish'
 import { fetchEvent } from '@/lib/nostr/relay-pool'
 import { cacheEvent } from '@/lib/nostr/eventCache'
@@ -75,6 +76,8 @@ export function EditModPage() {
           forMod: modData.forMod || '',
           jamEnabled: !!modData.jamCoordinate,
           jamNaddr: modData.jamCoordinate ? (jamNaddrFromCoordinate(modData.jamCoordinate) || '') : '',
+          bountyEnabled: !!modData.bountyCoordinate,
+          bountyNaddr: modData.bountyCoordinate ? (bountyNaddrFromCoordinate(modData.bountyCoordinate) || '') : '',
           elsewhere: modData.elsewhere,
           dependenciesEnabled: modData.dependencies.length > 0,
           dependencies: modData.dependencies.length > 0 ? modData.dependencies : [{ title: '', value: '' }],

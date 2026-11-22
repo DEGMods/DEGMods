@@ -25,6 +25,9 @@ import { GamePage } from '@/pages/GamePage'
 import { MarketResearchPage } from '@/pages/MarketResearchPage'
 import { ModsPage } from '@/pages/ModsPage'
 import { ModJamsPage } from '@/pages/ModJamsPage'
+import { BountiesPage } from '@/pages/BountiesPage'
+import { BountyPage } from '@/pages/BountyPage'
+import { SubmitBountyPage } from '@/pages/SubmitBountyPage'
 import { JamSubmitPage } from '@/pages/JamSubmitPage'
 import { JamPage } from '@/pages/JamPage'
 import { JamSubmissionsPage } from '@/pages/JamSubmissionsPage'
@@ -176,6 +179,10 @@ export default function App() {
           <Route path="/mod-jam/:naddr" element={<JamPage />} />
           <Route path="/mod-jam/:naddr/edit" element={<JamSubmitPage />} />
           <Route path="/mod-jam/:naddr/submissions" element={<JamSubmissionsPage />} />
+          <Route path="/mod-bounties" element={<BountiesPage />} />
+          <Route path="/submit-mod-bounty" element={<SubmitBountyPage />} />
+          <Route path="/mod-bounty/:naddr" element={<BountyPage />} />
+          <Route path="/mod-bounty/:naddr/edit" element={<SubmitBountyPage />} />
           <Route path="/mod/:naddr" element={<ModPage />} />
           <Route path="/submit-mod" element={<SubmitModPage />} />
           {/* legacy path — keep old links/bookmarks working */}

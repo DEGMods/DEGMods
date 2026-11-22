@@ -25,6 +25,7 @@ import type { ModDetails } from '@/types/mod'
 
 import { CollapsibleMarkdown } from '@/components/mod/CollapsibleMarkdown'
 import { ModJamBanner } from '@/components/jam/ModJamBanner'
+import { BountyFulfillmentBanner } from '@/components/mod/BountyFulfillmentBanner'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { ModScreenshots } from '@/components/mod/ModScreenshots'
 import { ModDownloads } from '@/components/mod/ModDownloads'
@@ -833,6 +834,11 @@ export default function ModPage() {
               submissionDTag={mod.dTag}
               submissionTitle={mod.title}
             />
+          )}
+
+          {/* Bounty fulfilment: the bounty this mod was made for */}
+          {mod.bountyCoordinate && (
+            <BountyFulfillmentBanner bountyCoordinate={mod.bountyCoordinate} modCoordinate={mod.aTag} />
           )}
 
           {/* Author's latest social posts */}

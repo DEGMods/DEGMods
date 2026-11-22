@@ -11,6 +11,7 @@ import { cacheEvent } from '@/lib/nostr/eventCache'
 import type { ModFormState, DownloadEntry, PermissionsData } from '@/types/mod'
 import type { BlogFormState } from '@/types/blog'
 import { submissionTags, jamCoordinateFromNaddr, JAM_ENTRY_LABEL } from '@/lib/nostr/jam'
+import { fulfillmentTags, bountyCoordinateFromNaddr, BOUNTY_FULFILLMENT_LABEL } from '@/lib/nostr/bounty'
 
 // ─── Categories (c = maximal chains, h = rooted prefixes, f = segments) ──
 //
@@ -131,6 +132,13 @@ export function buildModEvent(form: ModFormState): UnsignedEvent {
   if (form.jamEnabled && form.jamNaddr.trim()) {
     const coord = jamCoordinateFromNaddr(form.jamNaddr)
     if (coord) tags.push(...submissionTags(coord))
+  }
+
+  // Bounty fulfilment (optional): links this mod to a bounty (kind 31144) via an
+  // `a` tag with the "bounty-fulfillment" role. See docs/mod-bounty-event.md.
+  if (form.bountyEnabled && form.bountyNaddr.trim()) {
+    const coord = bountyCoordinateFromNaddr(form.bountyNaddr)
+    if (coord) tags.push(...fulfillmentTags(coord))
   }
 
   // Elsewhere (optional): other places this mod is available — one tag per link.
@@ -335,6 +343,13 @@ export function extractModData(event: NostrEvent): ModDetails {
   const isJamEntry = !!jamATag && (jamATag[2] === JAM_ENTRY_LABEL || hasLegacyLabel)
   const jamCoordinate = isJamEntry ? jamATag![1] : undefined
 
+  // Bounty fulfilment: an `a` coordinate pointing at a bounty (31144:…) whose role
+  // value is "bounty-fulfillment" (legacy: a separate l=bounty-fulfillment tag).
+  const bountyATag = event.tags.find(t => t[0] === 'a' && t[1]?.startsWith(`${KINDS.BOUNTY}:`))
+  const hasLegacyBountyLabel = event.tags.some(t => t[0] === 'l' && t[1] === BOUNTY_FULFILLMENT_LABEL)
+  const isBountyFulfillment = !!bountyATag && (bountyATag[2] === BOUNTY_FULFILLMENT_LABEL || hasLegacyBountyLabel)
+  const bountyCoordinate = isBountyFulfillment ? bountyATag![1] : undefined
+
   const dTag = getTag('d')
 
   return {
@@ -356,6 +371,7 @@ export function extractModData(event: NostrEvent): ModDetails {
     emulatedPlatform,
     forMod: getTag('m') || undefined,
     jamCoordinate,
+    bountyCoordinate,
     elsewhere: getTags('elsewhere').filter(Boolean).slice(0, MAX_ELSEWHERE),
     dependencies: event.tags
       .filter(t => t[0] === 'dependencies')
