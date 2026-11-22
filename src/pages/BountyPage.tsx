@@ -54,7 +54,7 @@ export function BountyPage() {
   const [savingWinner, setSavingWinner] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
 
-  useSeoMeta(bounty ? { title: `${bounty.title} — mod bounty`, description: bounty.summary || bounty.content, image: bounty.image, type: 'article' } : null)
+  useSeoMeta(bounty ? { title: `${bounty.title} - mod request`, description: bounty.summary || bounty.content, image: bounty.image, type: 'article' } : null)
 
   // Load the bounty.
   useEffect(() => {
@@ -133,7 +133,7 @@ export function BountyPage() {
   return (
     <div className="py-6">
       <Link to="/mod-bounties" className="mb-4 inline-flex items-center gap-1.5 text-sm text-neutral-400 transition-colors hover:text-white">
-        <ChevronLeft size={16} /> Mod Bounties
+        <ChevronLeft size={16} /> Mod Requests
       </Link>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
@@ -146,7 +146,7 @@ export function BountyPage() {
           )}
 
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-[#fc4462]">
+            <div className="flex items-center gap-2 text-sm font-medium text-neutral-400">
               <Gamepad2 className="h-4 w-4" /> <span>{bounty.game}</span>
             </div>
             <div className="flex items-start justify-between gap-3">
@@ -157,7 +157,7 @@ export function BountyPage() {
                     <Button variant="ghost" size="icon" className="shrink-0 text-neutral-400 hover:bg-[#262626] hover:text-white"><MoreHorizontal className="h-4 w-4" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="border-[#262626] bg-[#1c1c1c]">
-                    <DropdownMenuItem onClick={() => navigate(`/mod-bounty/${bounty.naddr}/edit`)} className="cursor-pointer"><Pencil className="mr-2 h-4 w-4" /> Edit bounty</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(`/mod-bounty/${bounty.naddr}/edit`)} className="cursor-pointer"><Pencil className="mr-2 h-4 w-4" /> Edit request</DropdownMenuItem>
                     <DropdownMenuSeparator className="bg-[#262626]" />
                     <DropdownMenuItem onClick={() => setShowDelete(true)} className="cursor-pointer text-red-400 focus:text-red-400"><Trash2 className="mr-2 h-4 w-4" /> Request Delete</DropdownMenuItem>
                   </DropdownMenuContent>
@@ -168,7 +168,7 @@ export function BountyPage() {
             {/* Status band */}
             <div className={cn('flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm font-semibold', bounty.fulfilled ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300')}>
               {bounty.fulfilled ? <CheckCircle2 className="h-4 w-4" /> : <CircleDashed className="h-4 w-4" />}
-              {bounty.fulfilled ? 'Fulfilled' : 'Open — looking for a modder'}
+              {bounty.fulfilled ? 'Fulfilled' : 'Open, looking for a modder'}
             </div>
 
             {bounty.reward && (
@@ -186,7 +186,7 @@ export function BountyPage() {
           <section className="space-y-3 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
             <h2 className="flex items-center gap-2 text-lg font-semibold text-white"><FileUp className="h-4 w-4 text-neutral-400" /> Fulfilments {fulfillments.length > 0 && <span className="text-sm font-normal text-neutral-500">({fulfillments.length})</span>}</h2>
             {fulfillments.length === 0 ? (
-              <p className="text-sm text-neutral-500">No mods submitted for this bounty yet. Made one? Link it from your mod’s editor (“Fulfils a bounty”).</p>
+              <p className="text-sm text-neutral-500">No mods submitted for this request yet. Made one? Link it from your mod&rsquo;s editor (&ldquo;Fulfils a mod request&rdquo;).</p>
             ) : (
               <ul className="space-y-2">
                 {fulfillments.map((f) => {
@@ -219,10 +219,10 @@ export function BountyPage() {
           <PublisherCard pubkey={bounty.pubkey} />
 
           <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
-            <Button onClick={() => navigate(`/submit-mod?bounty=${bounty.naddr}`)} className="w-full gap-2 bg-[#fc4462] text-white hover:bg-[#e23a56]">
-              <FileUp className="h-4 w-4" /> Fulfil this bounty
+            <Button onClick={() => navigate(`/submit-mod?bounty=${bounty.naddr}`)} className="w-full gap-2 bg-purple-600 text-white hover:bg-purple-700">
+              <FileUp className="h-4 w-4" /> Fulfil this request
             </Button>
-            <p className="px-1 text-[11px] text-neutral-500">Publishes a new mod for {bounty.game}, pre-linked to this bounty.</p>
+            <p className="px-1 text-[11px] text-neutral-500">Publishes a new mod for {bounty.game}, pre-linked to this request.</p>
           </div>
 
           <section className="space-y-2">
@@ -246,7 +246,7 @@ export function BountyPage() {
           onOpenChange={setShowDelete}
           event={rawEvent as unknown as Parameters<typeof RequestDeleteDialog>[0]['event']}
           title={bounty.title}
-          noun="mod bounty"
+          noun="mod request"
           onDeleted={() => navigate('/mod-bounties')}
         />
       )}

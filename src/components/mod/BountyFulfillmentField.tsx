@@ -20,7 +20,7 @@ type Resolved =
 /**
  * The "fulfils a bounty" naddr field: validates the pasted bounty address, fetches
  * the bounty, and shows its title + game + status. Warns when the bounty's game
- * doesn't match this mod's game — the publish guard enforces the match, this is the
+ * doesn't match this mod's game. The publish guard enforces the match; this is the
  * early heads-up.
  */
 export function BountyFulfillmentField({
@@ -42,7 +42,7 @@ export function BountyFulfillmentField({
     if (!raw) { setResolved({ state: 'idle' }); return }
 
     const coord = bountyCoordinateFromNaddr(raw)
-    if (!coord) { setResolved({ state: 'invalid', message: 'Not a valid mod bounty address.' }); return }
+    if (!coord) { setResolved({ state: 'invalid', message: 'Not a valid mod request address.' }); return }
 
     const reqId = ++reqRef.current
     setResolved({ state: 'loading' })
@@ -72,23 +72,23 @@ export function BountyFulfillmentField({
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Paste the mod bounty address (naddr1…)"
+        placeholder="Paste the mod request address (naddr1...)"
         className={cn(inputClass, 'font-mono text-xs')}
       />
       <div className="flex items-center justify-between text-xs">
         <div className="min-h-[1rem]">
           {resolved.state === 'loading' && (
-            <span className="inline-flex items-center gap-1.5 text-neutral-500"><Loader2 className="h-3 w-3 animate-spin" /> Looking up bounty…</span>
+            <span className="inline-flex items-center gap-1.5 text-neutral-500"><Loader2 className="h-3 w-3 animate-spin" /> Looking up request...</span>
           )}
           {resolved.state === 'invalid' && (
             <span className="inline-flex items-center gap-1.5 text-red-400"><AlertCircle className="h-3 w-3" /> {resolved.message}</span>
           )}
           {resolved.state === 'notfound' && (
-            <span className="inline-flex items-center gap-1.5 text-amber-400"><AlertCircle className="h-3 w-3" /> Bounty not found on your relays.</span>
+            <span className="inline-flex items-center gap-1.5 text-amber-400"><AlertCircle className="h-3 w-3" /> Mod request not found on your relays.</span>
           )}
           {resolved.state === 'ok' && (
             <span className="inline-flex flex-wrap items-center gap-1.5">
-              {mismatch ? <AlertCircle className="h-3 w-3 text-red-400" /> : <CheckCircle2 className="h-3 w-3 text-[#fc4462]" />}
+              {mismatch ? <AlertCircle className="h-3 w-3 text-red-400" /> : <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
               <span className="font-medium text-neutral-200">{resolved.title}</span>
               <span className={cn(mismatch ? 'text-red-400' : 'text-neutral-500')}>· {resolved.game}</span>
               {resolved.fulfilled && <span className="text-amber-400">· already fulfilled</span>}

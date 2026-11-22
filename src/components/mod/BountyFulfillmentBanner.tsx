@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Target, Trophy, Gift } from 'lucide-react'
+import { PackagePlus, Trophy, Gift } from 'lucide-react'
 import { KINDS } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
@@ -35,9 +35,9 @@ export function BountyFulfillmentBanner({ bountyCoordinate, modCoordinate }: { b
   return (
     <Link
       to={`/mod-bounty/${naddr}`}
-      className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border border-[#fc4462]/30 bg-[#fc4462]/10 px-4 py-3 text-sm transition-colors hover:border-[#fc4462]/50"
+      className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-3 text-sm transition-colors hover:border-purple-500/50"
     >
-      <span className="inline-flex items-center gap-1.5 font-medium text-[#fc4462]"><Target className="h-4 w-4" /> Fulfils a bounty</span>
+      <span className="inline-flex items-center gap-1.5 font-medium text-purple-300"><PackagePlus className="h-4 w-4" /> Fulfils a mod request</span>
       <span className="font-semibold text-white">{bounty.title}</span>
       <span className="text-neutral-400">· {bounty.game}</span>
       {isWinner && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300"><Trophy className="h-3 w-3" /> Chosen fulfiller</span>}

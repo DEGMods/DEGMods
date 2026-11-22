@@ -29,7 +29,7 @@ import {
   Boxes,
   RotateCcw,
   ExternalLink,
-  BarChart3,
+  PackagePlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -234,13 +234,13 @@ async function validateSubmissionLinks(form: ModFormState): Promise<string | nul
 
   if (form.bountyEnabled && form.bountyNaddr.trim()) {
     const coord = bountyCoordinateFromNaddr(form.bountyNaddr)
-    if (!coord) return 'The bounty address is not a valid mod bounty (naddr).'
+    if (!coord) return 'The mod request address is not valid (naddr).'
     const [, pubkey, ...idParts] = coord.split(':')
     const ev = await fetchLatestEvent(relays, { kinds: [KINDS.BOUNTY], authors: [pubkey], '#d': [idParts.join(':')] })
     const bounty = ev ? extractBounty(ev) : null
-    if (!bounty) return 'That bounty could not be found on your relays — remove the link or try again.'
+    if (!bounty) return 'That mod request could not be found on your relays. Remove the link or try again.'
     if (bounty.game && game && bounty.game !== game) {
-      return `This bounty is for “${bounty.game}”, but your mod is for “${game}”. The games must match.`
+      return `This request is for "${bounty.game}", but your mod is for "${game}". The games must match.`
     }
   }
 
@@ -250,9 +250,9 @@ async function validateSubmissionLinks(form: ModFormState): Promise<string | nul
     const [, pubkey, ...idParts] = coord.split(':')
     const ev = await fetchLatestEvent(relays, { kinds: [KINDS.JAM], authors: [pubkey], '#d': [idParts.join(':')] })
     const jam = ev ? extractJam(ev) : null
-    if (!jam) return 'That jam could not be found on your relays — remove the link or try again.'
+    if (!jam) return 'That jam could not be found on your relays. Remove the link or try again.'
     if (jam.games.length && game && !jam.games.includes(game)) {
-      return `This jam is for ${jam.games.join(', ')}, but your mod is for “${game}”. The games must match.`
+      return `This jam is for ${jam.games.join(', ')}, but your mod is for "${game}". The games must match.`
     }
   }
 
@@ -631,15 +631,15 @@ export function ModEditor({
         </div>
       </Section>
 
-      {/* ── 1d. Fulfils a bounty ────────────────────────────────── */}
-      <Section icon={BarChart3} label="Fulfils a bounty" step={1} order={5}>
+      {/* ── 1d. Fulfils a mod request ───────────────────────────── */}
+      <Section icon={PackagePlus} label="Fulfils a mod request" step={1} order={5}>
         <div className="space-y-3">
           <label className="flex items-center gap-3 cursor-pointer">
             <Switch
               checked={form.bountyEnabled}
               onCheckedChange={(v) => updateField('bountyEnabled', v)}
             />
-            <span className="text-sm text-neutral-300">This mod fulfils a mod bounty</span>
+            <span className="text-sm text-neutral-300">This mod fulfils a mod request</span>
           </label>
           {form.bountyEnabled && (
             <>
@@ -649,7 +649,7 @@ export function ModEditor({
                 modGame={form.game}
                 inputClass={inputClass}
               />
-              <p className="text-xs text-neutral-500">Paste the bounty’s address (from its page). Your mod is linked to that bounty as a fulfilment. The bounty must be for the same game as this mod.</p>
+              <p className="text-xs text-neutral-500">Paste the mod request&rsquo;s address (from its page). Your mod is linked to that request as a fulfilment. The request must be for the same game as this mod.</p>
             </>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Gamepad2, Package, Rss, Settings, User, Menu, X, Eye, Pencil, LogOut, Bell, MessageSquare, PlusSquare, Target } from 'lucide-react'
+import { Gamepad2, Package, Rss, Settings, User, Menu, X, Eye, Pencil, LogOut, Bell, MessageSquare, PlusSquare, PackagePlus } from 'lucide-react'
 import { JamIcon } from '@/components/shared/JamIcon'
 import { CreateMenu } from '@/components/shared/CreateMenu'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,7 @@ const navLinks = [
   { to: '/games', label: 'Games', icon: Gamepad2 },
   { to: '/mods', label: 'Mods', icon: Package },
   { to: '/mod-jams', label: 'Mod Jams', icon: JamIcon },
-  { to: '/mod-bounties', label: 'Bounties', icon: Target },
+  { to: '/mod-bounties', label: 'Requests', icon: PackagePlus },
   { to: '/feed', label: 'Feed', icon: Rss },
 ]
 
