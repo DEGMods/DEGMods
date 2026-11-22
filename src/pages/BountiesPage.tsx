@@ -64,7 +64,7 @@ export function BountiesPage() {
       ) : filtered.length === 0 ? (
         <p className="py-16 text-center text-sm text-neutral-500">No mod requests{status !== 'all' ? ` (${status})` : ''} yet.</p>
       ) : (
-        <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((b) => <BountyCard key={b.aTag} bounty={b} />)}
         </ol>
       )}
