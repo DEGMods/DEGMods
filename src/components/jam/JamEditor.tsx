@@ -445,7 +445,7 @@ export function JamEditor({ editJam, onPublish, publishing }: {
     const relays = s.relays.filter((r) => r.enabled).map((r) => r.url)
 
     if (!s.title.trim()) return toast.error('Enter a title')
-    if (!s.image.trim()) return toast.error('Add a cover image')
+    if (!s.image.trim()) return toast.error('Add a featured image')
     if (!s.summary.trim()) return toast.error('Enter a summary')
     if (!s.content.trim()) return toast.error('Enter the jam details')
     if (s.tags.length === 0) return toast.error('Add at least one tag')
@@ -507,9 +507,9 @@ export function JamEditor({ editJam, onPublish, publishing }: {
           <Counter value={s.title} max={LIMITS.title} />
         </div>
         <div className="space-y-1.5">
-          <Label>Cover image <span className="text-[#fc4462]">*</span></Label>
+          <Label>Featured image <span className="text-[#fc4462]">*</span></Label>
           <BlossomUploadField accept={IMAGE_UPLOAD_ACCEPT} label="Drop an image or click to upload" sublabel="Mirrored to up to 3 servers" onUploaded={(r) => set('image', r.url)} resetAfter />
-          <Input value={s.image} onChange={(e) => set('image', e.target.value)} placeholder="Cover image URL" maxLength={LIMITS.imageUrl} className={`${inputCls} font-mono text-xs`} />
+          <Input value={s.image} onChange={(e) => set('image', e.target.value)} placeholder="Featured image URL" maxLength={LIMITS.imageUrl} className={`${inputCls} font-mono text-xs`} />
           <Counter value={s.image} max={LIMITS.imageUrl} />
         </div>
         <div className="space-y-1.5">

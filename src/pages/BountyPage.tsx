@@ -4,8 +4,9 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import {
   Gamepad2, Gift, Loader2, CheckCircle2, CircleDashed, Pencil, Trash2, MoreHorizontal,
-  FileUp, Trophy, ChevronLeft, Copy, FileJson,
+  FileUp, Trophy, ChevronLeft, Copy, FileJson, AlertTriangle,
 } from 'lucide-react'
+import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { KINDS } from '@/lib/constants'
 import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -41,7 +42,8 @@ function bountyToForm(b: BountyDetails, previousCreatedAt: number): BountyFormSt
   return {
     dTag: b.dTag, isEdit: true, previousCreatedAt, publishedAt: b.publishedAt,
     title: b.title, featuredImageUrl: b.image, summary: b.summary, content: b.content, game: b.game,
-    tags: b.tags, reward: b.reward ?? { what: '', how: '' },
+    tags: b.tags, contentWarning: !!b.contentWarning, contentWarningReason: b.contentWarning || '',
+    reward: b.reward ?? { what: '', how: '' },
     winnerCoordinate: b.winnerCoordinate, winnerPubkey: b.winnerPubkey,
   }
 }
@@ -60,6 +62,7 @@ export function BountyPage() {
   const [showDelete, setShowDelete] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
   const [page, setPage] = useState(1)
+  const { revealed, reveal } = useNsfwReveal()
 
   useSeoMeta(bounty ? { title: `${bounty.title} - mod request`, description: bounty.summary || bounty.content, image: bounty.image, type: 'article' } : null)
 
@@ -145,6 +148,7 @@ export function BountyPage() {
   if (notFound || !bounty) return <div className="py-24 text-center text-neutral-400">Mod request not found.</div>
 
   const isAuthor = myPubkey === bounty.pubkey
+  const hasWarning = !!bounty.contentWarning && !revealed
   const target: NostrTarget = { id: bounty.id, pubkey: bounty.pubkey, kind: KINDS.BOUNTY, aTag: bounty.aTag }
   const copyNaddr = () => { navigator.clipboard.writeText(nip19.naddrEncode({ kind: KINDS.BOUNTY, pubkey: bounty.pubkey, identifier: bounty.dTag })); toast.success('Note ID copied to clipboard') }
   const copyNpub = () => { navigator.clipboard.writeText(nip19.npubEncode(bounty.pubkey)); toast.success('Author npub copied to clipboard') }
@@ -185,7 +189,14 @@ export function BountyPage() {
         <div className="min-w-0 space-y-6 lg:col-span-2">
           {bounty.image && (
             <div className="relative aspect-video overflow-hidden rounded-xl border border-[#262626]">
-              <SkeletonImage src={bounty.image} alt={bounty.title} className="h-full w-full object-cover" />
+              <SkeletonImage src={bounty.image} alt={bounty.title} className={cn('h-full w-full object-cover', hasWarning && 'blur-2xl')} />
+              {hasWarning && (
+                <button onClick={() => reveal()} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/60 text-neutral-300">
+                  <AlertTriangle className="h-7 w-7 text-yellow-500" />
+                  <span className="text-sm font-medium">{bounty.contentWarning}</span>
+                  <span className="text-xs text-neutral-500">Click to reveal</span>
+                </button>
+              )}
             </div>
           )}
 

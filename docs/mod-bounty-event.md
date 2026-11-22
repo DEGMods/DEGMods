@@ -90,16 +90,17 @@ Once the requester picks a winner, the event is re-published with the fulfilment
 - **Required:** Yes
 - **Value:** Unix timestamp string, set once on first publish, preserved on edits. Use for display/ordering (never changes, unlike `created_at`).
 
-### `title` / `image` / `summary` / `t`
+### `title` / `image` / `summary` / `t` / `content-warning`
 
 These behave as in the [mod event](./game-mod-event.md):
 
 | Tag | Required | Notes |
 |---|---|---|
 | `title` | Yes | The bounty's short name. |
-| `image` | No | Optional cover image for the card. |
+| `image` | No | Optional featured image for the card. |
 | `summary` | No | Short description for cards/listings. Falls back to the first line of `content`. |
 | `t` | No | Keywords, one per tag, lowercase. |
+| `content-warning` | No | NIP-36 sensitive (NSFW) flag with an optional reason; omit when not sensitive. The creator sets it via a simple on/off toggle, so the value is usually the literal `nsfw`. Legacy `["nsfw","true"]` is accepted on read. Drives the NSFW listing filter (hide / show / only) and blurs the featured image until revealed. |
 
 ### `g` — Game the bounty is for
 
@@ -248,6 +249,7 @@ A third party cannot edit someone else's bounty, so an **additional** reward off
 | `g` | **Yes (exactly 1)** | No | Game name | The game the mod is wanted for |
 | `reward` | No | No | `what` + optional `how` | Descriptive only |
 | `t` | No | Yes | Keyword | Lowercase |
+| `content-warning` | No | No | Reason string | NIP-36 NSFW flag (toggle; value usually `nsfw`) |
 | `v` | Yes (auto) | No | `unfulfilled` \| `fulfilled` | Derived from the `a` selection; relay-indexed |
 | `a` | No | No | `31142:<pk>:<d>` | Winner selection (chosen mod). Presence ⇒ `fulfilled` |
 | `p` | With `a` | No | hex pubkey | Chosen fulfiller |

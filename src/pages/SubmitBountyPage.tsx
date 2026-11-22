@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
 import { toast } from 'sonner'
-import { Loader2, Plus, X } from 'lucide-react'
+import { Loader2, Plus, X, Pencil, Eye } from 'lucide-react'
 import { KINDS, IMAGE_UPLOAD_ACCEPT } from '@/lib/constants'
 import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
@@ -19,7 +19,11 @@ import { RequiredDot } from '@/components/shared/RequiredDot'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { MarkdownToolbar } from '@/components/shared/MarkdownToolbar'
+import { Markdown } from '@/components/shared/Markdown'
 import { CharCounter } from '@/components/shared/CharCounter'
 import { cn } from '@/lib/utils'
 
@@ -34,7 +38,7 @@ function emptyForm(): BountyFormState {
   return {
     dTag: crypto.randomUUID(),
     title: '', featuredImageUrl: '', summary: '', content: '', game: '',
-    tags: [], reward: { what: '', how: '' },
+    tags: [], contentWarning: false, contentWarningReason: '', reward: { what: '', how: '' },
     winnerCoordinate: null, winnerPubkey: null,
   }
 }
@@ -49,6 +53,7 @@ export function SubmitBountyPage() {
   const [form, setForm] = useState<BountyFormState>(emptyForm)
   const [loading, setLoading] = useState(!!naddr)
   const [publishing, setPublishing] = useState(false)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
   const isEdit = !!naddr
 
   const set = useCallback(<K extends keyof BountyFormState>(key: K, value: BountyFormState[K]) => {
@@ -73,7 +78,8 @@ export function SubmitBountyPage() {
       setForm({
         dTag: b.dTag, isEdit: true, previousCreatedAt: ev.created_at, publishedAt: b.publishedAt,
         title: b.title, featuredImageUrl: b.image, summary: b.summary, content: b.content, game: b.game,
-        tags: b.tags, reward: b.reward ?? { what: '', how: '' },
+        tags: b.tags, contentWarning: !!b.contentWarning, contentWarningReason: b.contentWarning || '',
+        reward: b.reward ?? { what: '', how: '' },
         winnerCoordinate: b.winnerCoordinate, winnerPubkey: b.winnerPubkey,
       })
       setLoading(false)
@@ -122,25 +128,54 @@ export function SubmitBountyPage() {
       </div>
 
       <div className="space-y-6">
-        <Field label="Title" incomplete={!form.title.trim()}>
-          <Input value={form.title} onChange={(e) => set('title', e.target.value)} maxLength={LIMITS.title} placeholder="e.g. First-person camera for vehicles" className={inputClass} />
-          <CharCounter value={form.title} max={LIMITS.title} />
-        </Field>
+        <Section title="Basics" incomplete={!form.title.trim() || !form.game.trim()}>
+          <div className="space-y-2">
+            <Label>Title</Label>
+            <Input value={form.title} onChange={(e) => set('title', e.target.value)} maxLength={LIMITS.title} placeholder="e.g. First-person camera for vehicles" className={inputClass} />
+            <CharCounter value={form.title} max={LIMITS.title} />
+          </div>
+          <div className="space-y-2">
+            <Label hint="(the game this mod is wanted for)">Game</Label>
+            <GameAutocomplete value={form.game} onChange={(v) => set('game', v)} maxLength={LIMITS.game} className={inputClass} />
+          </div>
+          <div className="space-y-2">
+            <Label hint="(optional, shown in listings)">Summary</Label>
+            <Input value={form.summary} onChange={(e) => set('summary', e.target.value)} maxLength={LIMITS.summary} placeholder="One-line summary" className={inputClass} />
+            <CharCounter value={form.summary} max={LIMITS.summary} />
+          </div>
+        </Section>
 
-        <Field label="Game" incomplete={!form.game.trim()} hint="The game this mod is wanted for.">
-          <GameAutocomplete value={form.game} onChange={(v) => set('game', v)} maxLength={LIMITS.game} className={inputClass} />
-        </Field>
+        <Section title="Details" incomplete={!form.content.trim()}>
+          <div className="space-y-2">
+            <Label hint="(markdown)">Description</Label>
+            <Tabs defaultValue="edit" className="w-full">
+              <TabsList className="border border-[#262626] bg-[#212121]">
+                <TabsTrigger value="edit" className="gap-1.5 text-xs data-[state=active]:bg-[#2a2a2a]"><Pencil size={13} /> Edit</TabsTrigger>
+                <TabsTrigger value="preview" className="gap-1.5 text-xs data-[state=active]:bg-[#2a2a2a]"><Eye size={13} /> Preview</TabsTrigger>
+              </TabsList>
+              <TabsContent value="edit" className="mt-3 space-y-2">
+                <MarkdownToolbar textareaRef={bodyRef} value={form.content} onChange={(val) => set('content', val)} />
+                <Textarea ref={bodyRef} value={form.content} onChange={(e) => set('content', e.target.value)} rows={8} maxLength={LIMITS.content} placeholder="What the mod should do and why..." className={cn(inputClass, 'min-h-[220px] resize-y')} />
+                <CharCounter value={form.content} max={LIMITS.content} />
+              </TabsContent>
+              <TabsContent value="preview" className="mt-3">
+                <div className="min-h-[220px] rounded-lg border border-[#262626] bg-[#212121] p-4">
+                  {form.content.trim() ? <Markdown content={form.content} /> : <span className="text-sm italic text-neutral-600">Nothing to preview</span>}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
 
-        <Field label="Summary" hint="Optional short line for listings.">
-          <Input value={form.summary} onChange={(e) => set('summary', e.target.value)} maxLength={LIMITS.summary} placeholder="One-line summary" className={inputClass} />
-          <CharCounter value={form.summary} max={LIMITS.summary} />
-        </Field>
+          <label className="flex cursor-pointer items-center gap-3">
+            <Switch checked={form.contentWarning} onCheckedChange={(v) => set('contentWarning', v)} />
+            <span className="text-sm text-neutral-300">Mark this request as NSFW</span>
+          </label>
 
-        <Field label="Featured image" hint="Optional. Paste a URL or upload one.">
-          <div className="space-y-3">
+          <div className="space-y-2">
+            <Label hint="(optional)">Featured image</Label>
             <Input value={form.featuredImageUrl} onChange={(e) => set('featuredImageUrl', e.target.value)} maxLength={LIMITS.image} placeholder="Image URL (https://...)" className={inputClass} />
             <CharCounter value={form.featuredImageUrl} max={LIMITS.image} />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 pt-1">
               <Separator className="flex-1 bg-[#262626]" />
               <span className="text-xs uppercase tracking-wider text-neutral-600">or upload</span>
               <Separator className="flex-1 bg-[#262626]" />
@@ -157,29 +192,30 @@ export function SubmitBountyPage() {
               </div>
             )}
           </div>
-        </Field>
+        </Section>
 
-        <Field label="Description" incomplete={!form.content.trim()} hint="Markdown supported. What the mod should do and why.">
-          <Textarea value={form.content} onChange={(e) => set('content', e.target.value)} maxLength={LIMITS.content} rows={8} placeholder="Describe the mod you want..." className={inputClass} />
-          <CharCounter value={form.content} max={LIMITS.content} />
-        </Field>
-
-        <Field label="Reward" hint="Optional. What you're offering, and how you'll deliver it.">
+        <Section title="Reward">
+          <p className="text-xs text-neutral-500">Optional and descriptive only - nothing is held or paid through the app.</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <div>
-              <Input value={form.reward.what} onChange={(e) => set('reward', { ...form.reward, what: e.target.value })} maxLength={LIMITS.rewardWhat} placeholder="What (e.g. $100)" className={inputClass} />
+            <div className="space-y-2">
+              <Label>What</Label>
+              <Input value={form.reward.what} onChange={(e) => set('reward', { ...form.reward, what: e.target.value })} maxLength={LIMITS.rewardWhat} placeholder="e.g. $100" className={inputClass} />
               <CharCounter value={form.reward.what} max={LIMITS.rewardWhat} />
             </div>
-            <div>
+            <div className="space-y-2">
+              <Label>How</Label>
               <Input value={form.reward.how} onChange={(e) => set('reward', { ...form.reward, how: e.target.value })} maxLength={LIMITS.rewardHow} placeholder="How will you deliver this?" className={inputClass} />
               <CharCounter value={form.reward.how} max={LIMITS.rewardHow} />
             </div>
           </div>
-        </Field>
+        </Section>
 
-        <Field label="Tags" hint="Optional.">
-          <ChipInput items={form.tags} onChange={(v) => set('tags', v)} placeholder="Add a tag and press Enter" maxLength={LIMITS.tag} max={MAX_TAGS} />
-        </Field>
+        <Section title="Tags">
+          <div className="space-y-2">
+            <Label hint="(optional)">Tags</Label>
+            <ChipInput items={form.tags} onChange={(v) => set('tags', v)} placeholder="Add a tag and press Enter" maxLength={LIMITS.tag} max={MAX_TAGS} />
+          </div>
+        </Section>
 
         <Button onClick={publish} disabled={publishing} className="w-full bg-purple-600 text-white hover:bg-purple-700">
           {publishing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -190,17 +226,19 @@ export function SubmitBountyPage() {
   )
 }
 
-function Field({ label, incomplete, hint, children }: { label: string; incomplete?: boolean; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="flex items-center gap-1.5 text-sm font-medium text-neutral-200">
-        {label}{incomplete && <RequiredDot />}
-      </label>
-      {hint && <p className="text-xs text-neutral-500">{hint}</p>}
-      {children}
+const Section = ({ title, incomplete, children }: { title: string; incomplete?: boolean; children: React.ReactNode }) => (
+  <section className="space-y-3 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
+    <div className="flex items-center gap-2">
+      <h2 className="text-sm font-semibold text-white">{title}</h2>
+      {incomplete && <RequiredDot label="Something required in this section is still empty" />}
     </div>
-  )
-}
+    {children}
+  </section>
+)
+
+const Label = ({ children, hint }: { children: React.ReactNode; hint?: string }) => (
+  <label className="block text-xs font-medium text-neutral-400">{children}{hint && <span className="ml-1 text-neutral-600">{hint}</span>}</label>
+)
 
 /** Chip-list tag input: type + Enter (or the Add button) to add, click × to remove. */
 function ChipInput({ items, onChange, placeholder, maxLength, max }: { items: string[]; onChange: (v: string[]) => void; placeholder: string; maxLength: number; max: number }) {

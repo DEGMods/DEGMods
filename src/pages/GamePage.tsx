@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
-import { Gamepad2, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { useParams, Link } from 'react-router-dom'
+import { Gamepad2, X, ChevronLeft, ChevronRight, Loader2, PackagePlus } from 'lucide-react'
 import { useSeoMeta } from '@/hooks/useSeoMeta'
 import type { Filter } from 'nostr-tools'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -144,14 +144,22 @@ export function GamePage() {
 
       {/* Mods */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h2 className="text-xl font-bold text-white">Mods</h2>
-          <AdvancedSearch
-            fixedGame={gameName}
-            active={!!advanced}
-            onSearch={setAdvanced}
-            onClear={() => setAdvanced(null)}
-          />
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/mod-bounties?game=${encodeURIComponent(gameName)}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040] hover:text-white"
+            >
+              <PackagePlus className="h-4 w-4" /> Mod requests
+            </Link>
+            <AdvancedSearch
+              fixedGame={gameName}
+              active={!!advanced}
+              onSearch={setAdvanced}
+              onClear={() => setAdvanced(null)}
+            />
+          </div>
         </div>
 
         {advanced && (

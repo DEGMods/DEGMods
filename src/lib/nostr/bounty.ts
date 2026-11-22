@@ -39,8 +39,9 @@ export interface BountyDetails {
   image: string
   summary: string
   content: string
-  game: string // the single `g` — the game the mod is wanted for
+  game: string // the single `g` - the game the mod is wanted for
   tags: string[] // t
+  contentWarning: string | null // NIP-36 reason, or null when not NSFW
   reward: BountyReward | null
 
   // Derived fulfilment state.
@@ -65,6 +66,8 @@ export interface BountyFormState {
   content: string
   game: string
   tags: string[]
+  contentWarning: boolean
+  contentWarningReason: string
   reward: BountyReward
 
   // Winner selection (set when the requester picks a fulfiller).
@@ -94,6 +97,8 @@ export function buildBountyEvent(form: BountyFormState): UnsignedEvent {
   }
 
   for (const t of form.tags.map((s) => s.trim()).filter(Boolean)) tags.push(['t', t.toLowerCase()])
+
+  if (form.contentWarning) tags.push(['content-warning', form.contentWarningReason.trim() || 'nsfw'])
 
   // Winner selection + derived status. The presence of the winner `a` tag is the
   // single source of truth; `v` is recomputed from it so the two can't drift.
@@ -132,6 +137,10 @@ export function extractBounty(event: NostrEvent): BountyDetails | null {
     ? { what: rewardTag[1], how: rewardTag[2] ?? '' }
     : null
 
+  const cwTag = event.tags.find((t) => t[0] === 'content-warning')
+  const nsfwLegacy = event.tags.find((t) => t[0] === 'nsfw' && t[1] === 'true')
+  const contentWarning = cwTag ? (cwTag[1] || 'nsfw') : nsfwLegacy ? 'nsfw' : null
+
   const naddr = nip19.naddrEncode({ kind: KINDS.BOUNTY, pubkey: event.pubkey, identifier: dTag })
 
   return {
@@ -148,6 +157,7 @@ export function extractBounty(event: NostrEvent): BountyDetails | null {
     content: event.content,
     game: get('g'),
     tags: all('t').map((t) => t[1]).filter(Boolean),
+    contentWarning,
     reward,
     status: fulfilled ? 'fulfilled' : 'unfulfilled',
     fulfilled,
