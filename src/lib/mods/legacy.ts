@@ -131,6 +131,7 @@ export function extractLegacyModData(event: NostrEvent): ModDetails {
     game: first('game'),
     publishedAt: Number.isFinite(publishedAt) ? publishedAt : event.created_at,
     createdAt: event.created_at,
+    updatedAt: parseInt(first('updated_at'), 10) || null,
     featuredImageUrl: first('featuredImageUrl') || undefined,
     featuredVideoUrl: undefined,
     contentWarning: first('nsfw') === 'true' ? 'NSFW' : undefined,

@@ -822,6 +822,7 @@ export default function ModPage() {
             <section className="space-y-2">
               <h2 className="text-lg font-semibold text-neutral-200">Published</h2>
               <p className="text-sm text-neutral-400">{publishedDate}</p>
+              {mod.updatedAt && <p className="text-xs text-neutral-500">Edited {new Date(mod.updatedAt * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>}
               {mod.client && <p className="text-xs text-neutral-500">on {mod.client}</p>}
             </section>
           )}

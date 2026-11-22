@@ -96,7 +96,7 @@ After the voting period ends and the creator publishes results, the jam event is
 - **Type:** Unix timestamp (seconds)
 - **Required:** Yes (set automatically)
 - **On first publish:** Current Unix timestamp.
-- **On edit:** `previous_created_at + 1`. Like mods and blogs, this keeps an edited jam from jumping to the top of "latest" feeds. Original ordering comes from `published_at`.
+- **On edit:** `previous_created_at + 1`. Like mods and blogs, this keeps an edited jam from jumping to the top of "latest" feeds. Original ordering comes from `published_at`. It's a +1 counter, not a real edit time — the optional `updated_at` tag (unix seconds, wall-clock, written only on edits, display-only, not indexed) carries that, same as mods/blogs/bounties.
 
 ---
 

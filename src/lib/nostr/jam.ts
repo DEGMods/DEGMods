@@ -31,6 +31,7 @@ export interface JamDetails {
   naddr: string
   createdAt: number
   publishedAt: number
+  updatedAt: number | null // wall-clock time of the last edit (display only), or null if never edited
 
   title: string
   image: string
@@ -123,9 +124,12 @@ export function monthLabel(bucket: string): string {
 }
 
 export function buildJamEvent(form: JamFormState): UnsignedEvent {
-  const now = Math.floor(Date.now() / 1000)
-  const createdAt = form.isEdit && form.previousCreatedAt ? form.previousCreatedAt + 1 : now
-  const publishedAt = form.publishedAt ?? now
+  // created_at is a +1 logical counter per edit; published_at is set once;
+  // updated_at records the real wall-clock time of an edit, for display only.
+  const wall = Math.floor(Date.now() / 1000)
+  const editing = !!form.isEdit && form.previousCreatedAt !== undefined
+  const createdAt = editing ? form.previousCreatedAt! + 1 : wall
+  const publishedAt = form.publishedAt ?? wall
   const bucketEnd = form.votingEnabled && form.votingEnd ? form.votingEnd : form.end
 
   const tags: string[][] = [
@@ -181,6 +185,8 @@ export function buildJamEvent(form: JamFormState): UnsignedEvent {
   }
   if (form.resultsAt) tags.push(['results', String(form.resultsAt)])
 
+  if (editing) tags.push(['updated_at', String(wall)])
+
   tags.push(['client', CLIENT_NAME])
 
   return { kind: KINDS.JAM, content: form.content, tags, created_at: createdAt, pubkey: '' }
@@ -222,6 +228,7 @@ export function extractJam(event: NostrEvent): JamDetails | null {
     naddr,
     createdAt: event.created_at,
     publishedAt: Number(get('published_at')) || event.created_at,
+    updatedAt: Number(get('updated_at')) || null,
     title: get('title'),
     image: get('image'),
     video: get('video'),

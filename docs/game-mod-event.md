@@ -78,7 +78,13 @@ A game mod is published as a **Nostr addressable replaceable event** with kind `
 - **Required:** Yes (set automatically)
 - **Purpose:** Indicates when this version of the event was created.
 - **On first publish:** Set to the current Unix timestamp.
-- **On edit:** Set to `previous_created_at + 1`. This prevents the mod from jumping to the "latest" position in feeds, since the increment is minimal. Clients can use `published_at` for original ordering — the two timestamps will remain close together.
+- **On edit:** Set to `previous_created_at + 1`. This prevents the mod from jumping to the "latest" position in feeds, since the increment is minimal. Clients can use `published_at` for original ordering — the two timestamps will remain close together. Because it's a +1 counter, it is **not** a usable "last edited" time — use the `updated_at` tag for that.
+
+### `updated_at` (tag)
+
+- **Required:** No (written only on edits).
+- **Value:** Unix timestamp string — the real **wall-clock** time of the edit. Absent on a never-edited mod.
+- **For display only** ("Edited <date>"): not relay-indexed, and never used to select revisions (that's `created_at`). Same convention across mods, jams, blogs, and mod bounties.
 
 ---
 

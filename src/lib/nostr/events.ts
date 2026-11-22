@@ -106,11 +106,12 @@ export function extractCategories(event: NostrEvent): string[] {
 export const MAX_ELSEWHERE = 3
 
 export function buildModEvent(form: ModFormState): UnsignedEvent {
-  const now = Math.floor(Date.now() / 1000)
-  const createdAt = form.isEdit && form.previousCreatedAt
-    ? form.previousCreatedAt + 1
-    : now
-  const publishedAt = form.publishedAt ?? now
+  // created_at is a +1 logical counter per edit; published_at is set once;
+  // updated_at records the real wall-clock time of an edit, for display only.
+  const wall = Math.floor(Date.now() / 1000)
+  const editing = !!form.isEdit && form.previousCreatedAt !== undefined
+  const createdAt = editing ? form.previousCreatedAt! + 1 : wall
+  const publishedAt = form.publishedAt ?? wall
 
   const tags: string[][] = [
     ['d', form.dTag],
@@ -186,6 +187,8 @@ export function buildModEvent(form: ModFormState): UnsignedEvent {
 
   // Categories (c = maximal chains, h = rooted prefixes, f = segments)
   tags.push(...buildCategoryTags(form.categories))
+
+  if (editing) tags.push(['updated_at', String(wall)])
 
   // Client (NIP-89)
   tags.push(['client', CLIENT_NAME])
@@ -362,6 +365,7 @@ export function extractModData(event: NostrEvent): ModDetails {
     game: getTag('g'),
     publishedAt: parseInt(getTag('published_at')) || event.created_at,
     createdAt: event.created_at,
+    updatedAt: parseInt(getTag('updated_at')) || null,
     featuredImageUrl: getTag('image') || undefined,
     featuredVideoUrl: getTag('video') || undefined,
     contentWarning: contentWarning || undefined,
@@ -422,11 +426,10 @@ export function isModDataComplete(event: NostrEvent): boolean {
 // ─── Blog Events (kind 30023) ────────────────────────────────────────
 
 export function buildBlogEvent(form: BlogFormState): UnsignedEvent {
-  const now = Math.floor(Date.now() / 1000)
-  const createdAt = form.isEdit && form.previousCreatedAt
-    ? form.previousCreatedAt + 1
-    : now
-  const publishedAt = form.publishedAt ?? now
+  const wall = Math.floor(Date.now() / 1000)
+  const editing = !!form.isEdit && form.previousCreatedAt !== undefined
+  const createdAt = editing ? form.previousCreatedAt! + 1 : wall
+  const publishedAt = form.publishedAt ?? wall
 
   const tags: string[][] = [
     ['d', form.dTag],
@@ -439,6 +442,7 @@ export function buildBlogEvent(form: BlogFormState): UnsignedEvent {
     tags.push(['t', t.toLowerCase()])
   }
   if (form.contentWarning) tags.push(['content-warning', 'nsfw'])
+  if (editing) tags.push(['updated_at', String(wall)])
   tags.push(['client', CLIENT_NAME])
 
   return { kind: KINDS.BLOG, content: form.content, tags, created_at: createdAt, pubkey: '' }
@@ -463,6 +467,7 @@ export function extractBlogData(event: NostrEvent): BlogDetails {
     content: event.content,
     publishedAt: parseInt(getTag('published_at')) || event.created_at,
     createdAt: event.created_at,
+    updatedAt: parseInt(getTag('updated_at')) || null,
     featuredImageUrl: getTag('image') || undefined,
     tags: getTags('t'),
     client: getTag('client') || undefined,

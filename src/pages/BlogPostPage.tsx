@@ -416,6 +416,7 @@ export default function BlogPostPage() {
             <section className="space-y-2">
               <h2 className="text-lg font-semibold text-neutral-200">Published</h2>
               <p className="text-sm text-neutral-400">{publishedDate}</p>
+              {blog.updatedAt && <p className="text-xs text-neutral-500">Edited {new Date(blog.updatedAt * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</p>}
               {blog.client && <p className="text-xs text-neutral-500">from {blog.client}</p>}
             </section>
           )}

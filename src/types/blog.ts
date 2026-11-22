@@ -11,6 +11,7 @@ export interface BlogDetails {
   content: string  // markdown
   publishedAt: number
   createdAt: number
+  updatedAt: number | null // wall-clock time of the last edit (display only), or null if never edited
   featuredImageUrl?: string
   tags: string[]
   client?: string  // NIP-89 client tag (publishing app name)

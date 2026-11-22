@@ -499,6 +499,7 @@ export function JamPage() {
           <section className="space-y-2">
             <h2 className="text-lg font-semibold text-neutral-200">Published</h2>
             <p className="text-sm text-neutral-400">{fmtLong(jam.publishedAt)}</p>
+            {jam.updatedAt && <p className="text-xs text-neutral-500">Edited {fmtLong(jam.updatedAt)}</p>}
             {jam.client && <p className="text-xs text-neutral-500">on {jam.client}</p>}
           </section>
 

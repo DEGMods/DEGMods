@@ -57,6 +57,7 @@ export interface ModDetails {
   game: string           // game name
   publishedAt: number    // unix timestamp (never changes on edit)
   createdAt: number      // unix timestamp (increments on edit)
+  updatedAt: number | null // wall-clock time of the last edit (display only), or null if never edited
   featuredImageUrl?: string
   featuredVideoUrl?: string
   contentWarning?: string // presence = NSFW
