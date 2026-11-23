@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import {
-  Gamepad2, Gift, Loader2, CircleDashed, Pencil, Trash2, MoreHorizontal,
+  Gamepad2, Gift, Loader2, Pencil, Trash2, MoreHorizontal,
   FileUp, ChevronLeft, Copy, FileJson, AlertTriangle,
 } from 'lucide-react'
 import { useNsfwReveal } from '@/hooks/useNsfwReveal'
@@ -221,8 +221,7 @@ export function BountyPage() {
 
           {/* Status + chosen fulfiller */}
           <section className="space-y-3">
-            <div className={cn('flex items-center gap-2 text-sm font-semibold', bounty.fulfilled ? 'text-emerald-300' : 'text-amber-300')}>
-              {!bounty.fulfilled && <CircleDashed className="h-4 w-4" />}
+            <div className={cn('flex items-center gap-2 text-sm font-semibold', bounty.fulfilled ? 'text-emerald-300' : 'text-orange-400')}>
               {bounty.fulfilled ? 'Mod request fulfilled' : 'Open, looking for a modder'}
             </div>
 
@@ -300,7 +299,7 @@ export function BountyPage() {
 
       {/* Comments */}
       <div className="mt-8">
-        <CommentSection root={target} />
+        <CommentSection root={target} accent="orange" />
       </div>
 
       {rawEvent && (

@@ -62,7 +62,7 @@ export function AuthorHubs({ pubkey, allowManage = false }: { pubkey: string; al
         <p className="text-sm text-neutral-500">
           {canManage
             ? 'You haven’t recommended a community hub yet.'
-            : 'This creator hasn’t recommended a community hub yet.'}
+            : 'This user hasn’t recommended a community hub yet.'}
         </p>
       ) : (
         <HubCard rec={recs[0]} />

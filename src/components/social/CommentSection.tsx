@@ -21,6 +21,7 @@ import { CommentForm } from './CommentForm'
 import { Comment } from './Comment'
 import { CommentThreadModal } from './CommentThreadModal'
 import { CommentFilters, DEFAULT_COMMENT_FILTERS, type CommentFilterState } from './CommentFilters'
+import { AccentProvider, ACCENTS, type Accent } from '@/components/shared/accent'
 
 interface CommentSectionProps {
   root: NostrTarget
@@ -29,9 +30,12 @@ interface CommentSectionProps {
   focusCommentId?: string | null
   /** The mod's downloads — enables the download-snapshot option on top-level comments. */
   modDownloads?: DownloadEntry[]
+  /** Theme accent so the section matches its host page (mod/jam/request). */
+  accent?: Accent
 }
 
-export function CommentSection({ root, focusCommentId, modDownloads }: CommentSectionProps) {
+export function CommentSection({ root, focusCommentId, modDownloads, accent = 'purple' }: CommentSectionProps) {
+  const a = ACCENTS[accent]
   const defaultPow = useSettingsStore(s => s.powFilterDifficulty)
   const [events, setEvents] = useState<NostrEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -120,10 +124,11 @@ export function CommentSection({ root, focusCommentId, modDownloads }: CommentSe
   }, [focusCommentId, loading, tree])
 
   return (
+    <AccentProvider value={accent}>
     <section ref={sectionRef} className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-neutral-200">
-          <MessagesSquare className="h-5 w-5 text-purple-400" />
+          <MessagesSquare className={`h-5 w-5 ${a.text}`} />
           Comments
           {!loading && <span className="text-sm font-normal text-neutral-500">({total})</span>}
         </h2>
@@ -139,7 +144,7 @@ export function CommentSection({ root, focusCommentId, modDownloads }: CommentSe
               >
                 <ListFilter className="h-4 w-4" />
                 {activeFilterCount > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-600 px-1 text-[10px] font-semibold text-white">
+                  <span className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full ${a.badge} px-1 text-[10px] font-semibold text-white`}>
                     {activeFilterCount}
                   </span>
                 )}
@@ -178,7 +183,7 @@ export function CommentSection({ root, focusCommentId, modDownloads }: CommentSe
       {/* Thread */}
       {loading ? (
         <div className="flex items-center justify-center py-10">
-          <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+          <Loader2 className={`h-6 w-6 animate-spin ${a.loader}`} />
         </div>
       ) : displayTree.length === 0 ? (
         <p className="py-8 text-center text-sm text-neutral-500">
@@ -216,5 +221,6 @@ export function CommentSection({ root, focusCommentId, modDownloads }: CommentSe
         onChange={setFilters}
       />
     </section>
+    </AccentProvider>
   )
 }

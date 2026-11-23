@@ -1,5 +1,7 @@
 import { Fragment } from 'react'
 import { usePreferencesStore } from '@/stores/preferencesStore'
+import { useAccent } from '@/components/shared/accent'
+import { cn } from '@/lib/utils'
 
 /**
  * Renders comment/reply text. By default it shows plain text only — links are
@@ -15,6 +17,7 @@ const AUDIO_RE = /\.(mp3|ogg|wav|m4a|flac|aac)(\?[^\s]*)?$/i
 
 export function CommentContent({ content }: { content: string }) {
   const { renderImages, renderVideos, renderAudio, renderHyperlinks } = usePreferencesStore()
+  const a = useAccent()
 
   const parts = content.split(URL_RE)
 
@@ -56,7 +59,7 @@ export function CommentContent({ content }: { content: string }) {
               href={part}
               target="_blank"
               rel="noopener noreferrer nofollow ugc"
-              className="text-purple-400 underline underline-offset-2 hover:text-purple-300 break-all"
+              className={cn(a.text, 'underline underline-offset-2 break-all')}
             >
               {part}
             </a>

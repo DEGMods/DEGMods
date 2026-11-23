@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Copy, Check, Share2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { ACCENTS, type Accent } from '@/components/shared/accent'
 
 const X_ICON = (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
@@ -19,10 +20,10 @@ const DISCORD_ICON = (
 )
 
 /** Share box: a read-only link + copy, and one-click share to X / Facebook / Discord. */
-export function ShareBox({ url, title, accent = 'purple' }: { url: string; title: string; accent?: 'purple' | 'orange' }) {
+export function ShareBox({ url, title, accent = 'purple' }: { url: string; title: string; accent?: Accent }) {
   const [copied, setCopied] = useState(false)
-  const iconClass = accent === 'orange' ? 'text-orange-400' : 'text-purple-400'
-  const copyBtnClass = accent === 'orange' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-purple-600 hover:bg-purple-700'
+  const iconClass = ACCENTS[accent].text
+  const copyBtnClass = ACCENTS[accent].solid
 
   const copy = (text: string, msg: string) => {
     navigator.clipboard.writeText(text)

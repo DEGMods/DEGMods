@@ -13,6 +13,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { CharCounter } from '@/components/shared/CharCounter'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { useAccent } from '@/components/shared/accent'
+import { cn } from '@/lib/utils'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
@@ -40,6 +42,7 @@ export function CommentForm({ root, replyTo, modDownloads, onPublished, onCancel
   const [sending, setSending] = useState(false)
   const [includeDownloads, setIncludeDownloads] = useState(true)
   const [optionsOpen, setOptionsOpen] = useState(false)
+  const a = useAccent()
 
   const isMod = root.kind === KINDS.MOD
   // Length cap applies to comments on mod and blog posts.
@@ -53,7 +56,7 @@ export function CommentForm({ root, replyTo, modDownloads, onPublished, onCancel
         <button
           type="button"
           onClick={() => useLoginModalStore.getState().open()}
-          className="text-purple-400 hover:text-purple-300"
+          className={cn(a.text, 'hover:underline')}
         >
           Log in
         </button>{' '}
@@ -135,7 +138,7 @@ export function CommentForm({ root, replyTo, modDownloads, onPublished, onCancel
             size="sm"
             onClick={submit}
             disabled={sending || !content.trim()}
-            className="bg-purple-600 hover:bg-purple-700 text-white gap-1.5"
+            className={cn(a.solid, 'text-white gap-1.5')}
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             {replyTo ? 'Reply' : 'Comment'}

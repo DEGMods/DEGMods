@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { nip19 } from 'nostr-tools'
 import { MessageSquare, User, ShieldCheck } from 'lucide-react'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
 import type { CommentNode, NostrTarget } from '@/lib/nostr/social'
@@ -13,6 +13,7 @@ import { ZapButton } from './ZapButton'
 import { CommentForm } from './CommentForm'
 import { SocialPostMenu } from './SocialPostMenu'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { useAccent } from '@/components/shared/accent'
 
 interface CommentProps {
   node: CommentNode
@@ -29,6 +30,7 @@ export function Comment({ node, root, onReplyPublished, onOpenThread, focused = 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
   const [deleted, setDeleted] = useState(false)
+  const a = useAccent()
 
   useEffect(() => {
     let cancelled = false
@@ -59,12 +61,12 @@ export function Comment({ node, root, onReplyPublished, onOpenThread, focused = 
         </Link>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <Link to={`/profile/${npub}`} className="text-sm font-medium text-neutral-200 hover:text-purple-400 transition-colors truncate">{name}</Link>
+            <Link to={`/profile/${npub}`} className={cn('text-sm font-medium text-neutral-200 transition-colors truncate', a.textHover)}>{name}</Link>
             <span className="text-xs text-neutral-600">·</span>
             {focused ? (
               <span className="text-xs text-neutral-500">{formatRelativeTime(event.created_at)}</span>
             ) : (
-              <button onClick={() => onOpenThread(event.id)} className="text-xs text-neutral-500 hover:text-purple-400 hover:underline">{formatRelativeTime(event.created_at)}</button>
+              <button onClick={() => onOpenThread(event.id)} className={cn('text-xs text-neutral-500 hover:underline', a.textHover)}>{formatRelativeTime(event.created_at)}</button>
             )}
             {via && <span className="text-xs text-neutral-600">via {via}</span>}
             {pow > 0 && (

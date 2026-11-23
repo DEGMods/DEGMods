@@ -504,7 +504,7 @@ export function JamPage() {
             {jam.client && <p className="text-xs text-neutral-500">on {jam.client}</p>}
           </section>
 
-          {naddr && <ShareBox url={`${window.location.origin}/mod-jam/${naddr}`} title={jam.title} />}
+          {naddr && <ShareBox url={`${window.location.origin}/mod-jam/${naddr}`} title={jam.title} accent="watermelon" />}
 
           {/* The author's recommended DEN Chat community hub */}
           <AuthorHubs pubkey={jam.pubkey} />
@@ -521,7 +521,7 @@ export function JamPage() {
 
       {/* Comments — full width below both columns (so on mobile they sit at the bottom) */}
       <div className="mt-8">
-        <CommentSection root={target} />
+        <CommentSection root={target} accent="watermelon" />
       </div>
 
       {tallyOpen && <JamTallyModal open={tallyOpen} onOpenChange={setTallyOpen} jam={jam} />}
