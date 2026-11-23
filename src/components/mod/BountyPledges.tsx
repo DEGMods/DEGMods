@@ -119,8 +119,8 @@ export function BountyPledges({ bountyCoordinate, game, accent = 'orange' }: { b
         <span className="flex items-center gap-1.5 text-sm text-neutral-300">
           <HandCoins className={cn('h-4 w-4', a.text)} />
           {loading && count === 0
-            ? 'Reward pledges'
-            : `${count}${!reachedEnd && count >= BATCH ? '+' : ''} reward pledge${count === 1 ? '' : 's'}`}
+            ? 'Extra reward pledges'
+            : `${count}${!reachedEnd && count >= BATCH ? '+' : ''} extra reward pledge${count === 1 ? '' : 's'}`}
         </span>
         <ChevronRight className="h-4 w-4 text-neutral-500" />
       </button>
@@ -184,7 +184,7 @@ function PledgesModal({
       <DialogContent className="flex max-h-[85vh] max-w-lg flex-col border-[#262626] bg-[#1c1c1c]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-neutral-100">
-            <HandCoins className={cn('h-5 w-5', a.text)} /> Reward pledges
+            <HandCoins className={cn('h-5 w-5', a.text)} /> Extra reward pledges
             {!loading && <span className="text-sm font-normal text-neutral-500">({pledges.length})</span>}
           </DialogTitle>
           <DialogDescription className="text-neutral-400">
@@ -196,7 +196,7 @@ function PledgesModal({
           {loading && pledges.length === 0 ? (
             <p className="flex items-center justify-center gap-2 py-10 text-sm text-neutral-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
           ) : pledges.length === 0 ? (
-            <p className="py-10 text-center text-sm text-neutral-500">No reward pledges yet.</p>
+            <p className="py-10 text-center text-sm text-neutral-500">No extra reward pledges yet.</p>
           ) : (
             <>
               <ul className="space-y-2">
