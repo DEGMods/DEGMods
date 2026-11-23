@@ -212,7 +212,7 @@ function BountyCard({ bounty: b }: { bounty: BountyDetails }) {
               {b.summary && <p className="line-clamp-2 text-sm leading-relaxed text-neutral-400">{b.summary}</p>}
 
               {b.reward && (
-                <p className="flex items-center gap-1.5 text-xs text-emerald-300">
+                <p className="flex items-center gap-1.5 text-xs text-orange-400">
                   <Gift className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{b.reward.what}{b.reward.how ? ` (${b.reward.how})` : ''}</span>
                 </p>
               )}
