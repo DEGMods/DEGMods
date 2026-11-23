@@ -23,6 +23,7 @@ import { ModScreenshots } from '@/components/mod/ModScreenshots'
 import { ShareBox } from '@/components/mod/ShareBox'
 import { PublisherCard } from '@/components/mod/PublisherCard'
 import { SidebarAd } from '@/components/mod/SidebarAd'
+import { AuthorHubs } from '@/components/hubs/AuthorHubs'
 import { ReactionButton } from '@/components/social/ReactionButton'
 import { ZapButton } from '@/components/social/ZapButton'
 import { CommentSection } from '@/components/social/CommentSection'
@@ -504,6 +505,10 @@ export function JamPage() {
           </section>
 
           {naddr && <ShareBox url={`${window.location.origin}/mod-jam/${naddr}`} title={jam.title} />}
+
+          {/* The author's recommended DEN Chat community hub */}
+          <AuthorHubs pubkey={jam.pubkey} />
+
           <SidebarAd />
         </div>
       </div>
