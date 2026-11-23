@@ -211,31 +211,6 @@ export function BountyPage() {
               <CollapsibleMarkdown content={bounty.content} />
             </section>
           )}
-
-          {/* Fulfilments */}
-          <section className="space-y-3">
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-neutral-200">
-              <FileUp className="h-4 w-4 text-neutral-400" /> Fulfilments
-              {fulfillments.length > 0 && <span className="text-sm font-normal text-neutral-500">({fulfillments.length})</span>}
-            </h2>
-            {fulfillments.length === 0 ? (
-              <p className="text-sm text-neutral-500">No mods submitted for this request yet. Made one? Link it from your mod&rsquo;s editor (&ldquo;Fulfils a mod request&rdquo;).</p>
-            ) : (
-              <>
-                <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {paginated.map((f) => (
-                    <li key={f.aTag} className="flex h-full flex-col gap-2">
-                      <div className="flex-1"><ModCard mod={f} /></div>
-                      {isAuthor && bounty.winnerCoordinate !== f.aTag && (
-                        <Button size="sm" disabled={savingWinner} onClick={() => setWinner(f.aTag, f.pubkey)} className="w-full bg-emerald-600 text-xs text-white hover:bg-emerald-500">Pick as fulfiller</Button>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-                <Pagination page={page} totalPages={totalPages} onPage={setPage} />
-              </>
-            )}
-          </section>
         </div>
 
         {/* Sidebar */}
@@ -288,6 +263,31 @@ export function BountyPage() {
           {naddr && <ShareBox url={`${window.location.origin}/mod-bounty/${bounty.naddr}`} title={bounty.title} />}
         </div>
       </div>
+
+      {/* Fulfilments (full width, like comments) */}
+      <section className="mt-8 space-y-3">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-neutral-200">
+          <FileUp className="h-4 w-4 text-neutral-400" /> Fulfilments
+          {fulfillments.length > 0 && <span className="text-sm font-normal text-neutral-500">({fulfillments.length})</span>}
+        </h2>
+        {fulfillments.length === 0 ? (
+          <p className="text-sm text-neutral-500">No mods submitted for this request yet. Made one? Link it from your mod&rsquo;s editor (&ldquo;Fulfils a mod request&rdquo;).</p>
+        ) : (
+          <>
+            <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {paginated.map((f) => (
+                <li key={f.aTag} className="flex h-full flex-col gap-2">
+                  <div className="flex-1"><ModCard mod={f} /></div>
+                  {isAuthor && bounty.winnerCoordinate !== f.aTag && (
+                    <Button size="sm" disabled={savingWinner} onClick={() => setWinner(f.aTag, f.pubkey)} className="w-full bg-emerald-600 text-xs text-white hover:bg-emerald-500">Pick as fulfiller</Button>
+                  )}
+                </li>
+              ))}
+            </ol>
+            <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+          </>
+        )}
+      </section>
 
       {/* Comments */}
       <div className="mt-8">
