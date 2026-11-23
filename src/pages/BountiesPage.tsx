@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { Filter } from 'nostr-tools'
-import { Search, Plus, Gamepad2, CheckCircle2, CircleDashed, Gift, PackagePlus } from 'lucide-react'
+import { Search, Plus, Gamepad2, CheckCircle2, CircleDashed, Gift } from 'lucide-react'
 import { KINDS } from '@/lib/constants'
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
 import { constructBountyListFromEvents, MOD_BOUNTY_TYPE, type BountyDetails } from '@/lib/nostr/bounty'
@@ -134,7 +134,7 @@ function BountyCard({ bounty: b }: { bounty: BountyDetails }) {
           {b.image ? (
             <SkeletonImage src={b.image} alt={b.title} className={cn('absolute inset-0 h-full w-full object-cover', nsfw && 'blur-xl')} />
           ) : (
-            <div className="flex h-full w-full items-center justify-center"><PackagePlus className="h-8 w-8 text-neutral-700" /></div>
+            <div className="flex h-full w-full items-center justify-center"><span className="text-sm text-neutral-600">No image</span></div>
           )}
           {nsfw && <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-yellow-400 backdrop-blur">NSFW</span>}
           <span className={cn('absolute right-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium backdrop-blur', b.fulfilled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300')}>

@@ -187,18 +187,22 @@ export function BountyPage() {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Main */}
         <div className="min-w-0 space-y-6 lg:col-span-2">
-          {bounty.image && (
-            <div className="relative aspect-video overflow-hidden rounded-xl border border-[#262626]">
-              <SkeletonImage src={bounty.image} alt={bounty.title} className={cn('h-full w-full object-cover', hasWarning && 'blur-2xl')} />
-              {hasWarning && (
-                <button onClick={() => reveal()} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/60 text-neutral-300">
-                  <AlertTriangle className="h-7 w-7 text-yellow-500" />
-                  <span className="text-sm font-medium">{bounty.contentWarning}</span>
-                  <span className="text-xs text-neutral-500">Click to reveal</span>
-                </button>
-              )}
-            </div>
-          )}
+          <div className="relative aspect-video overflow-hidden rounded-xl border border-[#262626] bg-[#212121]">
+            {bounty.image ? (
+              <>
+                <SkeletonImage src={bounty.image} alt={bounty.title} className={cn('h-full w-full object-cover', hasWarning && 'blur-2xl')} />
+                {hasWarning && (
+                  <button onClick={() => reveal()} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/60 text-neutral-300">
+                    <AlertTriangle className="h-7 w-7 text-yellow-500" />
+                    <span className="text-sm font-medium">{bounty.contentWarning}</span>
+                    <span className="text-xs text-neutral-500">Click to reveal</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="flex h-full w-full items-center justify-center"><span className="text-sm text-neutral-600">No image</span></div>
+            )}
+          </div>
 
           {bounty.content && (
             <section className="space-y-3">
