@@ -151,7 +151,7 @@ export function BountyPage() {
 
   return (
     <div className="space-y-6 py-6">
-      <Link to="/mod-bounties" className="inline-flex items-center gap-1.5 text-sm text-neutral-400 transition-colors hover:text-white">
+      <Link to="/mod-requests" className="inline-flex items-center gap-1.5 text-sm text-neutral-400 transition-colors hover:text-white">
         <ChevronLeft size={16} /> Mod Requests
       </Link>
 
@@ -169,7 +169,7 @@ export function BountyPage() {
             {isAuthor && (
               <>
                 <DropdownMenuSeparator className="bg-[#262626]" />
-                <DropdownMenuItem onClick={() => navigate(`/mod-bounty/${bounty.naddr}/edit`)} className="cursor-pointer"><Pencil className="mr-2 h-4 w-4" /> Edit request</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate(`/mod-request/${bounty.naddr}/edit`)} className="cursor-pointer"><Pencil className="mr-2 h-4 w-4" /> Edit request</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowDelete(true)} className="cursor-pointer text-red-400 focus:text-red-400"><Trash2 className="mr-2 h-4 w-4" /> Request Delete</DropdownMenuItem>
               </>
             )}
@@ -262,7 +262,7 @@ export function BountyPage() {
             {bounty.client && <p className="text-xs text-neutral-500">on {bounty.client}</p>}
           </section>
 
-          {naddr && <ShareBox url={`${window.location.origin}/mod-bounty/${bounty.naddr}`} title={bounty.title} accent="orange" />}
+          {naddr && <ShareBox url={`${window.location.origin}/mod-request/${bounty.naddr}`} title={bounty.title} accent="orange" />}
 
           {/* The author's recommended DEN Chat community hub */}
           <AuthorHubs pubkey={bounty.pubkey} />
@@ -309,7 +309,7 @@ export function BountyPage() {
           event={rawEvent as unknown as Parameters<typeof RequestDeleteDialog>[0]['event']}
           title={bounty.title}
           noun="mod request"
-          onDeleted={() => navigate('/mod-bounties')}
+          onDeleted={() => navigate('/mod-requests')}
         />
       )}
 

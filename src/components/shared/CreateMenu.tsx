@@ -17,7 +17,7 @@ const OPTIONS = [
   { to: '/submit-mod', icon: Package, title: 'Mod post', desc: 'Publish your mod for others to download' },
   { to: '/submit-blog', icon: BookOpen, title: 'Blog post', desc: 'Publish a blog post for your people to read' },
   { to: '/submit-mod-jam', icon: JamIcon, title: 'Mod jam', desc: 'Set up a Mod Jam event to entice creators' },
-  { to: '/submit-mod-bounty', icon: PackagePlus, title: 'Mod request', desc: 'Request a mod you want, with an optional reward' },
+  { to: '/submit-mod-request', icon: PackagePlus, title: 'Mod request', desc: 'Request a mod you want, with an optional reward' },
 ] as const
 
 export function CreateMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {

@@ -34,7 +34,7 @@ export function BountyFulfillmentBanner({ bountyCoordinate, modCoordinate }: { b
 
   return (
     <Link
-      to={`/mod-bounty/${naddr}`}
+      to={`/mod-request/${naddr}`}
       className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-3 text-sm transition-colors hover:border-purple-500/50"
     >
       <span className="inline-flex items-center gap-1.5 font-medium text-purple-300"><PackagePlus className="h-4 w-4" /> Fulfils a mod request</span>

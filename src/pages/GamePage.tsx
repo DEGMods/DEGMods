@@ -148,7 +148,7 @@ export function GamePage() {
           <h2 className="text-xl font-bold text-white">Mods</h2>
           <div className="flex items-center gap-2">
             <Link
-              to={`/mod-bounties?game=${encodeURIComponent(gameName)}`}
+              to={`/mod-requests?game=${encodeURIComponent(gameName)}`}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040] hover:text-white"
             >
               <PackagePlus className="h-4 w-4" /> Mod requests

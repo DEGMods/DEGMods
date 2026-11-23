@@ -45,7 +45,7 @@ export function BountiesPage() {
   const blockFilter = useBlockFilter()
   const wotFilter = useWotJamFilter()
 
-  // Deep link: /mod-bounties?game=<name> pins the game filter (from a game page).
+  // Deep link: /mod-requests?game=<name> pins the game filter (from a game page).
   useEffect(() => {
     const g = searchParams.get('game')
     if (g) setGame(g)
@@ -103,7 +103,7 @@ export function BountiesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-white">Mod Requests</h1>
-        <Link to="/submit-mod-bounty">
+        <Link to="/submit-mod-request">
           <Button size="sm" className="gap-1.5 bg-orange-600 text-xs text-white hover:bg-orange-700">
             <Plus size={14} /> Post request
           </Button>
@@ -171,7 +171,7 @@ function BountyCard({ bounty: b }: { bounty: BountyDetails }) {
   const authorName = author?.display_name || `${b.pubkey.slice(0, 8)}…`
 
   return (
-    <Link to={`/mod-bounty/${b.naddr}`} className="group block h-full">
+    <Link to={`/mod-request/${b.naddr}`} className="group block h-full">
       {/* Orange gradient border, shown on hover */}
       <div className="relative h-full rounded-lg p-0.5">
         <div className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-t from-orange-500 to-transparent to-50% opacity-0 transition-opacity duration-300 group-hover:opacity-100" />

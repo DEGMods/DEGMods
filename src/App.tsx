@@ -179,10 +179,10 @@ export default function App() {
           <Route path="/mod-jam/:naddr" element={<JamPage />} />
           <Route path="/mod-jam/:naddr/edit" element={<JamSubmitPage />} />
           <Route path="/mod-jam/:naddr/submissions" element={<JamSubmissionsPage />} />
-          <Route path="/mod-bounties" element={<BountiesPage />} />
-          <Route path="/submit-mod-bounty" element={<SubmitBountyPage />} />
-          <Route path="/mod-bounty/:naddr" element={<BountyPage />} />
-          <Route path="/mod-bounty/:naddr/edit" element={<SubmitBountyPage />} />
+          <Route path="/mod-requests" element={<BountiesPage />} />
+          <Route path="/submit-mod-request" element={<SubmitBountyPage />} />
+          <Route path="/mod-request/:naddr" element={<BountyPage />} />
+          <Route path="/mod-request/:naddr/edit" element={<SubmitBountyPage />} />
           <Route path="/mod/:naddr" element={<ModPage />} />
           <Route path="/submit-mod" element={<SubmitModPage />} />
           {/* legacy path — keep old links/bookmarks working */}

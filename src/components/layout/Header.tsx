@@ -20,8 +20,8 @@ import { EditProfileDialog } from '@/components/social/EditProfileDialog'
 const navLinks = [
   { to: '/games', label: 'Games', icon: Gamepad2 },
   { to: '/mods', label: 'Mods', icon: Package },
-  { to: '/mod-jams', label: 'Mod Jams', icon: JamIcon },
-  { to: '/mod-bounties', label: 'Requests', icon: PackagePlus },
+  { to: '/mod-requests', label: 'Requests', icon: PackagePlus },
+  { to: '/mod-jams', label: 'Jams', icon: JamIcon },
   { to: '/feed', label: 'Feed', icon: Rss },
 ]
 

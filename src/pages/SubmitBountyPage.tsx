@@ -67,14 +67,14 @@ export function SubmitBountyPage() {
     let cancelled = false
     ;(async () => {
       const coord = bountyCoordinateFromNaddr(naddr)
-      if (!coord) { toast.error('Invalid request address'); navigate('/mod-bounties'); return }
+      if (!coord) { toast.error('Invalid request address'); navigate('/mod-requests'); return }
       const [, authorPk, ...idParts] = coord.split(':')
       const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
       const ev = await fetchLatestEvent(relays, { kinds: [KINDS.BOUNTY], authors: [authorPk], '#d': [idParts.join(':')] })
       if (cancelled) return
       const b = ev ? extractBounty(ev) : null
-      if (!b || !ev) { toast.error('Mod request not found'); navigate('/mod-bounties'); return }
-      if (b.pubkey !== pubkey) { toast.error('You can only edit your own requests'); navigate(`/mod-bounty/${naddr}`); return }
+      if (!b || !ev) { toast.error('Mod request not found'); navigate('/mod-requests'); return }
+      if (b.pubkey !== pubkey) { toast.error('You can only edit your own requests'); navigate(`/mod-request/${naddr}`); return }
       setForm({
         dTag: b.dTag, isEdit: true, previousCreatedAt: ev.created_at, publishedAt: b.publishedAt,
         title: b.title, featuredImageUrl: b.image, summary: b.summary, content: b.content, game: b.game,
@@ -112,7 +112,7 @@ export function SubmitBountyPage() {
       if (!result.success) throw new Error(result.error || 'Failed to publish')
       toast.success(isEdit ? 'Mod request updated' : 'Mod request posted', { id: 'bounty' })
       const addr = nip19.naddrEncode({ identifier: form.dTag, pubkey: pubkey!, kind: KINDS.BOUNTY })
-      navigate(`/mod-bounty/${addr}`)
+      navigate(`/mod-request/${addr}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Publish failed', { id: 'bounty' })
     } finally {
