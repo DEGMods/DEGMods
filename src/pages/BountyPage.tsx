@@ -217,8 +217,8 @@ export function BountyPage() {
         <div className="space-y-6">
           <PublisherCard pubkey={bounty.pubkey} />
 
-          {/* Status + selection + reward */}
-          <section className="space-y-3 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
+          {/* Status + chosen fulfiller */}
+          <section className="space-y-3 rounded-xl border border-[#262626] p-4">
             <div className={cn('flex items-center gap-2 text-sm font-semibold', bounty.fulfilled ? 'text-emerald-300' : 'text-amber-300')}>
               {bounty.fulfilled ? <CheckCircle2 className="h-4 w-4" /> : <CircleDashed className="h-4 w-4" />}
               {bounty.fulfilled ? 'Fulfilled' : 'Open, looking for a modder'}
@@ -234,17 +234,18 @@ export function BountyPage() {
                 )}
               </div>
             )}
-
-            {bounty.reward && (
-              <div>
-                <p className="mb-1 text-xs font-medium text-neutral-400">Reward</p>
-                <p className="flex items-start gap-1.5 text-sm text-emerald-300">
-                  <Gift className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>{bounty.reward.what}{bounty.reward.how ? <span className="text-neutral-400"> ({bounty.reward.how})</span> : null}</span>
-                </p>
-              </div>
-            )}
           </section>
+
+          {/* Reward */}
+          {bounty.reward && (
+            <section className="space-y-1 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
+              <p className="text-xs font-medium text-neutral-400">Reward</p>
+              <p className="flex items-start gap-1.5 text-sm text-emerald-300">
+                <Gift className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{bounty.reward.what}{bounty.reward.how ? <span className="text-neutral-400"> ({bounty.reward.how})</span> : null}</span>
+              </p>
+            </section>
+          )}
 
           <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
             <Button onClick={() => navigate(`/submit-mod?bounty=${bounty.naddr}`)} className="w-full gap-2 bg-purple-600 text-white hover:bg-purple-700">
