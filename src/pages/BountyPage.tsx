@@ -24,6 +24,7 @@ import { Separator } from '@/components/ui/separator'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { CollapsibleMarkdown } from '@/components/mod/CollapsibleMarkdown'
+import { ModCard } from '@/components/mod/ModCard'
 import { PublisherCard } from '@/components/mod/PublisherCard'
 import { CommentSection } from '@/components/social/CommentSection'
 import { ShareBox } from '@/components/mod/ShareBox'
@@ -31,12 +32,11 @@ import { RequestDeleteDialog } from '@/components/shared/RequestDeleteDialog'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { Pagination } from '@/components/shared/Pagination'
 import type { NostrTarget } from '@/lib/nostr/social'
+import type { ModDetails } from '@/types/mod'
 import { cn } from '@/lib/utils'
 
 const fmt = (ts: number) => new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 const PER_PAGE = 6
-
-interface Fulfillment { title: string; naddr: string; pubkey: string; coordinate: string; image: string }
 
 function bountyToForm(b: BountyDetails, previousCreatedAt: number): BountyFormState {
   return {
@@ -57,7 +57,7 @@ export function BountyPage() {
   const [rawEvent, setRawEvent] = useState<NostrEvent | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const [fulfillments, setFulfillments] = useState<Fulfillment[]>([])
+  const [fulfillments, setFulfillments] = useState<ModDetails[]>([])
   const [savingWinner, setSavingWinner] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
@@ -101,20 +101,14 @@ export function BountyPage() {
       const evs = await fetchEvents(relays, { kinds: [KINDS.MOD], '#a': [bounty.aTag] })
       if (cancelled) return
       const seen = new Set<string>()
-      const list: Fulfillment[] = []
-      for (const ev of evs) {
+      const list: ModDetails[] = []
+      // Newest first, so a coordinate's latest edit is the one we keep.
+      for (const ev of [...evs].sort((a, b) => b.created_at - a.created_at)) {
         if (!isValidFulfillment(ev, bounty)) continue
         const coord = modCoordinate(ev)
         if (!coord || seen.has(coord)) continue
         seen.add(coord)
-        const data = extractModData(ev)
-        list.push({
-          title: data.title || 'Untitled mod',
-          naddr: nip19.naddrEncode({ kind: KINDS.MOD, pubkey: ev.pubkey, identifier: data.dTag }),
-          pubkey: ev.pubkey,
-          coordinate: coord,
-          image: data.featuredImageUrl || '',
-        })
+        list.push(extractModData(ev))
       }
       setFulfillments(list)
     })()
@@ -142,7 +136,7 @@ export function BountyPage() {
 
   const totalPages = Math.max(1, Math.ceil(fulfillments.length / PER_PAGE))
   const paginated = useMemo(() => fulfillments.slice((page - 1) * PER_PAGE, page * PER_PAGE), [fulfillments, page])
-  const winnerFulfillment = bounty?.winnerCoordinate ? fulfillments.find((f) => f.coordinate === bounty.winnerCoordinate) : undefined
+  const winnerFulfillment = bounty?.winnerCoordinate ? fulfillments.find((f) => f.aTag === bounty.winnerCoordinate) : undefined
 
   if (loading) return <div className="flex items-center justify-center py-24 text-neutral-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading request...</div>
   if (notFound || !bounty) return <div className="py-24 text-center text-neutral-400">Mod request not found.</div>
@@ -230,14 +224,12 @@ export function BountyPage() {
               <>
                 <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {paginated.map((f) => (
-                    <FulfillmentCard
-                      key={f.coordinate}
-                      f={f}
-                      isWinner={bounty.winnerCoordinate === f.coordinate}
-                      isAuthor={isAuthor}
-                      saving={savingWinner}
-                      onPick={() => setWinner(f.coordinate, f.pubkey)}
-                    />
+                    <li key={f.aTag} className="flex h-full flex-col gap-2">
+                      <div className="flex-1"><ModCard mod={f} /></div>
+                      {isAuthor && bounty.winnerCoordinate !== f.aTag && (
+                        <Button size="sm" disabled={savingWinner} onClick={() => setWinner(f.aTag, f.pubkey)} className="w-full bg-emerald-600 text-xs text-white hover:bg-emerald-500">Pick as fulfiller</Button>
+                      )}
+                    </li>
                   ))}
                 </ol>
                 <Pagination page={page} totalPages={totalPages} onPage={setPage} />
@@ -258,32 +250,14 @@ export function BountyPage() {
             </div>
 
             {bounty.fulfilled && (
-              winnerFulfillment ? (
-                <div className="flex flex-col overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c]">
-                  <Link to={`/mod/${winnerFulfillment.naddr}`} className="block">
-                    <div className="relative aspect-video w-full overflow-hidden bg-[#212121]">
-                      {winnerFulfillment.image ? (
-                        <SkeletonImage src={winnerFulfillment.image} alt={winnerFulfillment.title} className="absolute inset-0 h-full w-full object-cover" />
-                      ) : (
-                        <img src="/hub-banner-placeholder.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
-                      )}
-                    </div>
-                  </Link>
-                  <div className="flex flex-col gap-2 p-3">
-                    <Link to={`/mod/${winnerFulfillment.naddr}`} className="text-sm font-semibold text-neutral-100 hover:text-white"><span className="line-clamp-2">{winnerFulfillment.title}</span></Link>
-                    {isAuthor && (
-                      <Button variant="outline" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full border-[#262626] text-xs">Unmark as fulfilled</Button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
+              <div className="space-y-2">
+                {winnerFulfillment ? <ModCard mod={winnerFulfillment} /> : (
                   <p className="text-sm text-neutral-400">A fulfiller has been selected.</p>
-                  {isAuthor && (
-                    <Button variant="outline" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full border-[#262626] text-xs">Unmark as fulfilled</Button>
-                  )}
-                </div>
-              )
+                )}
+                {isAuthor && (
+                  <Button variant="outline" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full border-[#262626] text-xs">Unmark as fulfilled</Button>
+                )}
+              </div>
             )}
 
             {bounty.reward && (
@@ -347,33 +321,5 @@ export function BountyPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
-}
-
-function FulfillmentCard({ f, isWinner, isAuthor, saving, onPick }: {
-  f: Fulfillment; isWinner: boolean; isAuthor: boolean; saving: boolean; onPick: () => void
-}) {
-  return (
-    <li className="flex h-full flex-col overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c]">
-      <Link to={`/mod/${f.naddr}`} className="block">
-        <div className="relative aspect-video w-full overflow-hidden bg-[#212121]">
-          {f.image ? (
-            <SkeletonImage src={f.image} alt={f.title} className="absolute inset-0 h-full w-full object-cover" />
-          ) : (
-            <img src="/hub-banner-placeholder.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
-          )}
-        </div>
-      </Link>
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <Link to={`/mod/${f.naddr}`} className="text-sm font-semibold text-neutral-100 hover:text-white">
-          <span className="line-clamp-2">{f.title}</span>
-        </Link>
-        {isAuthor && !isWinner && (
-          <div className="mt-auto">
-            <Button size="sm" disabled={saving} onClick={onPick} className="w-full bg-emerald-600 text-xs text-white hover:bg-emerald-500">Pick as fulfiller</Button>
-          </div>
-        )}
-      </div>
-    </li>
   )
 }
