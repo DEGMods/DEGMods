@@ -200,7 +200,7 @@ export function BountyPage() {
                 )}
               </>
             ) : (
-              <div className="flex h-full w-full items-center justify-center"><span className="text-sm text-neutral-600">No image</span></div>
+              <img src="/hub-banner-placeholder.jpg" alt="" className="h-full w-full object-cover" />
             )}
           </div>
 
