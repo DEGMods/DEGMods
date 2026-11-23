@@ -213,7 +213,7 @@ export function SubmitBountyPage() {
         <Section title="Tags">
           <div className="space-y-2">
             <Label hint="(optional)">Tags</Label>
-            <ChipInput items={form.tags} onChange={(v) => set('tags', v)} placeholder="Add a tag and press Enter" maxLength={LIMITS.tag} max={MAX_TAGS} />
+            <TagRows tags={form.tags} onChange={(v) => set('tags', v)} maxLength={LIMITS.tag} max={MAX_TAGS} />
           </div>
         </Section>
 
@@ -240,35 +240,35 @@ const Label = ({ children, hint }: { children: React.ReactNode; hint?: string })
   <label className="block text-xs font-medium text-neutral-400">{children}{hint && <span className="ml-1 text-neutral-600">{hint}</span>}</label>
 )
 
-/** Chip-list tag input: type + Enter (or the Add button) to add, click × to remove. */
-function ChipInput({ items, onChange, placeholder, maxLength, max }: { items: string[]; onChange: (v: string[]) => void; placeholder: string; maxLength: number; max: number }) {
-  const [val, setVal] = useState('')
-  const full = items.length >= max
-  const add = () => {
-    if (full) return
-    const v = val.trim().toLowerCase()
-    if (v && !items.includes(v)) onChange([...items, v])
-    setVal('')
-  }
+/** Per-row tag editor: each tag is its own field with an × to remove and an Add button below. */
+function TagRows({ tags, onChange, maxLength, max }: { tags: string[]; onChange: (v: string[]) => void; maxLength: number; max: number }) {
+  const full = tags.length >= max
+  const update = (i: number, v: string) => { const next = [...tags]; next[i] = v; onChange(next) }
+  const remove = (i: number) => onChange(tags.filter((_, idx) => idx !== i))
+  const add = () => { if (!full) onChange([...tags, '']) }
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
-        <Input value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }} placeholder={placeholder} maxLength={maxLength} disabled={full} className={inputClass} />
-        <Button type="button" variant="outline" className="shrink-0 border-[#262626]" onClick={add} disabled={full}><Plus className="h-4 w-4" /></Button>
-      </div>
-      {items.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {items.map((it) => (
-            <span key={it} className="inline-flex items-center gap-1 rounded-md bg-[#262626] px-2 py-0.5 text-xs text-neutral-200">
-              {it}
-              <button type="button" onClick={() => onChange(items.filter((x) => x !== it))} className="text-neutral-500 hover:text-red-400"><X className="h-3 w-3" /></button>
-            </span>
-          ))}
+      {tags.map((tag, i) => (
+        <div key={i} className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Input
+              value={tag}
+              onChange={(e) => update(i, e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (i === tags.length - 1 && tag.trim() && !full) add() } }}
+              placeholder={`Tag #${i + 1}`}
+              maxLength={maxLength}
+              className={cn(inputClass, 'flex-1')}
+            />
+            <button type="button" onClick={() => remove(i)} className="rounded p-1.5 text-neutral-500 transition-colors hover:bg-[#2a2a2a] hover:text-neutral-300"><X size={14} /></button>
+          </div>
+          <CharCounter value={tag} max={maxLength} />
         </div>
-      )}
-      <div className="flex items-center justify-end gap-3">
-        <CharCounter value={val} max={maxLength} />
-        <span className={cn('text-[10px] tabular-nums', items.length >= max ? 'text-amber-400' : 'text-neutral-600')}>{items.length}/{max}</span>
+      ))}
+      <div className="flex items-center justify-between">
+        <Button type="button" variant="outline" size="sm" onClick={add} disabled={full} className="border-[#262626] bg-transparent text-xs text-neutral-400 hover:bg-[#2a2a2a]">
+          <Plus size={14} className="mr-1" /> Add Tag
+        </Button>
+        <span className={cn('text-[10px] tabular-nums', full ? 'text-amber-400' : 'text-neutral-600')}>{tags.length}/{max}</span>
       </div>
     </div>
   )
