@@ -258,9 +258,9 @@ export function BountyPage() {
             </div>
 
             {bounty.fulfilled && (
-              <div className="space-y-2">
-                {winnerFulfillment ? (
-                  <Link to={`/mod/${winnerFulfillment.naddr}`} className="group block overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c] transition-colors hover:border-[#3a3a3a]">
+              winnerFulfillment ? (
+                <div className="flex flex-col overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c]">
+                  <Link to={`/mod/${winnerFulfillment.naddr}`} className="block">
                     <div className="relative aspect-video w-full overflow-hidden bg-[#212121]">
                       {winnerFulfillment.image ? (
                         <SkeletonImage src={winnerFulfillment.image} alt={winnerFulfillment.title} className="absolute inset-0 h-full w-full object-cover" />
@@ -268,15 +268,22 @@ export function BountyPage() {
                         <img src="/hub-banner-placeholder.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
                       )}
                     </div>
-                    <p className="p-3 text-sm font-semibold text-neutral-100 group-hover:text-white"><span className="line-clamp-2">{winnerFulfillment.title}</span></p>
                   </Link>
-                ) : (
+                  <div className="flex flex-col gap-2 p-3">
+                    <Link to={`/mod/${winnerFulfillment.naddr}`} className="text-sm font-semibold text-neutral-100 hover:text-white"><span className="line-clamp-2">{winnerFulfillment.title}</span></Link>
+                    {isAuthor && (
+                      <Button variant="outline" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full border-[#262626] text-xs">Unmark as fulfilled</Button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
                   <p className="text-sm text-neutral-400">A fulfiller has been selected.</p>
-                )}
-                {isAuthor && (
-                  <Button variant="outline" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full border-[#262626] text-xs">Unmark as fulfilled</Button>
-                )}
-              </div>
+                  {isAuthor && (
+                    <Button variant="outline" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full border-[#262626] text-xs">Unmark as fulfilled</Button>
+                  )}
+                </div>
+              )
             )}
 
             {bounty.reward && (
