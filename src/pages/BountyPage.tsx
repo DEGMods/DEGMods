@@ -238,19 +238,19 @@ export function BountyPage() {
             )}
           </section>
 
-          {/* Reward */}
-          {bounty.reward && (
-            <section className="space-y-1 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
-              <p className="text-xs font-medium text-neutral-400">Reward</p>
+          {/* Reward (requester's own) + third-party pledges */}
+          <section className="space-y-3 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
+            <p className="text-xs font-medium text-neutral-400">Reward</p>
+            {bounty.reward ? (
               <p className="flex items-start gap-1.5 text-sm text-emerald-300">
                 <Gift className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{bounty.reward.what}{bounty.reward.how ? <span className="text-neutral-400"> ({bounty.reward.how})</span> : null}</span>
               </p>
-            </section>
-          )}
-
-          {/* Third-party reward pledges */}
-          <BountyPledges bountyCoordinate={bounty.aTag} game={bounty.game} accent="orange" />
+            ) : (
+              <p className="text-sm text-neutral-500">No reward offered by the requester.</p>
+            )}
+            <BountyPledges bountyCoordinate={bounty.aTag} game={bounty.game} accent="orange" />
+          </section>
 
           <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
             <Button onClick={() => navigate(`/submit-mod?bounty=${bounty.naddr}`)} className="w-full gap-2 bg-orange-600 text-white hover:bg-orange-700">

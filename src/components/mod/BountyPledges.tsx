@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
-import { HandCoins, Gift, Plus, Pencil, Trash2, Loader2, User } from 'lucide-react'
+import { HandCoins, Gift, Plus, Pencil, Trash2, Loader2, User, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useLoginModalStore } from '@/stores/loginModalStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { CharCounter } from '@/components/shared/CharCounter'
+import { Pagination } from '@/components/shared/Pagination'
 import { RequestDeleteDialog } from '@/components/shared/RequestDeleteDialog'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -27,93 +28,227 @@ import {
 import { cn } from '@/lib/utils'
 
 const LIMITS = { what: 120, how: 160, message: 500 }
+const BATCH = 30
+const PER_PAGE = 10
 const inputClass = 'bg-[#212121] border-[#262626] text-neutral-200 placeholder:text-neutral-600'
 
 /**
- * Third-party reward pledges on a mod request (kind 31244). Anyone logged in can
- * add one editable pledge toward the request; it's descriptive only (no escrow).
+ * Progressive fetch for a request's pledges: `loadMore()` pulls older events via
+ * an `until` cursor (like useProgressiveEvents), and `reload()` re-pulls the
+ * newest batch so a just-published or withdrawn pledge shows immediately.
+ */
+function usePledgeEvents(bountyCoordinate: string) {
+  const [events, setEvents] = useState<NostrEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [reachedEnd, setReachedEnd] = useState(false)
+  const seenRef = useRef<Set<string>>(new Set())
+  const oldestRef = useRef<number | undefined>(undefined)
+  const inFlightRef = useRef(false)
+
+  const baseFilter = useCallback(() => ({ kinds: [KINDS.BOUNTY_REWARD], '#a': [bountyCoordinate] }), [bountyCoordinate])
+
+  const ingest = useCallback((evs: NostrEvent[]): number => {
+    let fresh = 0
+    const add: NostrEvent[] = []
+    for (const e of evs) {
+      if (seenRef.current.has(e.id)) continue
+      seenRef.current.add(e.id)
+      add.push(e)
+      fresh++
+      if (oldestRef.current === undefined || e.created_at < oldestRef.current) oldestRef.current = e.created_at
+    }
+    if (add.length) setEvents((prev) => [...prev, ...add].sort((a, b) => b.created_at - a.created_at))
+    return fresh
+  }, [])
+
+  const reload = useCallback(async () => {
+    seenRef.current = new Set()
+    oldestRef.current = undefined
+    setEvents([])
+    setReachedEnd(false)
+    setLoading(true)
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    try {
+      const evs = await fetchEvents(relays, { ...baseFilter(), limit: BATCH }, 8000)
+      ingest(evs)
+    } catch { /* ignore */ } finally {
+      setLoading(false)
+    }
+  }, [baseFilter, ingest])
+
+  useEffect(() => { reload() }, [reload])
+
+  const loadMore = useCallback(async () => {
+    if (inFlightRef.current || reachedEnd || oldestRef.current === undefined) return
+    inFlightRef.current = true
+    setLoadingMore(true)
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    try {
+      const evs = await fetchEvents(relays, { ...baseFilter(), until: oldestRef.current - 1, limit: BATCH }, 8000)
+      if (ingest(evs) === 0) setReachedEnd(true)
+    } catch { /* ignore */ } finally {
+      inFlightRef.current = false
+      setLoadingMore(false)
+    }
+  }, [reachedEnd, baseFilter, ingest])
+
+  return { events, loading, loadingMore, reachedEnd, loadMore, reload }
+}
+
+/**
+ * Third-party reward pledges on a mod request (kind 31244). Rendered inside the
+ * Reward box as a single clickable count; the list (paginated, progressively
+ * fetched) lives in a modal. Anyone logged in can add one editable pledge.
  */
 export function BountyPledges({ bountyCoordinate, game, accent = 'orange' }: { bountyCoordinate: string; game: string; accent?: Accent }) {
+  const a = ACCENTS[accent]
+  const [open, setOpen] = useState(false)
+
+  const { events, loading, loadingMore, reachedEnd, loadMore, reload } = usePledgeEvents(bountyCoordinate)
+  const pledges = useMemo(() => constructPledgeListFromEvents(events, bountyCoordinate), [events, bountyCoordinate])
+  const count = pledges.length
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center justify-between gap-2 rounded-lg bg-[#212121] px-3 py-2 text-left transition-colors hover:bg-[#262626]"
+      >
+        <span className="flex items-center gap-1.5 text-sm text-neutral-300">
+          <HandCoins className={cn('h-4 w-4', a.text)} />
+          {loading && count === 0
+            ? 'Reward pledges'
+            : `${count}${!reachedEnd && count >= BATCH ? '+' : ''} reward pledge${count === 1 ? '' : 's'}`}
+        </span>
+        <ChevronRight className="h-4 w-4 text-neutral-500" />
+      </button>
+
+      <PledgesModal
+        open={open}
+        onOpenChange={setOpen}
+        pledges={pledges}
+        rawEvents={events}
+        loading={loading}
+        loadingMore={loadingMore}
+        reachedEnd={reachedEnd}
+        loadMore={loadMore}
+        reload={reload}
+        bountyCoordinate={bountyCoordinate}
+        game={game}
+        accent={accent}
+      />
+    </>
+  )
+}
+
+function PledgesModal({
+  open, onOpenChange, pledges, rawEvents, loading, loadingMore, reachedEnd, loadMore, reload,
+  bountyCoordinate, game, accent,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  pledges: BountyPledge[]
+  rawEvents: NostrEvent[]
+  loading: boolean
+  loadingMore: boolean
+  reachedEnd: boolean
+  loadMore: () => void
+  reload: () => void
+  bountyCoordinate: string
+  game: string
+  accent: Accent
+}) {
   const myPubkey = useAuthStore((s) => s.pubkey)
   const isAuthed = useAuthStore((s) => s.isAuthenticated)
   const a = ACCENTS[accent]
 
-  const [raw, setRaw] = useState<NostrEvent[]>([])
-  const [pledges, setPledges] = useState<BountyPledge[]>([])
-  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
   const [formOpen, setFormOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<NostrEvent | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-    const evs = await fetchEvents(relays, { kinds: [KINDS.BOUNTY_REWARD], '#a': [bountyCoordinate] })
-    setRaw(evs)
-    setPledges(constructPledgeListFromEvents(evs, bountyCoordinate))
-    setLoading(false)
-  }, [bountyCoordinate])
-
-  useEffect(() => { load() }, [load])
-
   const myPledge = myPubkey ? pledges.find((p) => p.pubkey === myPubkey) ?? null : null
 
+  const totalPages = Math.max(1, Math.ceil(pledges.length / PER_PAGE))
+  const currentPage = Math.min(page, totalPages)
+  const paginated = pledges.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE)
+
+  // Prefetch an older batch as the user nears the last loaded page.
+  useEffect(() => {
+    if (open && !loading && !reachedEnd && currentPage >= totalPages - 1) loadMore()
+  }, [open, currentPage, totalPages, reachedEnd, loading, loadMore])
+
   return (
-    <section className="space-y-3 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-200">
-        <HandCoins className={cn('h-4 w-4', a.text)} /> Reward pledges
-        {pledges.length > 0 && <span className="text-xs font-normal text-neutral-500">({pledges.length})</span>}
-      </h2>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col border-[#262626] bg-[#1c1c1c]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-neutral-100">
+            <HandCoins className={cn('h-5 w-5', a.text)} /> Reward pledges
+            {!loading && <span className="text-sm font-normal text-neutral-500">({pledges.length})</span>}
+          </DialogTitle>
+          <DialogDescription className="text-neutral-400">
+            Extra rewards offered by others for whoever makes this mod. Descriptive only — nothing is held or paid through the app.
+          </DialogDescription>
+        </DialogHeader>
 
-      {loading ? (
-        <p className="flex items-center gap-2 text-sm text-neutral-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…</p>
-      ) : pledges.length === 0 ? (
-        <p className="text-sm text-neutral-500">No extra reward pledges yet.</p>
-      ) : (
-        <ul className="space-y-2">
-          {pledges.map((p) => (
-            <PledgeRow
-              key={p.aTag}
-              pledge={p}
-              accent={accent}
-              isOwn={p.pubkey === myPubkey}
-              onEdit={() => setFormOpen(true)}
-              onDelete={() => { const ev = raw.find((e) => e.id === p.id); if (ev) setDeleteTarget(ev) }}
-            />
-          ))}
-        </ul>
-      )}
+        <div className="min-h-0 flex-1 overflow-auto">
+          {loading && pledges.length === 0 ? (
+            <p className="flex items-center justify-center gap-2 py-10 text-sm text-neutral-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
+          ) : pledges.length === 0 ? (
+            <p className="py-10 text-center text-sm text-neutral-500">No reward pledges yet.</p>
+          ) : (
+            <>
+              <ul className="space-y-2">
+                {paginated.map((p) => (
+                  <PledgeRow
+                    key={p.aTag}
+                    pledge={p}
+                    accent={accent}
+                    isOwn={p.pubkey === myPubkey}
+                    onEdit={() => setFormOpen(true)}
+                    onDelete={() => { const ev = rawEvents.find((e) => e.id === p.id); if (ev) setDeleteTarget(ev) }}
+                  />
+                ))}
+              </ul>
+              <Pagination page={currentPage} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />
+            </>
+          )}
+        </div>
 
-      {isAuthed ? (
-        <Button size="sm" variant="outline" onClick={() => setFormOpen(true)} className="w-full gap-1.5 border-[#262626] text-xs">
-          {myPledge ? <><Pencil className="h-3.5 w-3.5" /> Edit your pledge</> : <><Plus className="h-3.5 w-3.5" /> Pledge a reward</>}
-        </Button>
-      ) : (
-        <button onClick={() => useLoginModalStore.getState().open()} className={cn('text-xs hover:underline', a.text)}>
-          Log in to pledge a reward
-        </button>
-      )}
+        <DialogFooter>
+          {isAuthed ? (
+            <Button onClick={() => setFormOpen(true)} className={cn('w-full gap-1.5 text-white', a.solid)}>
+              {myPledge ? <><Pencil className="h-4 w-4" /> Edit your pledge</> : <><Plus className="h-4 w-4" /> Pledge a reward</>}
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => useLoginModalStore.getState().open()} className="w-full border-[#262626]">
+              Log in to pledge a reward
+            </Button>
+          )}
+        </DialogFooter>
 
-      <PledgeFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        bountyCoordinate={bountyCoordinate}
-        game={game}
-        existing={myPledge}
-        accent={accent}
-        onPublished={() => { setFormOpen(false); setTimeout(load, 1000) }}
-      />
-
-      {deleteTarget && (
-        <RequestDeleteDialog
-          open={!!deleteTarget}
-          onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}
-          event={deleteTarget}
-          title="your reward pledge"
-          noun="reward pledge"
-          onDeleted={() => { setDeleteTarget(null); setTimeout(load, 1000) }}
+        <PledgeFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          bountyCoordinate={bountyCoordinate}
+          game={game}
+          existing={myPledge}
+          accent={accent}
+          onPublished={() => { setFormOpen(false); setPage(1); setTimeout(reload, 1000) }}
         />
-      )}
-    </section>
+
+        {deleteTarget && (
+          <RequestDeleteDialog
+            open={!!deleteTarget}
+            onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}
+            event={deleteTarget}
+            title="your reward pledge"
+            noun="reward pledge"
+            onDeleted={() => { setDeleteTarget(null); setTimeout(reload, 1000) }}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -134,12 +269,12 @@ function PledgeRow({ pledge, accent, isOwn, onEdit, onDelete }: {
   const name = author?.display_name || `${npub.slice(0, 10)}…`
 
   return (
-    <li className="rounded-lg bg-[#212121] p-3">
+    <li className="rounded-lg border border-[#262626] bg-[#212121] p-3">
       <div className="flex items-center justify-between gap-2">
         <Link to={`/profile/${npub}`} className="flex min-w-0 items-center gap-2">
           <Avatar className="h-5 w-5 shrink-0">
             {author?.picture ? <AvatarImage src={author.picture} alt={name} /> : null}
-            <AvatarFallback className="bg-[#212121] text-neutral-400"><User className="h-3 w-3" /></AvatarFallback>
+            <AvatarFallback className="bg-[#1c1c1c] text-neutral-400"><User className="h-3 w-3" /></AvatarFallback>
           </Avatar>
           <span className="truncate text-xs text-neutral-300">{name}</span>
         </Link>
