@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { Filter } from 'nostr-tools'
-import { Search, Plus, Gamepad2, CheckCircle2, CircleDashed, Gift, AlertTriangle, User } from 'lucide-react'
+import { Search, Plus, Gamepad2, CheckCircle2, CircleDashed, Gift, AlertTriangle, User, X } from 'lucide-react'
 import { KINDS } from '@/lib/constants'
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
 import { constructBountyListFromEvents, MOD_BOUNTY_TYPE, type BountyDetails } from '@/lib/nostr/bounty'
@@ -22,6 +22,7 @@ import { Card } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
 import { BountyFiltersBar } from '@/components/mod/BountyFiltersBar'
+import { AdvancedSearch } from '@/components/search/AdvancedSearch'
 import { Pagination } from '@/components/shared/Pagination'
 import { cn } from '@/lib/utils'
 
@@ -33,6 +34,7 @@ export function BountiesPage() {
 
   const [searchParams] = useSearchParams()
   const [search, setSearch] = useState('')
+  const [advanced, setAdvanced] = useState<Filter | null>(null)
   const [page, setPage] = useState(1)
 
   const { nsfwMode, status, game, sources, searchTags, excludedTags, setGame } = useBountyFiltersStore()
@@ -55,7 +57,9 @@ export function BountiesPage() {
     useBountyFiltersStore.getState().applyExcludedTagsDefaults(moderationDefaults)
   }, [moderationDefaults])
 
-  const filter = useMemo<Filter>(() => ({ kinds: [KINDS.BOUNTY], '#b': [MOD_BOUNTY_TYPE] }), [])
+  // Advanced (relay-side) search replaces the default listing query; it stays
+  // scoped to game-mod requests via the `#b` base so it can't escape the kind.
+  const filter = useMemo<Filter>(() => advanced ?? { kinds: [KINDS.BOUNTY], '#b': [MOD_BOUNTY_TYPE] }, [advanced])
   const { events, loading, loadingMore, reachedEnd, loadMore } = useProgressiveEvents(filter, BATCH)
   const bounties = useMemo(() => constructBountyListFromEvents(events), [events])
 
@@ -88,7 +92,7 @@ export function BountiesPage() {
   const paginated = filtered.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE)
 
   // Reset to page 1 whenever the filters change the result set.
-  useEffect(() => { setPage(1) }, [nsfwMode, status, game, sources, searchTags, excludedTags, search])
+  useEffect(() => { setPage(1) }, [nsfwMode, status, game, sources, searchTags, excludedTags, search, advanced])
 
   // Prefetch an older batch as the user nears the last loaded page.
   useEffect(() => {
@@ -106,9 +110,32 @@ export function BountiesPage() {
         </Link>
       </div>
 
-      <div className="relative">
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search requests..." className="border-[#262626] bg-[#212121] pl-9 text-white" />
+      {advanced && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setAdvanced(null)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-orange-500/30 bg-orange-500/10 px-2.5 py-1 text-sm text-orange-300 hover:bg-orange-500/20"
+          >
+            Advanced search active
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Quick local search by title, game, or tags..." className="border-[#262626] bg-[#212121] pl-9 text-white" />
+        </div>
+        <AdvancedSearch
+          kind={KINDS.BOUNTY}
+          base={{ '#b': [MOD_BOUNTY_TYPE] }}
+          showCategories={false}
+          subject="mod request"
+          active={!!advanced}
+          onSearch={setAdvanced}
+          onClear={() => setAdvanced(null)}
+        />
       </div>
 
       <BountyFiltersBar availableClients={availableClients} resultCount={filtered.length} wotHiddenCount={wotHiddenCount} />
