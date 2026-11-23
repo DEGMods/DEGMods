@@ -289,7 +289,7 @@ export function BountyPage() {
               </Tooltip>
             </div>
             {bounty.reward ? (
-              <p className="flex items-start gap-1.5 text-sm text-emerald-300">
+              <p className="flex items-start gap-1.5 text-sm text-orange-400">
                 <Gift className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{bounty.reward.what}{bounty.reward.how ? <span className="text-neutral-400"> ({bounty.reward.how})</span> : null}</span>
               </p>
