@@ -239,25 +239,27 @@ A third party cannot edit someone else's bounty, so an **additional** reward off
 {
   "kind": 31244,
   "pubkey": "<pledger-hex>",
-  "content": "",
+  "content": "<optional note>",
   "tags": [
-    ["d", "<uuid>"],
-    ["a", "31144:<requester-hex>:b7f3c2a1-…"],
+    ["d", "31144:<requester-hex>:b7f3c2a1-…"],
+    ["published_at", "1749571200"],
+    ["a", "31144:<requester-hex>:b7f3c2a1-…", "bounty-reward"],
     ["l", "bounty-reward"],
+    ["reward", "20,000 sats", "zapped on release"],
     ["g", "Grand Theft Auto VI"],
-    ["reward", "20,000 sats", "zapped on release"]
+    ["client", "degmods"]
   ]
 }
 ```
 
-- **Addressable** (`d` tag) → the pledger can edit or withdraw (replace, or NIP-09 delete) their own offer.
-- **`a`** → the bounty coordinate. Because `a` is relay-indexed, a bounty's pledges are directly queryable: `{ "kinds": [31244], "#a": ["31144:<pubkey>:<d>"] }`.
-- **`l`** → bare label `"bounty-reward"`.
-- **`g`** → must match the bounty's game (same guard as fulfilments).
-- **`reward`** → same `["reward", "<what>", "<how>"]` shape as the bounty's own reward.
-- Purely descriptive, trust-based, no settlement — identical philosophy to the bounty reward. The bounty page lists these under the requester's own reward ("Also offered: 20,000 sats — @alice").
-
-> Reward pledges are a **reserved, later phase.** The kind is specified and claimed now so the schema is stable; the core bounty + fulfilment loop ships first.
+- **Addressable** (`d` tag) → the pledger can edit or withdraw (replace, or NIP-09 delete) their own offer. The `d` tag is the **bounty's own coordinate** (`31144:<requester>:<d>`), so each person has exactly **one editable pledge per request** — re-pledging replaces it.
+- **`a`** → the bounty coordinate, with the role `"bounty-reward"` as the third element (mirrors how a fulfilment carries `bounty-fulfillment`). Because `a` is relay-indexed, a bounty's pledges are directly queryable: `{ "kinds": [31244], "#a": ["31144:<pubkey>:<d>"] }`.
+- **`l`** → bare label `"bounty-reward"` (single-letter, relay-indexed mirror of the role).
+- **`reward`** → same `["reward", "<what>", "<how>"]` shape as the bounty's own reward. The `<what>` is required; `<how>` is optional.
+- **`g`** → the bounty's game, mirrored for the same cross-check philosophy as fulfilments.
+- **`content`** → an optional free-text note (conditions/details).
+- **`published_at` / `updated_at` / `client`** → same convention as the bounty: `published_at` is set once, `updated_at` is the wall-clock time of an edit (display only), `created_at` is a +1 logical counter per edit.
+- Purely descriptive, trust-based, no settlement — identical philosophy to the bounty reward. The request page lists these under the requester's own reward, each with the pledger's identity and edit/delete controls for one's own pledge.
 
 ---
 
@@ -300,4 +302,4 @@ A bounty is "a mod request, not a mod." Removed from `31142`: `download`, catego
 - **`g` is mandatory and cross-checked.** Both the bounty and every fulfilment/pledge must name the same game; mismatches are refused on write and dropped on read.
 - **Two link directions, two owners.** Mod→bounty (the `a` on a mod) is author-only and game-matched; bounty→mod (the `a` on the bounty) is the requester's own edit and may point anywhere.
 - **No money in-protocol.** Rewards (on the bounty and via `31244` pledges) are descriptions only. A future phase may wire the existing `PAYTO` (kind 10133, NIP-A3) payment targets for one-click payout — out of scope here.
-- **Anyone logged in can post a bounty** (PoW anti-spam, like other posts). Reward pledges and the "Featured Mod Bounties" landing surface are later phases.
+- **Anyone logged in can post a bounty** (PoW anti-spam, like other posts), and anyone can add a reward pledge (`31244`). The "Featured Mod Bounties" landing surface is a later phase.

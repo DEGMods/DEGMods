@@ -275,3 +275,107 @@ export function isValidFulfillment(mod: NostrEvent, bounty: Pick<BountyDetails, 
   const modGame = mod.tags.find((t) => t[0] === 'g')?.[1] ?? ''
   return !!modGame && modGame === bounty.game
 }
+
+// ─── Reward pledges (kind 31244) ─────────────────────────────────────
+//
+// A third party can pledge an ADDITIONAL reward toward a request. It's an
+// addressable event keyed by the request's coordinate (so each person has one
+// editable pledge per request) that points back at the request via an `a` tag
+// with the "bounty-reward" role. Descriptive only, exactly like the main reward
+// — no money moves through the app. See docs/mod-bounty-event.md.
+
+export interface BountyPledge {
+  id: string
+  pubkey: string
+  dTag: string
+  aTag: string // 31244:<pubkey>:<d>
+  bountyCoordinate: string // the 31144 request this pledges toward
+  createdAt: number
+  publishedAt: number
+  updatedAt: number | null
+  reward: BountyReward
+  message: string // optional note (event content)
+  client: string
+}
+
+export interface BountyPledgeFormState {
+  bountyCoordinate: string
+  game: string // the request's game, mirrored on the pledge (same guard as fulfilments)
+  reward: BountyReward
+  message: string
+  isEdit?: boolean
+  previousCreatedAt?: number
+  publishedAt?: number
+}
+
+/** Stable d-tag: one (editable) pledge per author per request. */
+export function pledgeDTag(bountyCoordinate: string): string {
+  return bountyCoordinate
+}
+
+export function buildBountyPledgeEvent(form: BountyPledgeFormState): UnsignedEvent {
+  const wall = Math.floor(Date.now() / 1000)
+  const editing = !!form.isEdit && form.previousCreatedAt !== undefined
+  const createdAt = editing ? form.previousCreatedAt! + 1 : wall
+  const publishedAt = form.publishedAt ?? wall
+  const what = form.reward.what.trim()
+  const how = form.reward.how.trim()
+
+  const tags: string[][] = [
+    ['d', pledgeDTag(form.bountyCoordinate)],
+    ['published_at', publishedAt.toString()],
+    // Link to the request + the role, plus a single-letter `l` mirror so the
+    // relationship is relay-indexed the same way fulfilments/jam-entries are.
+    ['a', form.bountyCoordinate, BOUNTY_REWARD_LABEL],
+    ['l', BOUNTY_REWARD_LABEL],
+    how ? ['reward', what, how] : ['reward', what],
+  ]
+  if (form.game.trim()) tags.push(['g', form.game.trim()])
+  if (editing) tags.push(['updated_at', String(wall)])
+  tags.push(['client', CLIENT_NAME])
+
+  return { kind: KINDS.BOUNTY_REWARD, content: form.message.trim(), tags, created_at: createdAt, pubkey: '' }
+}
+
+export function extractBountyPledge(event: NostrEvent): BountyPledge | null {
+  if (event.kind !== KINDS.BOUNTY_REWARD) return null
+  cacheEvent(event)
+  const get = (name: string) => event.tags.find((t) => t[0] === name)?.[1] ?? ''
+  const dTag = get('d')
+  if (!dTag) return null
+  // The request this pledges toward: an `a` pointing at a bounty coordinate.
+  const aRef = event.tags.find((t) => t[0] === 'a' && t[1]?.startsWith(`${KINDS.BOUNTY}:`))
+  const bountyCoordinate = aRef?.[1] ?? ''
+  if (!bountyCoordinate) return null
+  const rewardTag = event.tags.find((t) => t[0] === 'reward')
+  if (!rewardTag || !rewardTag[1]) return null
+  return {
+    id: event.id,
+    pubkey: event.pubkey,
+    dTag,
+    aTag: `${KINDS.BOUNTY_REWARD}:${event.pubkey}:${dTag}`,
+    bountyCoordinate,
+    createdAt: event.created_at,
+    publishedAt: Number(get('published_at')) || event.created_at,
+    updatedAt: Number(get('updated_at')) || null,
+    reward: { what: rewardTag[1], how: rewardTag[2] ?? '' },
+    message: event.content ?? '',
+    client: get('client'),
+  }
+}
+
+/** Newest pledge per author for a request; drops malformed or mismatched ones. */
+export function constructPledgeListFromEvents(events: NostrEvent[], bountyCoordinate: string): BountyPledge[] {
+  const byCoord = new Map<string, NostrEvent>()
+  for (const ev of events) {
+    const d = ev.tags.find((t) => t[0] === 'd')?.[1]
+    if (!d) continue
+    const key = `${ev.pubkey}:${d}`
+    const prev = byCoord.get(key)
+    if (!prev || ev.created_at > prev.created_at) byCoord.set(key, ev)
+  }
+  return [...byCoord.values()]
+    .map(extractBountyPledge)
+    .filter((p): p is BountyPledge => !!p && p.bountyCoordinate === bountyCoordinate && !!p.reward.what)
+    .sort((a, b) => b.publishedAt - a.publishedAt)
+}

@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { CollapsibleMarkdown } from '@/components/mod/CollapsibleMarkdown'
 import { ModCard } from '@/components/mod/ModCard'
 import { PublisherCard } from '@/components/mod/PublisherCard'
+import { BountyPledges } from '@/components/mod/BountyPledges'
 import { AuthorHubs } from '@/components/hubs/AuthorHubs'
 import { SidebarAd } from '@/components/mod/SidebarAd'
 import { CommentSection } from '@/components/social/CommentSection'
@@ -247,6 +248,9 @@ export function BountyPage() {
               </p>
             </section>
           )}
+
+          {/* Third-party reward pledges */}
+          <BountyPledges bountyCoordinate={bounty.aTag} game={bounty.game} accent="orange" />
 
           <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
             <Button onClick={() => navigate(`/submit-mod?bounty=${bounty.naddr}`)} className="w-full gap-2 bg-orange-600 text-white hover:bg-orange-700">
