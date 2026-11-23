@@ -343,6 +343,8 @@ export function extractBountyPledge(event: NostrEvent): BountyPledge | null {
   const get = (name: string) => event.tags.find((t) => t[0] === name)?.[1] ?? ''
   const dTag = get('d')
   if (!dTag) return null
+  // A withdrawn pledge is a tombstoned ["deleted","true"] revision — treat as gone.
+  if (event.tags.some((t) => t[0] === 'deleted' && t[1] === 'true')) return null
   // The request this pledges toward: an `a` pointing at a bounty coordinate.
   const aRef = event.tags.find((t) => t[0] === 'a' && t[1]?.startsWith(`${KINDS.BOUNTY}:`))
   const bountyCoordinate = aRef?.[1] ?? ''
