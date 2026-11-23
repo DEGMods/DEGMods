@@ -139,6 +139,8 @@ export function extractLegacyModData(event: NostrEvent): ModDetails {
     originalAuthor: first('originalAuthor') || undefined,
     emulation: false,
     emulatedPlatform: undefined,
+    port: false,
+    portName: undefined,
     forMod: undefined,
     elsewhere: [], // LEGACY: predates the elsewhere tag
     dependencies: [],
@@ -177,6 +179,8 @@ export function legacyToForm(mod: ModDetails): ModFormState {
     originalAuthor: mod.originalAuthor ?? '',
     emulation: false,
     emulatedPlatform: '',
+    port: false,
+    portName: '',
     forModEnabled: false,
     forMod: '',
     jamEnabled: false,

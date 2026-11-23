@@ -60,7 +60,7 @@ import {
 import {
   Loader2, MoreHorizontal, Copy, ExternalLink, FileJson, Edit, Trash2,
   Flag, Eye, AlertTriangle, ChevronLeft, ChevronDown, ChevronRight, Gamepad2, Tag,
-  User, Repeat2, Joystick, Layers, Boxes, RefreshCw, History, Image as ImageIcon, Film
+  User, Repeat2, Joystick, Cpu, Layers, Boxes, RefreshCw, History, Image as ImageIcon, Film
 } from 'lucide-react'
 import { PoopIcon } from '@/components/icons/PoopIcon'
 
@@ -793,6 +793,17 @@ export default function ModPage() {
               <span>
                 This mod is for an <span className="font-medium">emulated</span> version of the game
                 {mod.emulatedPlatform ? <> on <span className="font-medium">{mod.emulatedPlatform}</span></> : null}.
+              </span>
+            </div>
+          )}
+
+          {/* Native port notice */}
+          {mod.port && (
+            <div className="flex items-start gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2.5 text-sm text-purple-200">
+              <Cpu className="h-4 w-4 shrink-0 mt-0.5 text-purple-400" />
+              <span>
+                This mod is for an unofficial <span className="font-medium">native port</span> of the game
+                {mod.portName ? <> (<span className="font-medium">{mod.portName}</span>)</> : null}.
               </span>
             </div>
           )}

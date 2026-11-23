@@ -503,6 +503,8 @@ For each chain the author enters, the event carries three kinds of tags, **all d
 | `h` | No | Yes | JSON string-array (rooted prefix; subtree index) | `["graphics"]` |
 | `f` | No | Yes | Segment string (anywhere index) | `reshade` |
 | `m` | No | No | Mod name, naddr, or link | `naddr1...` |
+| `emulation` | No | No | `true` + optional platform | `["emulation","true","Xbox 360"]` — mod targets an **emulated** copy of the game. Omitted when off. |
+| `port` | No | No | `true` + optional port/project name | `["port","true","Ship of Harkinian"]` — mod targets an unofficial **native port** of the game. Omitted when off. Mutually exclusive with `emulation` (a mod runs one way). |
 | `dependencies` | No | Yes | `title` + value (name/naddr/link) | `["dependencies","ReShade","https://reshade.me/"]` |
 | `a` | No | Yes | `<kind>:<pubkey>:<d>` coordinate + optional role (no relay hint) | `["a","31143:<pk>:<d>","jam-entry"]` (which jam + that it's an entry) |
 | `elsewhere` | No | Yes (max 3) | Link (≤100 chars) | `https://www.nexusmods.com/…` |

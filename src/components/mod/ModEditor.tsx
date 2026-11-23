@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Repeat2,
   Joystick,
+  Cpu,
   Tag,
   Download,
   Shield,
@@ -95,6 +96,7 @@ const LIMITS = {
   downloadNote: 250,
   forMod: 200,
   emulatedPlatform: 50,
+  portName: 60,
   dependencyTitle: 50,
   dependencyValue: 200,
   elsewhere: 100,
@@ -811,7 +813,7 @@ export function ModEditor({
           <label className="flex items-center gap-3 cursor-pointer">
             <Switch
               checked={form.emulation}
-              onCheckedChange={(v) => updateField('emulation', v)}
+              onCheckedChange={(v) => setForm((prev) => ({ ...prev, emulation: v, ...(v ? { port: false } : {}) }))}
             />
             <span className="text-sm text-neutral-300">This is for an emulated game</span>
           </label>
@@ -824,6 +826,31 @@ export function ModEditor({
                 className={inputClass}
               />
               <Counter value={form.emulatedPlatform} max={LIMITS.emulatedPlatform} />
+            </>
+          )}
+        </div>
+      </Section>
+
+      {/* ── 8c. Native port ─────────────────────────────────────── */}
+      <Section icon={Cpu} label="Native port" step={1} order={2}>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <Switch
+              checked={form.port}
+              onCheckedChange={(v) => setForm((prev) => ({ ...prev, port: v, ...(v ? { emulation: false } : {}) }))}
+            />
+            <span className="text-sm text-neutral-300">This is for an unofficial native port</span>
+          </label>
+          {form.port && (
+            <>
+              <Input
+                value={form.portName}
+                onChange={(e) => updateField('portName', e.target.value)}
+                placeholder="Port / project name (e.g. Ship of Harkinian, sm64ex)"
+                maxLength={LIMITS.portName}
+                className={inputClass}
+              />
+              <Counter value={form.portName} max={LIMITS.portName} />
             </>
           )}
         </div>

@@ -65,6 +65,8 @@ export interface ModDetails {
   originalAuthor?: string // npub or link (when repost=true)
   emulation: boolean      // mod targets an emulated version of the game
   emulatedPlatform?: string // platform the game is emulated from (e.g. "Xbox 360")
+  port: boolean           // mod targets an unofficial native port of the game
+  portName?: string       // the native port / project (e.g. "Ship of Harkinian", "sm64ex")
   forMod?: string         // m tag: this mod is for another mod (name, naddr, or link)
   jamCoordinate?: string  // a tag (31143:…) with role "jam-entry" when this mod is a jam entry
   bountyCoordinate?: string // a tag (31144:…) with role "bounty-fulfillment" when this mod fulfils a bounty
@@ -106,6 +108,8 @@ export interface ModFormState {
   originalAuthor: string
   emulation: boolean
   emulatedPlatform: string
+  port: boolean
+  portName: string
   forModEnabled: boolean
   forMod: string
   jamEnabled: boolean
@@ -185,6 +189,8 @@ export function createEmptyFormState(): ModFormState {
     originalAuthor: '',
     emulation: false,
     emulatedPlatform: '',
+    port: false,
+    portName: '',
     forModEnabled: false,
     forMod: '',
     jamEnabled: false,

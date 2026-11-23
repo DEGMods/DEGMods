@@ -72,6 +72,8 @@ export function EditModPage() {
           originalAuthor: modData.originalAuthor || '',
           emulation: modData.emulation,
           emulatedPlatform: modData.emulatedPlatform || '',
+          port: modData.port,
+          portName: modData.portName || '',
           forModEnabled: !!modData.forMod,
           forMod: modData.forMod || '',
           jamEnabled: !!modData.jamCoordinate,

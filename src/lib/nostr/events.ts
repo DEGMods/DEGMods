@@ -126,6 +126,9 @@ export function buildModEvent(form: ModFormState): UnsignedEvent {
   // Emulation (optional): this mod targets an emulated version of the game.
   if (form.emulation) tags.push(['emulation', 'true', form.emulatedPlatform.trim()])
 
+  // Native port (optional): this mod targets an unofficial native port of the game.
+  if (form.port) tags.push(['port', 'true', form.portName.trim()])
+
   // For another mod (optional): name, naddr, or link.
   if (form.forModEnabled && form.forMod.trim()) tags.push(['m', form.forMod.trim()])
 
@@ -332,6 +335,11 @@ export function extractModData(event: NostrEvent): ModDetails {
   const emulation = emulationTag?.[1] === 'true'
   const emulatedPlatform = emulation ? (emulationTag?.[2] || '') : ''
 
+  // Parse native port
+  const portTag = event.tags.find(t => t[0] === 'port')
+  const port = portTag?.[1] === 'true'
+  const portName = port ? (portTag?.[2] || '') : ''
+
   // Content warning (NIP-36) + legacy nsfw tag
   const contentWarning = getTag('content-warning') ||
     (event.tags.find(t => t[0] === 'nsfw' && t[1] === 'true') ? 'nsfw' : undefined)
@@ -373,6 +381,8 @@ export function extractModData(event: NostrEvent): ModDetails {
     originalAuthor,
     emulation,
     emulatedPlatform,
+    port,
+    portName,
     forMod: getTag('m') || undefined,
     jamCoordinate,
     bountyCoordinate,
