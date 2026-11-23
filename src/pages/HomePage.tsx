@@ -7,6 +7,7 @@ import { GameCard } from '@/components/game/GameCard'
 import { BlogPostCard } from '@/components/blog/BlogPostCard'
 import { FeaturedSlider } from '@/components/home/FeaturedSlider'
 import { FeaturedBanner } from '@/components/home/FeaturedBanner'
+import { FeaturedRequests, FeaturedJams } from '@/components/home/FeaturedCurations'
 import { HomeAds } from '@/components/home/HomeAds'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUserStore, type UserProfile } from '@/stores/userStore'
@@ -413,6 +414,10 @@ export function HomePage() {
           </p>
         )}
       </section>
+
+      {/* Admin-curated featured mod requests + mod jams (hidden until set) */}
+      <FeaturedRequests />
+      <FeaturedJams />
 
       {/* Ads (up to 4; empty-state message when none) */}
       <HomeAds ads={ads} loading={curationLoading} />

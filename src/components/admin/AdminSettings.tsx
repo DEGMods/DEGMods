@@ -22,6 +22,8 @@ import {
   SUGGESTED_CATEGORIES_DTAG, extractSuggestedCategories, buildSuggestedCategoriesEvent,
 } from '@/lib/nostr/events'
 import { HUB_RECOMMENDATIONS_DTAG } from '@/lib/nostr/hubs'
+import { FEATURED_REQUESTS_DTAG } from '@/lib/nostr/bounty'
+import { FEATURED_JAMS_DTAG } from '@/lib/nostr/jam'
 import { HubRecommendationsEditor } from '@/components/hubs/HubRecommendationsEditor'
 import { useDragReorder } from '@/hooks/useDragReorder'
 import { CategoryChainsEditor } from '@/components/search/ModFiltersBar'
@@ -62,7 +64,7 @@ import {
   Upload, Trash2, FileText, Plus, Save, Pencil, SkipForward,
   AlertTriangle, X, Link2, Eye, GripVertical, ShieldAlert, EyeOff,
   Image as ImageIcon, HelpCircle, BookOpen, Joystick, Flag, Copy, ExternalLink, ChevronDown, Lightbulb,
-  HardDrive, Radio, BarChart3, ScrollText, Tag, Repeat2, HandCoins, Hash,
+  HardDrive, Radio, BarChart3, ScrollText, Tag, Repeat2, HandCoins, Hash, PackagePlus, Trophy,
 } from 'lucide-react'
 import { BlossomsTab } from './BlossomsTab'
 import { MarketResearchTab } from './MarketResearchTab'
@@ -972,6 +974,22 @@ function FeaturedTab() {
         desc="Mods highlighted in the featured grid section."
         icon={Gamepad2}
       />
+      <FeaturedModSection
+        dTag={FEATURED_REQUESTS_DTAG}
+        title="Featured Mod Requests"
+        desc="Mod requests highlighted on the home page."
+        icon={PackagePlus}
+        allowedKinds={[KINDS.BOUNTY]}
+        noun="mod request"
+      />
+      <FeaturedModSection
+        dTag={FEATURED_JAMS_DTAG}
+        title="Featured Mod Jams"
+        desc="Mod jams highlighted on the home page."
+        icon={Trophy}
+        allowedKinds={[KINDS.JAM]}
+        noun="mod jam"
+      />
       <FeaturedGamesSection
         dTag="home-featured-games"
         title="Featured Games"
@@ -1073,19 +1091,23 @@ function FeaturedBannerSection() {
 // ── Shared: decode an naddr (or raw coordinate) into a mod `a` coord ──
 // Accepts current mods (kind 31142) and legacy mods (kind 30402).
 
-function naddrToModCoord(input: string): { coord: string } | { error: string } {
+function naddrToModCoord(
+  input: string,
+  allowed: number[] = [KINDS.MOD, LEGACY_MOD_KIND],
+  noun = 'mod (31142 or legacy 30402)',
+): { coord: string } | { error: string } {
   const value = input.trim()
   if (!value) return { error: 'Enter an naddr' }
 
-  // Accept a raw coordinate too: 31142 (current) or 30402 (legacy) mods.
-  if (/^(31142|30402):[0-9a-f]{64}:.+$/i.test(value)) return { coord: normalizeModCoord(value) }
+  // Accept a raw coordinate too, for any of the allowed kinds.
+  if (new RegExp(`^(${allowed.join('|')}):[0-9a-f]{64}:.+$`, 'i').test(value)) return { coord: normalizeModCoord(value) }
 
   try {
     const decoded = nip19.decode(value)
     if (decoded.type !== 'naddr') return { error: 'Not an naddr address' }
     const { kind, pubkey, identifier } = decoded.data
-    if (kind !== KINDS.MOD && kind !== LEGACY_MOD_KIND) {
-      return { error: `naddr is kind ${kind}, expected a mod (31142 or legacy 30402)` }
+    if (!allowed.includes(kind)) {
+      return { error: `naddr is kind ${kind}, expected a ${noun}` }
     }
     return { coord: normalizeModCoord(`${kind}:${pubkey}:${identifier}`) }
   } catch {
@@ -1103,8 +1125,8 @@ interface FeaturedItem {
 // ── Featured Mods (slider / grid) ──
 
 function FeaturedModSection({
-  dTag, title, desc, icon: Icon,
-}: { dTag: string; title: string; desc: string; icon: typeof Star }) {
+  dTag, title, desc, icon: Icon, allowedKinds, noun = 'mod',
+}: { dTag: string; title: string; desc: string; icon: typeof Star; allowedKinds?: number[]; noun?: string }) {
   const [items, setItems] = useState<FeaturedItem[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
@@ -1150,7 +1172,7 @@ function FeaturedModSection({
   useEffect(() => { load() }, [load])
 
   const addItem = async () => {
-    const result = naddrToModCoord(input)
+    const result = allowedKinds ? naddrToModCoord(input, allowedKinds, noun) : naddrToModCoord(input)
     if ('error' in result) { toast.error(result.error); return }
     if (items.some(it => it.coord === result.coord)) {
       toast.error('Already in the list')
@@ -1200,14 +1222,14 @@ function FeaturedModSection({
         <h4 className="text-sm font-medium text-white">{title}</h4>
         <code className="ml-auto text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">d:{dTag}</code>
       </div>
-      <p className="text-[11px] text-neutral-500">{desc} Paste a mod's <strong>naddr</strong> to add it.</p>
+      <p className="text-[11px] text-neutral-500">{desc} Paste a {noun}'s <strong>naddr</strong> to add it.</p>
 
       <div className="flex gap-2">
         <Input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem() } }}
-          placeholder="naddr1… (current or legacy mod)"
+          placeholder="naddr1…"
           className="bg-[#212121] border-[#262626] text-white text-xs font-mono"
         />
         <Button size="sm" onClick={addItem} disabled={!input.trim()} className="bg-purple-600 hover:bg-purple-700 shrink-0">
@@ -1220,7 +1242,7 @@ function FeaturedModSection({
           <Loader2 size={14} className="animate-spin" /> Loading current selection…
         </div>
       ) : items.length === 0 ? (
-        <p className="text-xs text-neutral-600 py-2">No mods featured yet.</p>
+        <p className="text-xs text-neutral-600 py-2">Nothing featured yet.</p>
       ) : (
         <ul className="space-y-1.5">
           {items.map((it, i) => (

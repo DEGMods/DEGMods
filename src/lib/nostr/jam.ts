@@ -6,6 +6,8 @@ import { cacheEvent } from '@/lib/nostr/eventCache'
 // ─── Jam event (kind 31143) — see docs/jam-event.md ──────────────────
 
 export const JAM_ENTRY_LABEL = 'jam-entry'
+/** NIP-78 d-tag for the admin's "Featured Mod Jams" home-page list. */
+export const FEATURED_JAMS_DTAG = 'home-featured-mod-jams'
 /** Clients must not publish a jam whose start→(voting_end||end) span exceeds this. */
 export const MAX_JAM_DURATION_SECONDS = 366 * 24 * 60 * 60 // ~12 months
 

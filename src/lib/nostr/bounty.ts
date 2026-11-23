@@ -15,6 +15,8 @@ import { cacheEvent } from '@/lib/nostr/eventCache'
 
 /** Role value a fulfilling mod carries in its `a` tag (3rd element). */
 export const BOUNTY_FULFILLMENT_LABEL = 'bounty-fulfillment'
+/** NIP-78 d-tag for the admin's "Featured Mod Requests" home-page list. */
+export const FEATURED_REQUESTS_DTAG = 'home-featured-mod-requests'
 /** Bare `l` label on a third-party reward-pledge event (kind 31244). */
 export const BOUNTY_REWARD_LABEL = 'bounty-reward'
 
