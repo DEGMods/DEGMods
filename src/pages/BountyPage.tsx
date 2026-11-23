@@ -32,6 +32,8 @@ import { BountyPledges } from '@/components/mod/BountyPledges'
 import { AuthorHubs } from '@/components/hubs/AuthorHubs'
 import { SidebarAd } from '@/components/mod/SidebarAd'
 import { CommentSection } from '@/components/social/CommentSection'
+import { ReactionButton } from '@/components/social/ReactionButton'
+import { PoopIcon } from '@/components/icons/PoopIcon'
 import { ShareBox } from '@/components/mod/ShareBox'
 import { RequestDeleteDialog } from '@/components/shared/RequestDeleteDialog'
 import { SkeletonImage } from '@/components/shared/SkeletonImage'
@@ -234,6 +236,12 @@ export function BountyPage() {
             ) : (
               <img src="/hub-banner-placeholder.jpg" alt="" className="h-full w-full object-cover" />
             )}
+          </div>
+
+          {/* Reactions */}
+          <div className="flex flex-wrap items-center gap-2">
+            <ReactionButton target={target} bucket="positive" />
+            <ReactionButton target={target} content="💩" bucket="negative" icon={PoopIcon} />
           </div>
 
           {bounty.content && (
