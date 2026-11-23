@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { nip19, type Event as NostrEvent } from 'nostr-tools'
+import { nip19, type Event as NostrEvent, type Filter } from 'nostr-tools'
 import { toast } from 'sonner'
 import {
   Gamepad2, Gift, Loader2, Pencil, Trash2, MoreHorizontal,
@@ -10,7 +10,8 @@ import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { KINDS } from '@/lib/constants'
 import { useAuthStore } from '@/stores/authStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { fetchLatestEvent, fetchEvents } from '@/lib/nostr/relay-pool'
+import { fetchLatestEvent } from '@/lib/nostr/relay-pool'
+import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
 import { signAndPublish } from '@/lib/nostr/publish'
 import { extractModData } from '@/lib/nostr/events'
 import {
@@ -41,6 +42,7 @@ import { cn } from '@/lib/utils'
 
 const fmt = (ts: number) => new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 const PER_PAGE = 6
+const FUL_BATCH = 30
 
 function bountyToForm(b: BountyDetails, previousCreatedAt: number): BountyFormState {
   return {
@@ -61,7 +63,7 @@ export function BountyPage() {
   const [rawEvent, setRawEvent] = useState<NostrEvent | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const [fulfillments, setFulfillments] = useState<ModDetails[]>([])
+  const [winnerMod, setWinnerMod] = useState<ModDetails | null>(null)
   const [savingWinner, setSavingWinner] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
@@ -93,31 +95,57 @@ export function BountyPage() {
     return () => { cancelled = true }
   }, [naddr])
 
-  // Cooperative rebroadcast + load fulfilments once we have the request.
+  // Cooperative rebroadcast of the request itself once we have it.
   useEffect(() => {
-    if (!bounty || !rawEvent) return
-    let cancelled = false
+    if (!rawEvent) return
     const t = setTimeout(() => {
       import('@/lib/nostr/eventRedundancy').then(({ ensureEventPresent }) => ensureEventPresent(rawEvent))
     }, 8000)
-    ;(async () => {
-      const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
-      const evs = await fetchEvents(relays, { kinds: [KINDS.MOD], '#a': [bounty.aTag] })
-      if (cancelled) return
-      const seen = new Set<string>()
-      const list: ModDetails[] = []
-      // Newest first, so a coordinate's latest edit is the one we keep.
-      for (const ev of [...evs].sort((a, b) => b.created_at - a.created_at)) {
-        if (!isValidFulfillment(ev, bounty)) continue
-        const coord = modCoordinate(ev)
-        if (!coord || seen.has(coord)) continue
-        seen.add(coord)
-        list.push(extractModData(ev))
-      }
-      setFulfillments(list)
-    })()
-    return () => { cancelled = true; clearTimeout(t) }
-  }, [bounty, rawEvent])
+    return () => clearTimeout(t)
+  }, [rawEvent])
+
+  // Fulfilments: progressively fetched (newest first), same system as listings.
+  const fulfilmentFilter = useMemo<Filter>(
+    () => ({ kinds: [KINDS.MOD], '#a': [bounty?.aTag ?? 'none'] }),
+    [bounty?.aTag],
+  )
+  const {
+    events: fulfilmentEvents,
+    loading: fulLoading,
+    loadingMore: fulLoadingMore,
+    reachedEnd: fulReachedEnd,
+    loadMore: fulLoadMore,
+  } = useProgressiveEvents(fulfilmentFilter, FUL_BATCH)
+
+  // Valid fulfilments, newest edit per coordinate. The hook already sorts newest
+  // first, so the first event seen for a coordinate is the one we keep.
+  const fulfillments = useMemo<ModDetails[]>(() => {
+    if (!bounty) return []
+    const seen = new Set<string>()
+    const list: ModDetails[] = []
+    for (const ev of fulfilmentEvents) {
+      if (!isValidFulfillment(ev, bounty)) continue
+      const coord = modCoordinate(ev)
+      if (!coord || seen.has(coord)) continue
+      seen.add(coord)
+      list.push(extractModData(ev))
+    }
+    return list
+  }, [fulfilmentEvents, bounty])
+
+  // The chosen fulfiller is fetched by its own coordinate so the sidebar card is
+  // reliable even when the winning mod isn't in the currently-loaded page.
+  useEffect(() => {
+    const coord = bounty?.winnerCoordinate
+    if (!coord) { setWinnerMod(null); return }
+    let cancelled = false
+    const [, pk, ...idParts] = coord.split(':')
+    const relays = useSettingsStore.getState().getAllEnabledRelayUrls('read')
+    fetchLatestEvent(relays, { kinds: [KINDS.MOD], authors: [pk], '#d': [idParts.join(':')] })
+      .then((ev) => { if (!cancelled) setWinnerMod(ev ? extractModData(ev) : null) })
+      .catch(() => { if (!cancelled) setWinnerMod(null) })
+    return () => { cancelled = true }
+  }, [bounty?.winnerCoordinate])
 
   const setWinner = useCallback(async (coordinate: string | null, pubkey: string | null) => {
     if (!bounty || !rawEvent) return
@@ -139,8 +167,14 @@ export function BountyPage() {
   }, [bounty, rawEvent])
 
   const totalPages = Math.max(1, Math.ceil(fulfillments.length / PER_PAGE))
-  const paginated = useMemo(() => fulfillments.slice((page - 1) * PER_PAGE, page * PER_PAGE), [fulfillments, page])
-  const winnerFulfillment = bounty?.winnerCoordinate ? fulfillments.find((f) => f.aTag === bounty.winnerCoordinate) : undefined
+  const currentPage = Math.min(page, totalPages)
+  const paginated = useMemo(() => fulfillments.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE), [fulfillments, currentPage])
+  const winnerFulfillment = winnerMod ?? undefined
+
+  // Prefetch an older batch as the user nears the last loaded page.
+  useEffect(() => {
+    if (!fulLoading && !fulReachedEnd && currentPage >= totalPages - 1) fulLoadMore()
+  }, [currentPage, totalPages, fulReachedEnd, fulLoading, fulLoadMore])
 
   if (loading) return <div className="flex items-center justify-center py-24 text-neutral-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading request...</div>
   if (notFound || !bounty) return <div className="py-24 text-center text-neutral-400">Mod request not found.</div>
@@ -295,7 +329,9 @@ export function BountyPage() {
           <FileUp className="h-4 w-4 text-neutral-400" /> Fulfilments
           {fulfillments.length > 0 && <span className="text-sm font-normal text-neutral-500">({fulfillments.length})</span>}
         </h2>
-        {fulfillments.length === 0 ? (
+        {fulLoading && fulfillments.length === 0 ? (
+          <p className="py-6 text-sm text-neutral-500">Loading fulfilments...</p>
+        ) : fulfillments.length === 0 ? (
           <p className="text-sm text-neutral-500">No mods submitted for this request yet. Made one? Link it from your mod&rsquo;s editor (&ldquo;Fulfils a mod request&rdquo;).</p>
         ) : (
           <>
@@ -309,7 +345,7 @@ export function BountyPage() {
                 </li>
               ))}
             </ol>
-            <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+            <Pagination page={currentPage} totalPages={totalPages} onPage={setPage} reachedEnd={fulReachedEnd} loadingMore={fulLoadingMore} />
           </>
         )}
       </section>
