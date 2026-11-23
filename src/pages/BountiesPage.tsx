@@ -132,6 +132,7 @@ export function BountiesPage() {
           base={{ '#b': [MOD_BOUNTY_TYPE] }}
           showCategories={false}
           subject="mod request"
+          accent="orange"
           active={!!advanced}
           onSearch={setAdvanced}
           onClear={() => setAdvanced(null)}

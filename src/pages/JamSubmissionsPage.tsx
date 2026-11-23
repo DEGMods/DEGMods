@@ -266,6 +266,7 @@ export function JamSubmissionsPage() {
             <AdvancedSearch
               subject="entry"
               base={{ '#a': [jamCoordinate] }}
+              accent="watermelon"
               active={!!advanced}
               onSearch={setAdvanced}
               onClear={() => setAdvanced(null)}

@@ -10,6 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { GameAutocomplete } from '@/components/shared/GameAutocomplete'
+import { ACCENTS, type Accent } from '@/components/shared/accent'
 import { TagEditor, CategoryChainsEditor } from './ModFiltersBar'
 
 interface AdvancedSearchProps {
@@ -31,6 +32,8 @@ interface AdvancedSearchProps {
   showCategories?: boolean
   /** What's being searched, for the field placeholder. */
   subject?: string
+  /** Theme accent so the control matches its host listing (mods/jams/requests). */
+  accent?: Accent
 }
 
 /**
@@ -39,8 +42,9 @@ interface AdvancedSearchProps {
  */
 export function AdvancedSearch({
   fixedGame, active, onSearch, onClear,
-  kind = KINDS.MOD, base, showCategories = true, subject = 'mod',
+  kind = KINDS.MOD, base, showCategories = true, subject = 'mod', accent = 'purple',
 }: AdvancedSearchProps) {
+  const a = ACCENTS[accent]
   const [open, setOpen] = useState(false)
   const [term, setTerm] = useState('')
   const [game, setGame] = useState('')
@@ -115,8 +119,9 @@ export function AdvancedSearch({
         onClick={() => setOpen(true)}
         aria-label="Advanced live search"
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040] hover:text-purple-300',
-          active && 'border-purple-500/50 text-purple-400',
+          'inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-[#404040]',
+          a.textHover,
+          active && cn(a.border, a.text),
         )}
       >
         <SlidersHorizontal className="h-4 w-4" />
@@ -127,7 +132,7 @@ export function AdvancedSearch({
         <DialogContent className="bg-[#1c1c1c] border-[#262626] max-h-[85vh] overflow-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-neutral-100">
-              <Search className="h-5 w-5 text-purple-400" />
+              <Search className={cn('h-5 w-5', a.text)} />
               Advanced search
             </DialogTitle>
             <DialogDescription className="text-neutral-400">
@@ -187,7 +192,7 @@ export function AdvancedSearch({
                 Clear search
               </Button>
             )}
-            <Button onClick={submit} className="bg-purple-600 hover:bg-purple-700">
+            <Button onClick={submit} className={cn('text-white', a.solid)}>
               <Search className="h-4 w-4 mr-2" />
               Search
             </Button>

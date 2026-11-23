@@ -18,6 +18,8 @@ export interface AccentClasses {
   badge: string
   /** Spinner / loader text color. */
   loader: string
+  /** Accent border (e.g. an active/selected outline). */
+  border: string
 }
 
 // Class strings are written as literals so Tailwind's content scan keeps them.
@@ -28,6 +30,7 @@ export const ACCENTS: Record<Accent, AccentClasses> = {
     solid: 'bg-purple-600 hover:bg-purple-700',
     badge: 'bg-purple-600',
     loader: 'text-purple-500',
+    border: 'border-purple-500/50',
   },
   orange: {
     text: 'text-orange-400',
@@ -35,6 +38,7 @@ export const ACCENTS: Record<Accent, AccentClasses> = {
     solid: 'bg-orange-600 hover:bg-orange-700',
     badge: 'bg-orange-600',
     loader: 'text-orange-500',
+    border: 'border-orange-500/50',
   },
   watermelon: {
     text: 'text-[#fc4462]',
@@ -42,6 +46,7 @@ export const ACCENTS: Record<Accent, AccentClasses> = {
     solid: 'bg-[#fc4462] hover:bg-[#e23a56]',
     badge: 'bg-[#fc4462]',
     loader: 'text-[#fc4462]',
+    border: 'border-[#fc4462]/50',
   },
 }
 

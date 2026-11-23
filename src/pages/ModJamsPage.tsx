@@ -141,6 +141,7 @@ export function ModJamsPage() {
           kind={KINDS.JAM}
           subject="jam"
           showCategories={false}
+          accent="watermelon"
           active={!!advanced}
           onSearch={setAdvanced}
           onClear={() => setAdvanced(null)}
