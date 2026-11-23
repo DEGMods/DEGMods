@@ -4,7 +4,7 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import {
   Gamepad2, Gift, Loader2, CheckCircle2, CircleDashed, Pencil, Trash2, MoreHorizontal,
-  FileUp, Trophy, ChevronLeft, Copy, FileJson, AlertTriangle,
+  FileUp, ChevronLeft, Copy, FileJson, AlertTriangle,
 } from 'lucide-react'
 import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { KINDS } from '@/lib/constants'
@@ -237,7 +237,6 @@ export function BountyPage() {
                       isAuthor={isAuthor}
                       saving={savingWinner}
                       onPick={() => setWinner(f.coordinate, f.pubkey)}
-                      onUnmark={() => setWinner(null, null)}
                     />
                   ))}
                 </ol>
@@ -259,12 +258,23 @@ export function BountyPage() {
             </div>
 
             {bounty.fulfilled && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm">
-                <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-emerald-300"><Trophy className="h-3.5 w-3.5" /> Chosen fulfiller</p>
+              <div className="space-y-2">
                 {winnerFulfillment ? (
-                  <Link to={`/mod/${winnerFulfillment.naddr}`} className="text-neutral-200 hover:text-white">{winnerFulfillment.title}</Link>
+                  <Link to={`/mod/${winnerFulfillment.naddr}`} className="group block overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c] transition-colors hover:border-[#3a3a3a]">
+                    <div className="relative aspect-video w-full overflow-hidden bg-[#212121]">
+                      {winnerFulfillment.image ? (
+                        <SkeletonImage src={winnerFulfillment.image} alt={winnerFulfillment.title} className="absolute inset-0 h-full w-full object-cover" />
+                      ) : (
+                        <img src="/hub-banner-placeholder.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
+                      )}
+                    </div>
+                    <p className="p-3 text-sm font-semibold text-neutral-100 group-hover:text-white"><span className="line-clamp-2">{winnerFulfillment.title}</span></p>
+                  </Link>
                 ) : (
-                  <span className="text-neutral-400">A fulfiller has been selected.</span>
+                  <p className="text-sm text-neutral-400">A fulfiller has been selected.</p>
+                )}
+                {isAuthor && (
+                  <Button variant="outline" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full border-[#262626] text-xs">Unmark as fulfilled</Button>
                 )}
               </div>
             )}
@@ -333,22 +343,17 @@ export function BountyPage() {
   )
 }
 
-function FulfillmentCard({ f, isWinner, isAuthor, saving, onPick, onUnmark }: {
-  f: Fulfillment; isWinner: boolean; isAuthor: boolean; saving: boolean; onPick: () => void; onUnmark: () => void
+function FulfillmentCard({ f, isWinner, isAuthor, saving, onPick }: {
+  f: Fulfillment; isWinner: boolean; isAuthor: boolean; saving: boolean; onPick: () => void
 }) {
   return (
-    <li className={cn('flex h-full flex-col overflow-hidden rounded-xl border bg-[#1c1c1c]', isWinner ? 'border-emerald-500/40' : 'border-[#262626]')}>
+    <li className="flex h-full flex-col overflow-hidden rounded-xl border border-[#262626] bg-[#1c1c1c]">
       <Link to={`/mod/${f.naddr}`} className="block">
         <div className="relative aspect-video w-full overflow-hidden bg-[#212121]">
           {f.image ? (
             <SkeletonImage src={f.image} alt={f.title} className="absolute inset-0 h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-sm text-neutral-600">No image</div>
-          )}
-          {isWinner && (
-            <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] font-medium text-emerald-300 backdrop-blur">
-              <Trophy className="h-3 w-3" /> Fulfiller
-            </span>
+            <img src="/hub-banner-placeholder.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
           )}
         </div>
       </Link>
@@ -356,13 +361,9 @@ function FulfillmentCard({ f, isWinner, isAuthor, saving, onPick, onUnmark }: {
         <Link to={`/mod/${f.naddr}`} className="text-sm font-semibold text-neutral-100 hover:text-white">
           <span className="line-clamp-2">{f.title}</span>
         </Link>
-        {isAuthor && (
+        {isAuthor && !isWinner && (
           <div className="mt-auto">
-            {isWinner ? (
-              <Button variant="outline" size="sm" disabled={saving} onClick={onUnmark} className="w-full border-[#262626] text-xs">Unmark fulfiller</Button>
-            ) : (
-              <Button size="sm" disabled={saving} onClick={onPick} className="w-full bg-emerald-600 text-xs text-white hover:bg-emerald-500">Pick as fulfiller</Button>
-            )}
+            <Button size="sm" disabled={saving} onClick={onPick} className="w-full bg-emerald-600 text-xs text-white hover:bg-emerald-500">Pick as fulfiller</Button>
           </div>
         )}
       </div>
