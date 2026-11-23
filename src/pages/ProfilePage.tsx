@@ -19,10 +19,21 @@ import { withLegacyMods } from '@/lib/mods/legacy' // LEGACY
 import { useProgressiveEvents } from '@/hooks/useProgressiveEvents'
 import { useModerationFilter } from '@/hooks/useModeration'
 import { useBlockFilter } from '@/hooks/useBlock'
-import { useWotModFilter, useWotHiddenCount } from '@/hooks/useWot'
+import { useWotModFilter, useWotJamFilter, useWotHiddenCount } from '@/hooks/useWot'
 import { useFollowedSet } from '@/hooks/useFollowedSet'
 import { applyModFilters } from '@/lib/mods/filterMods'
 import { ModFiltersBar, TagEditor, SourcesEditor } from '@/components/search/ModFiltersBar'
+import { BountyCard } from '@/components/mod/BountyCard'
+import { BountyFiltersBar } from '@/components/mod/BountyFiltersBar'
+import { constructBountyListFromEvents, MOD_BOUNTY_TYPE } from '@/lib/nostr/bounty'
+import { applyBountyFilters } from '@/lib/nostr/filterBounties'
+import { useBountyFiltersStore } from '@/stores/bountyFiltersStore'
+import { JamCard } from '@/components/jam/JamCard'
+import { JamFiltersBar } from '@/components/jam/JamFiltersBar'
+import { constructJamListFromEvents } from '@/lib/nostr/jam'
+import { applyJamFilters } from '@/lib/jams/filterJams'
+import { useJamFiltersStore } from '@/stores/jamFiltersStore'
+import { effectiveRange, monthToTs } from '@/lib/jams/monthRange'
 import { usePreferencesStore } from '@/stores/preferencesStore'
 import { UNTAGGED, BUILTIN_SOURCES, type NsfwMode, type SourceEntry } from '@/stores/modFiltersStore'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
@@ -70,7 +81,7 @@ export default function ProfilePage() {
   const { npub } = useParams<{ npub: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = ['mods', 'blogs', 'social'].includes(searchParams.get('tab') ?? '')
+  const tab = ['mods', 'blogs', 'requests', 'jams', 'social'].includes(searchParams.get('tab') ?? '')
     ? searchParams.get('tab')!
     : 'mods'
   const setTab = (v: string) => {
@@ -178,9 +189,11 @@ export default function ProfilePage() {
         <div className="lg:col-span-2 min-w-0">
           {targetPubkey ? (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList className="grid h-auto w-full grid-cols-3 items-stretch bg-[#1c1c1c] border border-[#262626]">
+              <TabsList className="grid h-auto w-full grid-cols-3 items-stretch bg-[#1c1c1c] border border-[#262626] sm:grid-cols-5">
                 <TabsTrigger value="mods" className={tabTrigger}>Mods</TabsTrigger>
                 <TabsTrigger value="blogs" className={tabTrigger}>Blog</TabsTrigger>
+                <TabsTrigger value="requests" className={tabTrigger}>Requests</TabsTrigger>
+                <TabsTrigger value="jams" className={tabTrigger}>Jams</TabsTrigger>
                 <TabsTrigger value="social" className={tabTrigger}>Social</TabsTrigger>
               </TabsList>
 
@@ -189,6 +202,12 @@ export default function ProfilePage() {
               </TabsContent>
               <TabsContent value="blogs" forceMount className={hideInactive}>
                 <BlogsTab pubkey={targetPubkey} profile={profile} />
+              </TabsContent>
+              <TabsContent value="requests" forceMount className={hideInactive}>
+                <RequestsTab pubkey={targetPubkey} />
+              </TabsContent>
+              <TabsContent value="jams" forceMount className={hideInactive}>
+                <JamsTab pubkey={targetPubkey} />
               </TabsContent>
               <TabsContent value="social" forceMount className={hideInactive}>
                 <SocialTab pubkey={targetPubkey} />
@@ -513,6 +532,177 @@ function BlogsTab({ pubkey, profile }: { pubkey: string; profile: UserProfile | 
         <>
           <div className="grid grid-cols-1 gap-4">
             {paged.map((blog) => <BlogPostCard key={blog.id} blog={blog} author={profile ?? undefined} />)}
+          </div>
+          <Pagination page={current} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Mod Requests tab (paginated + progressive) ─────────────────────────
+
+function RequestsTab({ pubkey }: { pubkey: string }) {
+  const filter = useMemo<Filter>(() => ({ kinds: [KINDS.BOUNTY], authors: [pubkey], '#b': [MOD_BOUNTY_TYPE] }), [pubkey])
+  const { events, loading, loadingMore, reachedEnd, loadMore } = useProgressiveEvents(filter, 60)
+  const bounties = useMemo(() => constructBountyListFromEvents(events), [events])
+  const moderate = useModerationFilter()
+  const blockFilter = useBlockFilter()
+  const wotFilter = useWotJamFilter()
+  const powExempt = useFollowedSet()
+  const minPow = useSettingsStore((s) => s.powFilterDifficulty)
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+
+  // Reuses the global request filters store (same as /mod-requests).
+  const { nsfwMode, status, game, sources, searchTags, excludedTags } = useBountyFiltersStore()
+
+  const availableClients = useMemo(() => [...new Set(bounties.map((b) => b.client).filter(Boolean))].sort(), [bounties])
+
+  const preWot = useMemo(() => {
+    let list = blockFilter(moderate(applyBountyFilters(bounties, {
+      nsfwMode, status, game, minPow, sources, searchTags, excludedTags, powExempt,
+    })))
+    const q = search.trim().toLowerCase()
+    if (q) list = list.filter((b) =>
+      b.title.toLowerCase().includes(q) ||
+      b.game.toLowerCase().includes(q) ||
+      b.tags.some((t) => t.toLowerCase().includes(q)),
+    )
+    return list
+  }, [bounties, moderate, blockFilter, nsfwMode, status, game, minPow, sources, searchTags, excludedTags, powExempt, search])
+
+  const filtered = useMemo(() => wotFilter(preWot).sort((a, b) => b.publishedAt - a.publishedAt), [wotFilter, preWot])
+  const wotHiddenCount = useWotHiddenCount(preWot)
+
+  useEffect(() => { setPage(1) }, [pubkey, search, nsfwMode, status, game, sources, searchTags, excludedTags])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 12))
+  const current = Math.min(page, totalPages)
+  const paged = filtered.slice((current - 1) * 12, current * 12)
+
+  useEffect(() => {
+    if (!loading && !reachedEnd && current >= totalPages - 1) loadMore()
+  }, [current, totalPages, reachedEnd, loading, loadMore])
+
+  const controls = (
+    <div className="space-y-3">
+      <SearchBar value={search} onChange={setSearch} placeholder="Search this author's requests by title, game, or tags…" />
+      <BountyFiltersBar availableClients={availableClients} resultCount={filtered.length} wotHiddenCount={wotHiddenCount} />
+    </div>
+  )
+
+  if (loading && bounties.length === 0) {
+    return (
+      <div className="space-y-4">
+        {controls}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-lg bg-[#212121]" />)}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {controls}
+      {paged.length === 0 ? (
+        <p className="py-12 text-center text-sm text-neutral-500">
+          {bounties.length === 0 ? 'No mod requests published yet.' : 'No mod requests match your filters.'}
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {paged.map((b) => <BountyCard key={b.aTag} bounty={b} />)}
+          </div>
+          <Pagination page={current} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Mod Jams tab (paginated + progressive) ─────────────────────────────
+
+function JamsTab({ pubkey }: { pubkey: string }) {
+  const now = Math.floor(Date.now() / 1000)
+  const filter = useMemo<Filter>(() => ({ kinds: [KINDS.JAM], authors: [pubkey] }), [pubkey])
+  const { events, loading, loadingMore, reachedEnd, loadMore } = useProgressiveEvents(filter, 100)
+  const jams = useMemo(() => constructJamListFromEvents(events), [events])
+  const moderate = useModerationFilter()
+  const blockFilter = useBlockFilter()
+  const wotFilter = useWotJamFilter()
+  const powExempt = useFollowedSet()
+  const minPow = useSettingsStore((s) => s.powFilterDifficulty)
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+
+  // Reuses the global jam filters store (same as /mod-jams).
+  const { nsfwMode, status, fromMonth, toMonth, sources, searchTags, excludedTags } = useJamFiltersStore()
+  const range = useMemo(() => effectiveRange(fromMonth, toMonth), [fromMonth, toMonth])
+
+  const availableClients = useMemo(() => [...new Set(jams.map((j) => j.client).filter(Boolean))].sort(), [jams])
+
+  const preWot = useMemo(() => {
+    let list = blockFilter(moderate(applyJamFilters(jams, {
+      nsfwMode, status, minPow, sources, searchTags, excludedTags, powExempt, now,
+    })))
+    if (range) {
+      const rs = monthToTs(range.from), re = monthToTs(range.to, true)
+      list = list.filter((j) => (j.votingEnd ?? j.end) >= rs && j.start <= re)
+    }
+    const q = search.trim().toLowerCase()
+    if (q) list = list.filter((j) =>
+      j.title.toLowerCase().includes(q) ||
+      j.games.some((g) => g.toLowerCase().includes(q)) ||
+      j.tags.some((t) => t.toLowerCase().includes(q)),
+    )
+    return list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jams, moderate, blockFilter, nsfwMode, status, minPow, sources, searchTags, excludedTags, powExempt, search, range])
+
+  const filtered = useMemo(() => wotFilter(preWot).sort((a, b) => b.publishedAt - a.publishedAt), [wotFilter, preWot])
+  const wotHiddenCount = useWotHiddenCount(preWot)
+
+  useEffect(() => { setPage(1) }, [pubkey, search, nsfwMode, status, fromMonth, toMonth, sources, searchTags, excludedTags])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 12))
+  const current = Math.min(page, totalPages)
+  const paged = filtered.slice((current - 1) * 12, current * 12)
+
+  useEffect(() => {
+    if (!loading && !reachedEnd && current >= totalPages - 1) loadMore()
+  }, [current, totalPages, reachedEnd, loading, loadMore])
+
+  const controls = (
+    <div className="space-y-3">
+      <SearchBar value={search} onChange={setSearch} placeholder="Search this author's jams by title, game, or tags…" />
+      <JamFiltersBar availableClients={availableClients} resultCount={filtered.length} wotHiddenCount={wotHiddenCount} />
+    </div>
+  )
+
+  if (loading && jams.length === 0) {
+    return (
+      <div className="space-y-4">
+        {controls}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-lg bg-[#212121]" />)}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {controls}
+      {paged.length === 0 ? (
+        <p className="py-12 text-center text-sm text-neutral-500">
+          {jams.length === 0 ? 'No mod jams published yet.' : 'No mod jams match your filters.'}
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {paged.map((j) => <JamCard key={j.aTag} jam={j} />)}
           </div>
           <Pagination page={current} totalPages={totalPages} onPage={setPage} reachedEnd={reachedEnd} loadingMore={loadingMore} />
         </>
