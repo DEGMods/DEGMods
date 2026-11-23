@@ -218,7 +218,7 @@ export function BountyPage() {
           <PublisherCard pubkey={bounty.pubkey} />
 
           {/* Status + chosen fulfiller */}
-          <section className="space-y-3 rounded-xl border border-[#262626] p-4">
+          <section className="space-y-3">
             <div className={cn('flex items-center gap-2 text-sm font-semibold', bounty.fulfilled ? 'text-emerald-300' : 'text-amber-300')}>
               {bounty.fulfilled ? <CheckCircle2 className="h-4 w-4" /> : <CircleDashed className="h-4 w-4" />}
               {bounty.fulfilled ? 'Fulfilled' : 'Open, looking for a modder'}
@@ -230,7 +230,7 @@ export function BountyPage() {
                   <p className="text-sm text-neutral-400">A fulfiller has been selected.</p>
                 )}
                 {isAuthor && (
-                  <Button variant="outline" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full border-[#262626] text-xs">Unmark as fulfilled</Button>
+                  <Button variant="ghost" size="sm" disabled={savingWinner} onClick={() => setWinner(null, null)} className="w-full text-xs text-neutral-400 hover:bg-[#262626] hover:text-white">Unmark as fulfilled</Button>
                 )}
               </div>
             )}
