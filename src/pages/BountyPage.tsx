@@ -4,7 +4,7 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { toast } from 'sonner'
 import {
   Gamepad2, Gift, Loader2, Pencil, Trash2, MoreHorizontal,
-  FileUp, ChevronLeft, Copy, FileJson, AlertTriangle,
+  FileUp, ChevronLeft, Copy, FileJson, AlertTriangle, Info,
 } from 'lucide-react'
 import { useNsfwReveal } from '@/hooks/useNsfwReveal'
 import { KINDS } from '@/lib/constants'
@@ -21,6 +21,7 @@ import { useSeoMeta } from '@/hooks/useSeoMeta'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { CollapsibleMarkdown } from '@/components/mod/CollapsibleMarkdown'
@@ -240,7 +241,19 @@ export function BountyPage() {
 
           {/* Reward (requester's own) + third-party pledges */}
           <section className="space-y-3 rounded-xl border border-[#262626] bg-[#1c1c1c] p-4">
-            <p className="text-xs font-medium text-neutral-400">Reward</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-medium text-neutral-400">Reward</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="text-neutral-500 transition-colors hover:text-neutral-300" aria-label="About rewards">
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  The reward and any extra pledges are trust based and not guaranteed. Nothing is held, escrowed, or paid through the app; any payment happens directly between the people involved.
+                </TooltipContent>
+              </Tooltip>
+            </div>
             {bounty.reward ? (
               <p className="flex items-start gap-1.5 text-sm text-emerald-300">
                 <Gift className="mt-0.5 h-3.5 w-3.5 shrink-0" />

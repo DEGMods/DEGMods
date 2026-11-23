@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { CharCounter } from '@/components/shared/CharCounter'
 import { Pagination } from '@/components/shared/Pagination'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { RequestDeleteDialog } from '@/components/shared/RequestDeleteDialog'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -187,7 +188,7 @@ function PledgesModal({
             {!loading && <span className="text-sm font-normal text-neutral-500">({pledges.length})</span>}
           </DialogTitle>
           <DialogDescription className="text-neutral-400">
-            Extra rewards offered by others for whoever makes this mod. Descriptive only — nothing is held or paid through the app.
+            Extra rewards offered by others for whoever makes this mod. Descriptive only: nothing is held or paid through the app.
           </DialogDescription>
         </DialogHeader>
 
@@ -280,8 +281,18 @@ function PledgeRow({ pledge, accent, isOwn, onEdit, onDelete }: {
         </Link>
         {isOwn && (
           <div className="flex shrink-0 items-center gap-1">
-            <button onClick={onEdit} className="rounded p-1 text-neutral-500 transition-colors hover:bg-[#262626] hover:text-neutral-200" title="Edit your pledge"><Pencil className="h-3.5 w-3.5" /></button>
-            <button onClick={onDelete} className="rounded p-1 text-neutral-500 transition-colors hover:bg-[#262626] hover:text-red-400" title="Delete your pledge"><Trash2 className="h-3.5 w-3.5" /></button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={onEdit} className="rounded p-1 text-neutral-500 transition-colors hover:bg-[#262626] hover:text-neutral-200"><Pencil className="h-3.5 w-3.5" /></button>
+              </TooltipTrigger>
+              <TooltipContent>Edit your pledge</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={onDelete} className="rounded p-1 text-neutral-500 transition-colors hover:bg-[#262626] hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+              </TooltipTrigger>
+              <TooltipContent>Delete your pledge</TooltipContent>
+            </Tooltip>
           </div>
         )}
       </div>
@@ -349,7 +360,7 @@ function PledgeFormDialog({ open, onOpenChange, bountyCoordinate, game, existing
         <DialogHeader>
           <DialogTitle className="text-neutral-100">{existing ? 'Edit your reward pledge' : 'Pledge a reward'}</DialogTitle>
           <DialogDescription className="text-neutral-400">
-            Offer an extra reward for whoever makes this mod. Descriptive only — nothing is held or paid through the app.
+            Offer an extra reward for whoever makes this mod. Descriptive only: nothing is held or paid through the app.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
