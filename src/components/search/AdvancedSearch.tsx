@@ -141,8 +141,8 @@ export function AdvancedSearch({
           </DialogHeader>
 
           <div className="space-y-4 py-1">
-            <div className="space-y-1">
-              <label className="text-xs text-neutral-400">Name / keyword</label>
+            <div className="space-y-1.5">
+              <label className="block text-xs text-neutral-400">Name / keyword</label>
               <Input
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
@@ -152,8 +152,8 @@ export function AdvancedSearch({
               <p className="text-[11px] text-neutral-500">Full-text search on relays that support it (NIP-50); other relays are matched on this device.</p>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs text-neutral-400">Game</label>
+            <div className="space-y-1.5">
+              <label className="block text-xs text-neutral-400">Game</label>
               <GameAutocomplete
                 value={fixedGame ?? game}
                 onChange={setGame}
@@ -163,20 +163,20 @@ export function AdvancedSearch({
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs text-neutral-400">Tags (matches any)</label>
-              <TagEditor tags={tags} onChange={setTags} placeholder="Add a tag…" />
+            <div className="space-y-1.5">
+              <label className="block text-xs text-neutral-400">Tags (matches any)</label>
+              <TagEditor tags={tags} onChange={setTags} placeholder="Add a tag…" accent={accent} />
             </div>
 
             {showCategories && (
-              <div className="space-y-1">
-                <label className="text-xs text-neutral-400">Categories (exact chain)</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs text-neutral-400">Categories (exact chain)</label>
                 <CategoryChainsEditor chains={categories} onChange={setCategories} />
               </div>
             )}
 
-            <div className="space-y-1">
-              <label className="text-xs text-neutral-400">Author (npub)</label>
+            <div className="space-y-1.5">
+              <label className="block text-xs text-neutral-400">Author (npub)</label>
               <Input
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}

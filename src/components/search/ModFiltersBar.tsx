@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ShieldCheck, Boxes, Tag as TagIcon, EyeOff, Plus, X, FolderTree, ChevronRight, ChevronDown, Check, Trash2, Users, Settings2, Repeat2, Joystick, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ACCENTS, type Accent } from '@/components/shared/accent'
 import { CATEGORY_MAX_DEPTH, CATEGORY_SEGMENT_MAXLEN } from '@/lib/constants'
 import {
   useModFiltersStore, UNTAGGED, BUILTIN_SOURCES, DEFAULT_MIN_POW,
@@ -91,10 +92,11 @@ function FilterButton({ icon: Icon, label, count, active, onClick }: {
   )
 }
 
-export function TagEditor({ tags, onChange, placeholder }: {
+export function TagEditor({ tags, onChange, placeholder, accent = 'purple' }: {
   tags: string[]
   onChange: (t: string[]) => void
   placeholder: string
+  accent?: Accent
 }) {
   const [input, setInput] = useState('')
   const add = () => {
@@ -113,7 +115,7 @@ export function TagEditor({ tags, onChange, placeholder }: {
           placeholder={placeholder}
           className="bg-[#212121] border-[#262626] text-white"
         />
-        <Button onClick={add} disabled={!input.trim()} className="shrink-0 bg-purple-600 hover:bg-purple-700">
+        <Button onClick={add} disabled={!input.trim()} className={cn('shrink-0 text-white', ACCENTS[accent].solid)}>
           <Plus size={14} className="mr-1" /> Add
         </Button>
       </div>
