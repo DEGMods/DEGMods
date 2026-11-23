@@ -19,8 +19,10 @@ const DISCORD_ICON = (
 )
 
 /** Share box: a read-only link + copy, and one-click share to X / Facebook / Discord. */
-export function ShareBox({ url, title }: { url: string; title: string }) {
+export function ShareBox({ url, title, accent = 'purple' }: { url: string; title: string; accent?: 'purple' | 'orange' }) {
   const [copied, setCopied] = useState(false)
+  const iconClass = accent === 'orange' ? 'text-orange-400' : 'text-purple-400'
+  const copyBtnClass = accent === 'orange' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-purple-600 hover:bg-purple-700'
 
   const copy = (text: string, msg: string) => {
     navigator.clipboard.writeText(text)
@@ -39,7 +41,7 @@ export function ShareBox({ url, title }: { url: string; title: string }) {
   return (
     <section className="space-y-3">
       <h2 className="flex items-center gap-2 text-lg font-semibold text-neutral-200">
-        <Share2 className="h-5 w-5 text-purple-400" /> Share
+        <Share2 className={`h-5 w-5 ${iconClass}`} /> Share
       </h2>
       <div className="rounded-lg border border-[#262626] bg-[#1c1c1c] p-4 space-y-3">
         <div className="flex items-center gap-2">
@@ -51,7 +53,7 @@ export function ShareBox({ url, title }: { url: string; title: string }) {
           />
           <button
             onClick={copyLink}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-md ${copyBtnClass} px-3 py-2 text-sm font-medium text-white transition-colors`}
           >
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             Copy

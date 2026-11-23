@@ -26,6 +26,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { CollapsibleMarkdown } from '@/components/mod/CollapsibleMarkdown'
 import { ModCard } from '@/components/mod/ModCard'
 import { PublisherCard } from '@/components/mod/PublisherCard'
+import { AuthorHubs } from '@/components/hubs/AuthorHubs'
+import { SidebarAd } from '@/components/mod/SidebarAd'
 import { CommentSection } from '@/components/social/CommentSection'
 import { ShareBox } from '@/components/mod/ShareBox'
 import { RequestDeleteDialog } from '@/components/shared/RequestDeleteDialog'
@@ -203,7 +205,7 @@ export function BountyPage() {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-neutral-200">About</h2>
                 <Link to={`/game/${encodeURIComponent(bounty.game)}`} className="w-fit">
-                  <Badge variant="outline" className="cursor-pointer border-purple-500/40 text-purple-400 transition-colors hover:bg-purple-500/10">
+                  <Badge variant="outline" className="cursor-pointer border-orange-500/40 text-orange-400 transition-colors hover:bg-orange-500/10">
                     <Gamepad2 className="mr-1 h-3 w-3" /> {bounty.game}
                   </Badge>
                 </Link>
@@ -261,7 +263,13 @@ export function BountyPage() {
             {bounty.client && <p className="text-xs text-neutral-500">on {bounty.client}</p>}
           </section>
 
-          {naddr && <ShareBox url={`${window.location.origin}/mod-bounty/${bounty.naddr}`} title={bounty.title} />}
+          {naddr && <ShareBox url={`${window.location.origin}/mod-bounty/${bounty.naddr}`} title={bounty.title} accent="orange" />}
+
+          {/* The author's recommended DEN Chat community hub */}
+          <AuthorHubs pubkey={bounty.pubkey} />
+
+          {/* Rotating sponsored ad */}
+          <SidebarAd />
         </div>
       </div>
 
