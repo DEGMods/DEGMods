@@ -217,7 +217,7 @@ export function SubmitBountyPage() {
           </div>
         </Section>
 
-        <Button onClick={publish} disabled={publishing} className="w-full bg-purple-600 text-white hover:bg-purple-700">
+        <Button onClick={publish} disabled={publishing} className="w-full bg-orange-600 text-white hover:bg-orange-700">
           {publishing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isEdit ? 'Update request' : 'Post request'}
         </Button>

@@ -100,7 +100,7 @@ export function BountiesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-white">Mod Requests</h1>
         <Link to="/submit-mod-bounty">
-          <Button size="sm" className="gap-1.5 bg-purple-600 text-xs text-white hover:bg-purple-700">
+          <Button size="sm" className="gap-1.5 bg-orange-600 text-xs text-white hover:bg-orange-700">
             <Plus size={14} /> Post request
           </Button>
         </Link>

@@ -248,7 +248,7 @@ export function BountyPage() {
           )}
 
           <div className="space-y-2 rounded-xl border border-[#262626] bg-[#1c1c1c] p-3">
-            <Button onClick={() => navigate(`/submit-mod?bounty=${bounty.naddr}`)} className="w-full gap-2 bg-purple-600 text-white hover:bg-purple-700">
+            <Button onClick={() => navigate(`/submit-mod?bounty=${bounty.naddr}`)} className="w-full gap-2 bg-orange-600 text-white hover:bg-orange-700">
               <FileUp className="h-4 w-4" /> Fulfil this request
             </Button>
             <p className="px-1 text-[11px] text-neutral-500">Publishes a new mod for {bounty.game}, pre-linked to this request.</p>
@@ -280,7 +280,7 @@ export function BountyPage() {
                 <li key={f.aTag} className="flex h-full flex-col gap-2">
                   <div className="flex-1"><ModCard mod={f} /></div>
                   {isAuthor && bounty.winnerCoordinate !== f.aTag && (
-                    <Button size="sm" disabled={savingWinner} onClick={() => setWinner(f.aTag, f.pubkey)} className="w-full bg-emerald-600 text-xs text-white hover:bg-emerald-500">Pick as fulfiller</Button>
+                    <Button size="sm" disabled={savingWinner} onClick={() => setWinner(f.aTag, f.pubkey)} className="w-full bg-orange-600 text-xs text-white hover:bg-orange-700">Pick as fulfiller</Button>
                   )}
                 </li>
               ))}
