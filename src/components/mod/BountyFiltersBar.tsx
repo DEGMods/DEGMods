@@ -254,6 +254,7 @@ export function BountyFiltersBar({ availableClients, resultCount, wotHiddenCount
             <DialogDescription className="text-neutral-400">Show only requests that have at least one of these tags.</DialogDescription>
           </DialogHeader>
           <TagEditor tags={searchTags} onChange={setSearchTags} placeholder="Add a tag to include..." />
+          <Button variant="outline" size="sm" onClick={() => setSearchTags([])} disabled={searchTags.length === 0} className="mt-1 w-fit border-[#262626] text-xs text-neutral-300">Clear</Button>
         </DialogContent>
       </Dialog>
 
@@ -265,7 +266,10 @@ export function BountyFiltersBar({ availableClients, resultCount, wotHiddenCount
             <DialogDescription className="text-neutral-400">Hide any request that has one of these tags (filtered locally).</DialogDescription>
           </DialogHeader>
           <TagEditor tags={excludedTags} onChange={setExcludedTags} placeholder="Add a tag to exclude..." />
-          <Button variant="outline" size="sm" onClick={() => resetExcludedTags(moderationDefaults)} className="mt-1 w-fit border-[#262626] text-xs text-neutral-300">Reset to defaults</Button>
+          <div className="mt-1 flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => resetExcludedTags(moderationDefaults)} className="w-fit border-[#262626] text-xs text-neutral-300">Reset to defaults</Button>
+            <Button variant="outline" size="sm" onClick={() => setExcludedTags([])} disabled={excludedTags.length === 0} className="w-fit border-[#262626] text-xs text-neutral-300">Clear</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

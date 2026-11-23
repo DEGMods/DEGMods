@@ -122,9 +122,13 @@ export function TagEditor({ tags, onChange, placeholder, accent = 'purple' }: {
       {tags.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {tags.map((t) => (
-            <span key={t} className="inline-flex items-center gap-1.5 rounded-md border border-[#262626] bg-[#212121] px-2 py-1 text-sm text-neutral-200">
-              {t}
-              <button onClick={() => onChange(tags.filter((x) => x !== t))} className="text-neutral-500 hover:text-red-400">
+            <span key={t} className="inline-flex items-stretch overflow-hidden rounded-md border border-[#262626] bg-[#212121] text-sm text-neutral-200">
+              <span className="px-2 py-1">{t}</span>
+              <button
+                onClick={() => onChange(tags.filter((x) => x !== t))}
+                aria-label={`Remove ${t}`}
+                className="flex items-center border-l border-[#262626] px-1.5 text-neutral-500 transition-colors hover:bg-[#2a2a2a] hover:text-red-400"
+              >
                 <X size={12} />
               </button>
             </span>
@@ -581,6 +585,9 @@ export function ModFiltersBar({
             </DialogDescription>
           </DialogHeader>
           <TagEditor tags={searchTags} onChange={setSearchTags} placeholder="Add a tag to include…" />
+          <Button variant="outline" size="sm" onClick={() => setSearchTags([])} disabled={searchTags.length === 0} className="mt-1 w-fit border-[#262626] text-xs text-neutral-300">
+            Clear
+          </Button>
         </DialogContent>
       </Dialog>
 
@@ -594,9 +601,14 @@ export function ModFiltersBar({
             </DialogDescription>
           </DialogHeader>
           <TagEditor tags={excludedTags} onChange={setExcludedTags} placeholder="Add a tag to exclude…" />
-          <Button variant="outline" size="sm" onClick={() => resetExcludedTags(moderationDefaults)} className="mt-1 w-fit border-[#262626] text-xs text-neutral-300">
-            Reset to defaults
-          </Button>
+          <div className="mt-1 flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => resetExcludedTags(moderationDefaults)} className="w-fit border-[#262626] text-xs text-neutral-300">
+              Reset to defaults
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setExcludedTags([])} disabled={excludedTags.length === 0} className="w-fit border-[#262626] text-xs text-neutral-300">
+              Clear
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
